@@ -1,4 +1,4 @@
-import { describe, it } from 'vitest';
+import { it } from 'vitest';
 import { RuleTester } from 'eslint';
 import { createImportRule } from '../src/lib/create-rule';
 
@@ -27,11 +27,22 @@ ruleTester.run('test-rule', testRule, {
       code: "import { a } from '@/features/auth';",
       options: [{ alias: ['@'] }],
     },
+    {
+      filename: '/proj/src/features/auth/ui/x.ts',
+      code: "const load = () => import('@/entities/user');",
+      options: [{ alias: ['@'] }],
+    },
   ],
   invalid: [
     {
       filename: '/proj/src/entities/user/ui/x.ts',
       code: "import { a } from '@/features/auth';",
+      options: [{ alias: ['@'] }],
+      errors: [{ messageId: 'hit' }],
+    },
+    {
+      filename: '/proj/src/entities/user/ui/x.ts',
+      code: "const load = () => import('@/features/auth');",
       options: [{ alias: ['@'] }],
       errors: [{ messageId: 'hit' }],
     },

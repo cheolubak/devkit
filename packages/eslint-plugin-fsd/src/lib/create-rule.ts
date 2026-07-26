@@ -41,8 +41,9 @@ export function createImportRule(opts: CreateImportRuleOptions): Rule.RuleModule
       const option = (context.options[0] ?? {}) as { alias?: string[] };
       const aliases = option.alias ?? DEFAULT_ALIASES;
 
-      function handle(node: { source?: { value?: unknown } | null }): void {
-        const src = node.source?.value;
+      function handle(node: { source?: unknown }): void {
+        const source = node.source as { value?: unknown } | null | undefined;
+        const src = source?.value;
         if (typeof src !== 'string') return;
         const targetPath = resolveImport(src, importer, aliases);
         if (targetPath === null) return;
@@ -60,8 +61,7 @@ export function createImportRule(opts: CreateImportRuleOptions): Rule.RuleModule
 
       return {
         ImportDeclaration: handle,
-        ImportExpression: (node) =>
-          handle({ source: (node as { source?: { value?: unknown } }).source }),
+        ImportExpression: handle,
         ExportNamedDeclaration: handle,
         ExportAllDeclaration: handle,
       };
