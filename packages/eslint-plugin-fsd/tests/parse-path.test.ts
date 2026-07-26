@@ -16,6 +16,9 @@ describe('findFsdRoot', () => {
   it('레이어도 src도 없으면 null', () => {
     expect(findFsdRoot('/proj/lib/helpers/x.ts')).toBeNull();
   });
+  it('레이어가 최상위(segment 0)면 루트는 /', () => {
+    expect(findFsdRoot('/app/features/auth/ui/x.ts')).toBe('/');
+  });
 });
 
 describe('parsePath', () => {

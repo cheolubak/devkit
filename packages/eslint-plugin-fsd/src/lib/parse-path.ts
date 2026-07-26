@@ -12,11 +12,8 @@ export function findFsdRoot(absPath: string): string | null {
     return '/' + segments.slice(0, lastSrc + 1).join('/');
   }
   const layerIdx = segments.findIndex((seg) => lookupLayer(seg) !== null);
-  if (layerIdx > 0) {
+  if (layerIdx !== -1) {
     return '/' + segments.slice(0, layerIdx).join('/');
-  }
-  if (layerIdx === 0) {
-    return ''; // 레이어가 최상위(루트)인 경우
   }
   return null;
 }
