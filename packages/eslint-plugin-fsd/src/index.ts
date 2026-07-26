@@ -9,6 +9,7 @@ interface FsdPlugin {
   configs: {
     recommended: {
       plugins: { fsd: FsdPlugin };
+      ignores: string[];
       rules: Record<string, 'error' | 'warn' | 'off'>;
     };
   };
@@ -26,6 +27,8 @@ const plugin = {
 
 plugin.configs.recommended = {
   plugins: { fsd: plugin },
+  // 프로젝트 루트의 Next.js 라우팅 폴더는 FSD 대상이 아니므로 제외
+  ignores: ['app/**', 'pages/**'],
   rules: {
     'fsd/no-higher-level-imports': 'error',
     'fsd/no-cross-imports': 'error',

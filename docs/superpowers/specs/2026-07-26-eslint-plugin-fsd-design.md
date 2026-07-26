@@ -129,6 +129,8 @@ export interface FsdLocation {
 > - Pages Router `pages/**/*.tsx`가 `@/screens/product-details`를 re-export → **valid** (루트 `pages/`는 `src` 밖)
 >
 > **알려진 한계**: `src/` 없이 루트에 레이어를 두면서 동시에 Pages Router 루트 `pages/`를 쓰는 조합은 오탐 가능. → 문서에서 **Next.js 프로젝트는 `src/` 레이아웃 사용**을 권장. (추후 rule option으로 `rootDir` override 여지 확보)
+>
+> **정정(2026-07-27, 최종 리뷰 반영)**: 위 "루트 라우팅 폴더는 importer로서 스킵" 서술은 정확하지 않다. `findFsdRoot`는 경로에 `src`가 없으면 top-most 레이어 세그먼트로 폴백하므로, 프로젝트 루트의 라우팅 `pages/`는 FSD `pages` 레이어로 파싱된다(App Router 루트 `app/`는 non-sliced·rank 0이라 무해하지만, Pages Router 루트 `pages/`는 `no-cross-imports` 오탐을 유발). 이 오탐은 파싱 단계가 아니라 `recommended` 프리셋의 `ignores: ['app/**','pages/**']`로 차단한다.
 
 ### 4.2 파싱 (`parsePath`)
 

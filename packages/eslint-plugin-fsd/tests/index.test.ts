@@ -16,4 +16,7 @@ describe('plugin 진입점', () => {
     expect(rec.rules['fsd/no-cross-imports']).toBe('error');
     expect(rec.rules['fsd/no-public-api-sidestep']).toBe('error');
   });
+  it('recommended 프리셋이 루트 Next.js 라우팅 폴더를 ignore한다', () => {
+    expect(plugin.configs.recommended.ignores).toEqual(['app/**', 'pages/**']);
+  });
 });
