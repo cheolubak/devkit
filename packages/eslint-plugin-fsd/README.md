@@ -1,12 +1,14 @@
 # eslint-plugin-fsd
 
-Feature-Sliced Design 구조를 강제하는 ESLint 플러그인 (ESLint v9 flat config).
+Feature-Sliced Design 구조를 강제하는 ESLint 플러그인 (ESLint v9 / v10 flat config).
 
 ## 설치
 
 ```bash
 pnpm add -D eslint-plugin-fsd
 ```
+
+요구 사항: ESLint `^9.0.0 || ^10.0.0` (flat config 전용). 개발·테스트는 ESLint 10 기준으로 검증한다.
 
 ## 사용
 
