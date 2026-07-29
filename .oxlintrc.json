@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "import", "promise", "unicorn", "vitest"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "env": {
+    "es2024": true,
+    "node": true
+  },
+  "ignorePatterns": ["**/dist/**", "**/node_modules/**", "coverage/**"],
+  "rules": {
+    // tsconfig target이 ES2022라 toSorted(ES2023)를 쓸 수 없다
+    "unicorn/no-array-sort": "off"
+  }
+}
