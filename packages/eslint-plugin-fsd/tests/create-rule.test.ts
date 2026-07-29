@@ -2,7 +2,7 @@ import { it } from 'vitest';
 import { RuleTester } from 'eslint';
 import { createImportRule } from '../src/lib/create-rule';
 
-RuleTester.it = it as unknown as typeof RuleTester.it;
+RuleTester.it = it;
 
 // 테스트용 rule: from.rank > to.rank 이면(하위→상위) 리포트
 const testRule = createImportRule({

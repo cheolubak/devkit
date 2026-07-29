@@ -2,7 +2,7 @@ import { it } from 'vitest';
 import { RuleTester } from 'eslint';
 import rule from '../src/rules/no-higher-level-imports';
 
-RuleTester.it = it as unknown as typeof RuleTester.it;
+RuleTester.it = it;
 const ruleTester = new RuleTester({ languageOptions: { ecmaVersion: 2022, sourceType: 'module' } });
 
 ruleTester.run('no-higher-level-imports', rule, {

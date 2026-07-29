@@ -26,7 +26,7 @@ export function parsePath(absPath: string): FsdLocation | null {
   const rel = allSegs.slice(rootSegs.length);
   if (rel.length === 0) return null;
 
-  const folderName = rel[0]!;
+  const folderName = rel[0];
   const layer = lookupLayer(folderName);
   if (layer === null) return null;
 
