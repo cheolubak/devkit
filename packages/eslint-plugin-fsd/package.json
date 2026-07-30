@@ -18,15 +18,25 @@
   },
   "peerDependencies": {
     "eslint": "^9.0.0 || ^10.0.0",
-    "eslint-plugin-react-hooks": "^7.0.0"
+    "eslint-plugin-react-hooks": "^7.0.0",
+    "eslint-plugin-jsx-a11y": "^6.10.0",
+    "@next/eslint-plugin-next": "^16.0.0"
   },
   "peerDependenciesMeta": {
     "eslint-plugin-react-hooks": {
       "optional": true
+    },
+    "eslint-plugin-jsx-a11y": {
+      "optional": true
+    },
+    "@next/eslint-plugin-next": {
+      "optional": true
     }
   },
   "devDependencies": {
+    "@next/eslint-plugin-next": "^16.2.12",
     "eslint": "^10.8.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react-hooks": "^7.0.0"
   }
 }

@@ -6,5 +6,5 @@
     "noEmit": true,
     "declaration": false
   },
-  "include": ["."]
+  "include": [".", "../src/types"]
 }
