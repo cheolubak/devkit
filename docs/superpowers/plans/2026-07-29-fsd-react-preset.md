@@ -797,7 +797,17 @@ consumer가 서브패스와 필요한 peer를 알 수 있어야 한다.
 
 - [ ] **Step 1: 사용 섹션 아래에 프리셋 문서 추가**
 
-`README.md`의 `## 사용` 섹션에서 `fsd.configs.recommended` 예시 바로 다음에 아래 내용을 삽입한다:
+`README.md`의 `## 사용` 섹션에서 `fsd.configs.recommended` 예시 바로 다음에 아래 내용을 삽입한다.
+
+**함께 해야 하는 구조 수정:** 삽입 지점 뒤에 있는 기존 `개별 규칙 + alias 커스터마이즈:` 블록은 `fsd` 단독 사용법이라 React/Next와 무관하다. 그런데 새 `###` 섹션을 그 앞에 끼워넣으면 마크다운 헤딩 스코프상 그 블록이 새 섹션의 마지막 항목처럼 읽힌다. 따라서 그 블록 앞에 헤딩을 붙여 분리한다:
+
+```markdown
+### 개별 규칙 직접 사용
+
+프리셋 대신 규칙을 하나씩 켜고 alias를 커스터마이즈할 수도 있다.
+```
+
+기존 예시 코드 자체는 옮기거나 바꾸지 않는다 — 헤딩과 한 줄 설명만 앞에 추가한다.
 
 ````markdown
 ### React / Next.js 프리셋
@@ -820,7 +830,9 @@ export default [...fsdReact];
 
 프리셋은 config **배열**이므로 스프레드(`...`)로 편다. `fsd.configs.recommended`는 단일 객체라 스프레드하지 않는다.
 
-**JSX/TSX 파서는 프리셋이 설정하지 않는다.** 프리셋 앞에 파서를 직접 지정하라. TypeScript 프로젝트 예시:
+**JSX/TSX 파서는 프리셋이 설정하지 않는다.** 프리셋 앞에 파서를 직접 지정하라.
+
+아래 예시의 `typescript-eslint`는 이 패키지의 peer가 아니라 **consumer가 직접 고르는 파서**다. TypeScript 프로젝트라면 이미 설치돼 있을 것이고, 없으면 `pnpm add -D typescript-eslint`로 추가한다.
 
 ```js
 import tseslint from 'typescript-eslint';
@@ -845,12 +857,16 @@ export default [
 pnpm add -D eslint-plugin-react-hooks eslint-plugin-jsx-a11y @next/eslint-plugin-next
 ```
 
-프리셋이 대신 해주는 일:
+프리셋이 대신 해주는 일 — **두 서브패스 공통**:
 
-- `ignores`를 FSD 규칙에만 건다. `@next/next` 규칙은 `app/`·`pages/`에서 그대로 동작한다.
+- `ignores`를 FSD 규칙에만 건다. 다른 플러그인의 규칙은 `app/`·`pages/`에서 그대로 동작한다.
 - `react-hooks` 규칙을 `.ts`/`.js`까지 적용한다. 커스텀 훅은 JSX 없는 파일에도 있기 때문이다.
-- `jsx-a11y` 규칙은 `.jsx`/`.tsx`로 좁힌다.
 - 상류 플러그인마다 다른 flat config 접근 경로(`configs.flat.*`, 최상위 `flatConfigs.*`, `configs['core-web-vitals']`)를 감춘다.
+
+**`/next`에만 해당**:
+
+- `jsx-a11y` 규칙은 `.jsx`/`.tsx`로 좁힌다.
+- `@next/next` 규칙에는 파일 스코프를 걸지 않는다 — Next.js 규칙이 가장 필요한 `app/`·`pages/`에서 돌아야 하기 때문이다.
 
 > **`eslint-plugin-react`를 포함하지 않는 이유**: 7.37.5는 ESLint 10에서 제거된 `context.getFilename()`을 호출해 크래시한다(`settings.react.version: 'detect'` 경로). 직접 추가하려면 ESLint 9을 쓰거나 `version`을 명시값으로 고정해야 하며, 그래도 미가드 경로가 남아 있다.
 
