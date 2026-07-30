@@ -11,7 +11,9 @@ import oxlint from 'eslint-plugin-oxlint';
  */
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', 'coverage/**'],
+    // .superpowers/는 git-ignored 스크래치(SDD 워크스페이스)다. ESLint는
+    // .gitignore를 읽지 않으므로 여기서 따로 제외해야 한다.
+    ignores: ['**/dist/**', 'coverage/**', '.superpowers/**'],
   },
 
   js.configs.recommended,
