@@ -501,10 +501,21 @@ EOF
 
 **Files:**
 - Test: `packages/eslint-plugin-fsd/tests/entry-isolation.test.ts`
+- Modify: `packages/eslint-plugin-fsd/package.json` (`devDependencies`에 `@types/node` 추가)
 
 **Interfaces:**
 - Consumes: 소스 파일을 문자열로 읽을 뿐이며 다른 태스크의 export를 import하지 않는다.
 - Produces: 없음 (테스트 전용)
+
+> **2026-07-30 개정:** 이 태스크는 `node:fs`/`node:path`/`node:url`을 쓰는 첫 파일이다. 그런데 이 저장소에는 `@types/node`가 설치돼 있지 않아, 타입 인식 린팅에서 `node:*` import가 해석되지 않고 반환값이 `error` 타입이 되어 `@typescript-eslint/no-unsafe-*`가 연쇄로 터진다(실측 27건). 따라서 Step 0에서 `@types/node`를 먼저 설치한다. 원래 계획의 "이 태스크는 아무것도 설치하지 않는다"는 전제는 폐기한다.
+
+- [ ] **Step 0: `@types/node` 설치**
+
+```bash
+pnpm --filter eslint-plugin-fsd add -D '@types/node@^24'
+```
+
+설치 후 `pnpm exec tsc -p packages/eslint-plugin-fsd/tests/tsconfig.json`이 `TS2307: Cannot find module 'node:fs'` 없이 통과하는지 확인한다. 설치 위치가 루트가 아니라 패키지인 이유는 다른 devDependency와 같다 — 테스트 파일이 패키지 디렉토리에 있어 모듈·타입 해석이 거기서 시작된다.
 
 **설계:** `src/index.ts`에서 시작해 상대 경로 import를 재귀적으로 따라가며 bare specifier를 모으고, React 패키지가 하나도 없음을 단언한다. 두 번째 테스트는 **탐지기 자체가 동작함을 증명**한다 — 이게 없으면 정규식이 깨져도 첫 테스트가 조용히 통과한다.
 
@@ -617,7 +628,7 @@ Expected: 종료 코드 0
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add packages/eslint-plugin-fsd/tests/entry-isolation.test.ts
+git add packages/eslint-plugin-fsd/tests/entry-isolation.test.ts packages/eslint-plugin-fsd/package.json pnpm-lock.yaml
 git commit -F - <<'EOF'
 test: 루트 진입점의 React 의존성 격리 회귀 테스트
 
@@ -627,6 +638,10 @@ src/index.ts에서 상대 import를 재귀적으로 따라가며 bare specifier�
 
 탐지기 자체가 동작함을 증명하는 테스트를 함께 둔다. 이게 없으면
 정규식이 깨져도 격리 테스트가 통과해버린다.
+
+node 빌트인을 쓰는 첫 파일이라 @types/node를 함께 설치한다. 없으면
+타입 인식 린팅이 node:* import를 error 타입으로 보고 no-unsafe-*를
+연쇄로 터뜨린다.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF

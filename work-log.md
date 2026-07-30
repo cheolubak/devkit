@@ -42,4 +42,17 @@
   - 규칙 집합 변화는 1건뿐: **`no-useless-assignment`가 v10 `recommended`에 신규 편입**(oxlint 활성 카테고리 밖이라 ESLint가 담당, 현재 코드는 통과). 제거된 규칙 0건. 하이브리드 중복 제거는 그대로 유지(off 158개 동일, 활성 40→41).
   - README의 "ESLint v9 flat config" 표기를 v9/v10으로 갱신. `docs/superpowers/` 아래 설계·계획 문서는 당시 결정을 담은 이력 문서라 수정하지 않음.
 - **검증**: `eslint --version` 10.8.0(루트/패키지 모두), `pnpm lint` 통과, `pnpm test` 42/42 통과(v10 RuleTester), `tsc --noEmit`(src/tests) 통과, `pnpm build` 성공.
-- **커밋**: 미커밋(작업 트리에 반영만)
+- **커밋**: `8e78c65`(타입 단언 정리), `68b7984`(하이브리드 구성), `e150ae3`(README), `271b9f5`(work-log)
+
+## 2026-07-30
+
+### React/Next 프리셋 작업 (진행 중) — eslint-plugin-react ESLint 10 비호환 발견
+- **변경 파일**: `docs/superpowers/specs/2026-07-29-fsd-react-preset-design.md`, `docs/superpowers/plans/2026-07-29-fsd-react-preset.md`, `packages/eslint-plugin-fsd/src/lib/preset.ts`, `packages/eslint-plugin-fsd/src/react.ts`, `packages/eslint-plugin-fsd/tests/{preset,react-preset}.test.ts`, `packages/eslint-plugin-fsd/package.json`
+- **내용**: consumer용 React/Next flat config 프리셋을 서브패스 export(`eslint-plugin-fsd/react`, `/next`)로 추가하는 작업. 브레인스토밍 → 설계 → 계획 → Subagent-Driven 실행 순서로 진행.
+  - **핵심 설계 2건**: (1) 루트 진입점은 React 의존 0을 유지한다 — optional peer만 선언하고 static import하면 선언과 실제가 어긋나므로 모듈 경계로 보증한다. (2) 프리셋은 config **배열**이다 — `ignores`를 FSD config에만 둬야 `@next/next` 규칙이 `app/`·`pages/`에서 꺼지지 않는다.
+  - **실런타임 결함 발견**: 구조 단언 테스트 9개가 전부 통과한 상태에서, ESLint를 실제 실행해보니 `eslint-plugin-react@7.37.5`가 ESLint 10에서 크래시했다. `settings.react.version:'detect'` → `util/version.js:31`이 제거된 `context.getFilename()`을 호출. `version` 명시로 크래시는 피할 수 있으나 미가드 호출이 3곳 더 남아 사용자 결정에 따라 **프리셋에서 제외**. `jsx-a11y`는 제거된 API를 호출하지 않아 유지.
+  - peer 범위가 `^9.7`까지인 것을 "표기 지연"으로 본 초기 판단이 틀렸음을 문서에 명시하고, 설계에 **런타임 스모크 검증**(6.1절)을 절차로 추가.
+  - 프리셋 구성 확정: `/react` = `[FSD, react-hooks]`, `/next` = `[FSD, react-hooks, jsx-a11y, @next/next]`. JSX 파싱 설정은 consumer 책임.
+- **검증**: Task 1 완료(리뷰 clean), Task 2 리뷰 통과 후 요구사항 변경으로 수정 라운드 진행 중. 테스트 목표 65개.
+- **커밋**: `69b87f6`(설계 문서), `24027bb`(구현 계획), `0e66b2f`(Task 1 조립 헬퍼), `48c325e`(Task 2 초안), `7b9bee7`(설계·계획 개정)
+- **남은 작업**: Task 2 수정 라운드 → Task 3(next 프리셋) → Task 4(격리 회귀 테스트) → Task 5(exports·tsup) → Task 6(README) → 최종 리뷰
