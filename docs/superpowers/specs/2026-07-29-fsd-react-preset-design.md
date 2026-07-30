@@ -72,7 +72,7 @@ contextOrFilename.getFilename is not a function
 
 이 저장소는 ESLint 10을 대상으로 하므로, 잠재 크래시 경로를 품은 플러그인을 프리셋으로 재배포하지 않는다. `eslint-plugin-react`를 제외한다.
 
-**잃는 것:** `react/jsx-key`, `react/no-children-prop` 등 recommended 규칙, 그리고 이 config가 제공했던 `languageOptions.parserOptions.ecmaFeatures.jsx` — 즉 **JSX 파싱 설정**. 단, `/next` 서브패스는 이걸 그대로 잃지 않는다. `eslint-plugin-jsx-a11y`(6.10.2) 의 `flatConfigs.recommended`가 같은 필드(`languageOptions.parserOptions.ecmaFeatures.jsx: true`)를 갖고 있고, `/next`가 이 config를 `scopeToFiles`로 얕은 복사하면서 그 필드를 그대로 들고 오기 때문에 `**/*.{jsx,tsx}`에서 JSX 파싱이 부수적으로 되살아난다. 이는 설계가 아니라 jsx-a11y의 upstream config에 얹혀가는 **부수 효과**이며, `/react`에는 jsx-a11y가 없으므로 해당하지 않는다. 자세한 내용과 이 부수 효과에 기대면 안 되는 이유는 3.3절 참조.
+**잃는 것:** `react/jsx-key`, `react/no-children-prop` 등 recommended 규칙, 그리고 이 config가 제공했던 `languageOptions.parserOptions.ecmaFeatures.jsx` — 즉 **JSX 파싱 설정**. 단, `/next` 서브패스는 이걸 그대로 잃지 않는다. `eslint-plugin-jsx-a11y`(6.10.2)의 `flatConfigs.recommended`가 같은 필드(`languageOptions.parserOptions.ecmaFeatures.jsx: true`)를 갖고 있고, `/next`가 이 config를 `scopeToFiles`로 얕은 복사하면서 그 필드를 그대로 들고 오기 때문에 `**/*.{jsx,tsx}`에서 JSX 파싱이 부수적으로 되살아난다. 이는 설계가 아니라 jsx-a11y의 upstream config에 얹혀가는 **부수 효과**이며, `/react`에는 jsx-a11y가 없으므로 해당하지 않는다. 자세한 내용과 이 부수 효과에 기대면 안 되는 이유는 3.3절 참조.
 
 `jsx-a11y`도 ESLint 10을 peer로 선언하지 않지만, 제거된 `context.*` API를 **한 번도 호출하지 않는다**(조사 완료). 표기만 뒤처진 경우이므로 유지한다. README에 경고가 예상된 것임을 명시한다.
 
