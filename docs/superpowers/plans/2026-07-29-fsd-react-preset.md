@@ -141,7 +141,9 @@ EOF
 
 ### Task 2: `eslint-plugin-fsd/react` 프리셋
 
-FSD 규칙 + `eslint-plugin-react` + `eslint-plugin-react-hooks`를 배열로 조립한다.
+> **2026-07-30 개정:** `eslint-plugin-react`를 제외한다. ESLint 10에서 제거된 `context.getFilename()`을 호출해 크래시하는 것이 실런타임 검증으로 확인됐다(설계 문서 2.1절). 프리셋은 FSD + `eslint-plugin-react-hooks` 두 개짜리 배열이다.
+
+FSD 규칙 + `eslint-plugin-react-hooks`를 배열로 조립한다.
 
 **Files:**
 - Create: `packages/eslint-plugin-fsd/src/react.ts`
@@ -149,33 +151,33 @@ FSD 규칙 + `eslint-plugin-react` + `eslint-plugin-react-hooks`를 배열로 �
 - Test: `packages/eslint-plugin-fsd/tests/react-preset.test.ts`
 
 **Interfaces:**
-- Consumes: Task 1의 `scopeToFiles`, `JSX_FILES`, `HOOK_FILES`. 기존 `src/index.ts`의 default export `plugin`(`plugin.configs.recommended`를 그대로 재사용).
-- Produces: `src/react.ts`의 default export — `Linter.Config[]`, 길이 3. 인덱스 순서는 `[FSD, react, react-hooks]`이며 Task 3이 이 배열을 spread한다.
+- Consumes: Task 1의 `scopeToFiles`, `HOOK_FILES`. 기존 `src/index.ts`의 default export `plugin`(`plugin.configs.recommended`를 그대로 재사용). `JSX_FILES`는 이 태스크에서 쓰지 않는다(Task 3의 jsx-a11y가 쓴다) — import하면 미사용 import로 린트가 실패한다.
+- Produces: `src/react.ts`의 default export — `Linter.Config[]`, 길이 **2**. 인덱스 순서는 `[FSD, react-hooks]`이며 Task 3이 이 배열을 spread한다.
 
 **상류 사실(확인 완료, 추측 아님):**
-- `react.configs.flat.recommended` → `{ plugins: { react }, rules, languageOptions }`
-- `react.configs.flat['jsx-runtime']` → `react/react-in-jsx-scope: 0`, `react/jsx-uses-react: 0`
 - `reactHooks.configs.flat.recommended` → `{ plugins: { 'react-hooks': plugin }, rules }`
-- 두 패키지 모두 타입을 제공하지만 `react-hooks`의 flat config 타입은 **부정확**하다(`plugins: { react: any }`로 선언하지만 실제로는 `react-hooks` 키로 등록). 그래서 경계에서 `Linter.Config`로 고정한다.
+- `react-hooks`는 타입을 제공하지만 flat config 타입이 **부정확**하다(`plugins: { react: any }`로 선언하지만 실제로는 `react-hooks` 키로 등록). 그래서 경계에서 `as unknown as Linter.Config`로 고정한다.
+- `plugin.configs.recommended`는 캐스팅하지 **않는다**. 이미 `Linter.Config`에 구조적으로 할당 가능해서 캐스팅하면 `@typescript-eslint/no-unnecessary-type-assertion` 에러가 난다.
 
 - [ ] **Step 1: 의존성 설치**
 
 ```bash
-pnpm --filter eslint-plugin-fsd add -D 'eslint-plugin-react@^7.37.0' 'eslint-plugin-react-hooks@^7.0.0'
+pnpm --filter eslint-plugin-fsd add -D 'eslint-plugin-react-hooks@^7.0.0'
+pnpm --filter eslint-plugin-fsd remove eslint-plugin-react
 ```
+
+두 번째 명령은 이전 개정에서 설치됐던 `eslint-plugin-react`를 제거한다. 이미 없으면 무해하게 실패하므로 그냥 넘어간다.
 
 - [ ] **Step 2: package.json에 optional peer 선언**
 
-`packages/eslint-plugin-fsd/package.json`의 `peerDependencies`에 두 줄을 추가하고, `peerDependenciesMeta` 블록을 새로 만든다. 최종 형태:
+`packages/eslint-plugin-fsd/package.json`의 `peerDependencies`에 한 줄을 추가하고, `peerDependenciesMeta` 블록을 새로 만든다. `eslint-plugin-react` 항목이 남아 있으면 **세 곳(peerDependencies, peerDependenciesMeta, devDependencies)에서 모두 제거**한다. 최종 형태:
 
 ```json
   "peerDependencies": {
     "eslint": "^9.0.0 || ^10.0.0",
-    "eslint-plugin-react": "^7.37.0",
     "eslint-plugin-react-hooks": "^7.0.0"
   },
   "peerDependenciesMeta": {
-    "eslint-plugin-react": { "optional": true },
     "eslint-plugin-react-hooks": { "optional": true }
   },
 ```
@@ -192,9 +194,9 @@ import reactPreset from '../src/react';
 import plugin from '../src/index';
 
 describe('react 프리셋', () => {
-  it('config 3개짜리 배열이다', () => {
+  it('config 2개짜리 배열이다', () => {
     expect(Array.isArray(reactPreset)).toBe(true);
-    expect(reactPreset).toHaveLength(3);
+    expect(reactPreset).toHaveLength(2);
   });
 
   it('FSD config는 기존 recommended 객체를 그대로 재사용한다', () => {
@@ -204,34 +206,23 @@ describe('react 프리셋', () => {
   it('ignores는 FSD config에만 걸린다', () => {
     expect(reactPreset[0].ignores).toEqual(['app/**', 'pages/**']);
     expect(reactPreset[1].ignores).toBeUndefined();
-    expect(reactPreset[2].ignores).toBeUndefined();
   });
 
-  it('react 규칙은 jsx/tsx에만, hooks 규칙은 ts까지 적용한다', () => {
-    expect(reactPreset[1].files).toEqual(['**/*.{jsx,tsx}']);
-    expect(reactPreset[2].files).toEqual(['**/*.{js,jsx,ts,tsx}']);
+  it('hooks 규칙은 JSX 없는 ts/js까지 적용한다', () => {
+    expect(reactPreset[1].files).toEqual(['**/*.{js,jsx,ts,tsx}']);
   });
 
-  it('react와 react-hooks 네임스페이스가 충돌 없이 등록된다', () => {
-    expect(Object.keys(reactPreset[1].plugins ?? {})).toEqual(['react']);
-    expect(Object.keys(reactPreset[2].plugins ?? {})).toEqual(['react-hooks']);
+  it('react-hooks 네임스페이스로 등록된다', () => {
+    expect(Object.keys(reactPreset[1].plugins ?? {})).toEqual(['react-hooks']);
   });
 
-  it('자동 런타임 가정으로 react-in-jsx-scope를 끈다', () => {
-    expect(reactPreset[1].rules?.['react/react-in-jsx-scope']).toBe(0);
-    expect(reactPreset[1].rules?.['react/jsx-uses-react']).toBe(0);
+  it('rules-of-hooks가 켜져 있다', () => {
+    expect(reactPreset[1].rules?.['react-hooks/rules-of-hooks']).toBeDefined();
   });
 
-  it('recommended의 실제 규칙은 살아 있다', () => {
-    expect(reactPreset[1].rules?.['react/jsx-key']).toBe(2);
-  });
-
-  it('react 버전을 detect로 설정한다', () => {
-    expect(reactPreset[1].settings?.react).toEqual({ version: 'detect' });
-  });
-
-  it('@next/next 규칙은 포함하지 않는다', () => {
+  it('eslint-plugin-react와 @next/next 규칙은 포함하지 않는다', () => {
     const allRules = reactPreset.flatMap((config) => Object.keys(config.rules ?? {}));
+    expect(allRules.some((rule) => rule.startsWith('react/'))).toBe(false);
     expect(allRules.some((rule) => rule.startsWith('@next/next/'))).toBe(false);
   });
 });
@@ -248,16 +239,13 @@ Expected: FAIL — `Failed to resolve import "../src/react"`
 
 ```ts
 import type { Linter } from 'eslint';
-import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import plugin from './index';
-import { scopeToFiles, JSX_FILES, HOOK_FILES } from './lib/preset';
+import { scopeToFiles, HOOK_FILES } from './lib/preset';
 
-// 상류 플러그인의 flat config 타입은 부정확하다. eslint-plugin-react-hooks는
-// plugins를 { react: any }로 선언하지만 실제로는 react-hooks 키로 등록한다.
+// eslint-plugin-react-hooks의 flat config 타입은 부정확하다. plugins를
+// { react: any }로 선언하지만 실제로는 react-hooks 키로 등록한다.
 // 경계에서 Linter.Config로 고정해 아래 조립 코드가 정확한 타입 위에서 돌게 한다.
-const reactRecommended = react.configs.flat.recommended as unknown as Linter.Config;
-const jsxRuntime = react.configs.flat['jsx-runtime'] as unknown as Linter.Config;
 const hooksRecommended = reactHooks.configs.flat.recommended as unknown as Linter.Config;
 
 /**
@@ -266,18 +254,13 @@ const hooksRecommended = reactHooks.configs.flat.recommended as unknown as Linte
  * 단일 객체가 아니라 배열인 이유: ignores는 그것을 가진 config 객체의 모든
  * 규칙에 걸린다. FSD 규칙만 Next.js 라우팅 폴더에서 제외해야 하므로
  * config를 나눈다. 설계 문서 3.2 참조.
+ *
+ * eslint-plugin-react는 의도적으로 제외한다. ESLint 10에서 제거된
+ * context.getFilename()을 호출해 크래시한다. 설계 문서 2.1 참조.
+ * 그 결과 JSX 파싱 설정도 프리셋이 제공하지 않는다 — consumer 책임(3.3).
  */
 const config: Linter.Config[] = [
-  plugin.configs.recommended as unknown as Linter.Config,
-  scopeToFiles(
-    {
-      ...reactRecommended,
-      settings: { react: { version: 'detect' } },
-      // React 17+ 자동 런타임 가정. 클래식 런타임 consumer는 뒤에서 다시 켜면 된다.
-      rules: { ...reactRecommended.rules, ...jsxRuntime.rules },
-    },
-    JSX_FILES,
-  ),
+  plugin.configs.recommended,
   scopeToFiles(hooksRecommended, HOOK_FILES),
 ];
 
@@ -287,11 +270,11 @@ export default config;
 - [ ] **Step 6: 테스트 통과 확인**
 
 Run: `pnpm test`
-Expected: PASS (47개 + 신규 9개 = 56개)
+Expected: PASS (47개 + 신규 7개 = 54개)
 
-세 상류 config를 모두 `as unknown as Linter.Config`로 캐스팅하는 이유: 상류 타입(특히 `plugins` 필드)이 ESLint의 `Linter.Config`와 구조적으로 호환되지 않아 단일 캐스팅은 "Conversion of type ... may be a mistake" 에러가 날 수 있다. `as unknown as`는 항상 컴파일되며, `@typescript-eslint/no-unnecessary-type-assertion`에도 걸리지 않는다.
+`hooksRecommended`만 `as unknown as Linter.Config`로 캐스팅하는 이유: 상류 타입의 `plugins` 필드가 ESLint의 `Linter.Config`와 구조적으로 호환되지 않아 단일 캐스팅은 "Conversion of type ... may be a mistake" 에러가 날 수 있다. `as unknown as`는 항상 컴파일되며, `@typescript-eslint/no-unnecessary-type-assertion`에도 걸리지 않는다.
 
-반대로 `@next/eslint-plugin-next`와 (Task 3의 셰임을 거친) `jsx-a11y`는 이미 `Linter.Config` 타입이므로 **캐스팅하지 않는다.** 불필요한 캐스팅은 린트 에러가 된다.
+반대로 `plugin.configs.recommended`, `@next/eslint-plugin-next`, (Task 3의 셰임을 거친) `jsx-a11y`는 이미 `Linter.Config`에 할당 가능하므로 **캐스팅하지 않는다.** 불필요한 캐스팅은 린트 에러가 된다.
 
 - [ ] **Step 7: 타입 체크와 린트 확인**
 
@@ -309,15 +292,19 @@ git add packages/eslint-plugin-fsd/src/react.ts packages/eslint-plugin-fsd/tests
 git commit -F - <<'EOF'
 feat: React 프리셋 추가
 
-FSD 규칙에 eslint-plugin-react와 eslint-plugin-react-hooks를 얹은
-프리셋을 src/react.ts에 만든다. 두 플러그인은 optional peer로 선언한다.
+FSD 규칙에 eslint-plugin-react-hooks를 얹은 프리셋을 src/react.ts에
+만든다. react-hooks는 optional peer로 선언한다.
 
 단일 객체가 아니라 배열인 이유: ignores는 그것을 가진 config의 모든
 규칙에 걸리므로, FSD 규칙만 Next.js 라우팅 폴더에서 제외하려면
 config를 나눠야 한다.
 
-react-hooks 규칙만 ts/js까지 적용한다. 커스텀 훅은 JSX 없는 파일에도
+react-hooks 규칙은 ts/js까지 적용한다. 커스텀 훅은 JSX 없는 파일에도
 존재하기 때문이다.
+
+eslint-plugin-react는 포함하지 않는다. ESLint 10에서 제거된
+context.getFilename()을 호출해 크래시하는 것을 실런타임 검증으로
+확인했다. 설계 문서 2.1 참조.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
@@ -336,8 +323,8 @@ react 프리셋에 `jsx-a11y`와 `@next/next`를 얹는다. **Next 규칙에는 
 - Test: `packages/eslint-plugin-fsd/tests/next-preset.test.ts`
 
 **Interfaces:**
-- Consumes: Task 2의 `src/react.ts` default export(`Linter.Config[]`, 길이 3), Task 1의 `scopeToFiles`/`JSX_FILES`.
-- Produces: `src/next.ts`의 default export — `Linter.Config[]`, 길이 5. 순서는 `[FSD, react, react-hooks, jsx-a11y, @next/next]`.
+- Consumes: Task 2의 `src/react.ts` default export(`Linter.Config[]`, 길이 **2** — `[FSD, react-hooks]`), Task 1의 `scopeToFiles`/`JSX_FILES`.
+- Produces: `src/next.ts`의 default export — `Linter.Config[]`, 길이 **4**. 순서는 `[FSD, react-hooks, jsx-a11y, @next/next]`.
 
 **상류 사실(확인 완료):**
 - `jsx-a11y`는 flat config를 **최상위 `flatConfigs`**로 export한다(`configs.flat`이 아니다). **타입 정의를 제공하지 않으므로 셰임이 필요하다.**
@@ -356,13 +343,11 @@ pnpm --filter eslint-plugin-fsd add -D 'eslint-plugin-jsx-a11y@^6.10.0' '@next/e
 ```json
   "peerDependencies": {
     "eslint": "^9.0.0 || ^10.0.0",
-    "eslint-plugin-react": "^7.37.0",
     "eslint-plugin-react-hooks": "^7.0.0",
     "eslint-plugin-jsx-a11y": "^6.10.0",
     "@next/eslint-plugin-next": "^16.0.0"
   },
   "peerDependenciesMeta": {
-    "eslint-plugin-react": { "optional": true },
     "eslint-plugin-react-hooks": { "optional": true },
     "eslint-plugin-jsx-a11y": { "optional": true },
     "@next/eslint-plugin-next": { "optional": true }
@@ -403,13 +388,13 @@ import reactPreset from '../src/react';
 import plugin from '../src/index';
 
 describe('next 프리셋', () => {
-  it('config 5개짜리 배열이다', () => {
+  it('config 4개짜리 배열이다', () => {
     expect(Array.isArray(nextPreset)).toBe(true);
-    expect(nextPreset).toHaveLength(5);
+    expect(nextPreset).toHaveLength(4);
   });
 
-  it('앞의 3개는 react 프리셋을 그대로 포함한다', () => {
-    expect(nextPreset.slice(0, 3)).toEqual(reactPreset);
+  it('앞의 2개는 react 프리셋을 그대로 포함한다', () => {
+    expect(nextPreset.slice(0, 2)).toEqual(reactPreset);
   });
 
   it('ignores는 여전히 FSD config에만 걸린다', () => {
@@ -421,21 +406,23 @@ describe('next 프리셋', () => {
 
   it('Next 규칙에는 파일 스코프를 걸지 않는다', () => {
     // app/·pages/에서 돌아야 하므로 files가 없어야 한다.
-    expect(nextPreset[4].files).toBeUndefined();
+    expect(nextPreset[3].files).toBeUndefined();
   });
 
   it('jsx-a11y 규칙은 jsx/tsx로 좁힌다', () => {
-    expect(nextPreset[3].files).toEqual(['**/*.{jsx,tsx}']);
+    expect(nextPreset[2].files).toEqual(['**/*.{jsx,tsx}']);
   });
 
-  it('네 플러그인 네임스페이스가 충돌 없이 등록된다', () => {
+  it('세 플러그인 네임스페이스가 fsd와 충돌 없이 등록된다', () => {
     const keys = nextPreset.flatMap((config) => Object.keys(config.plugins ?? {}));
-    expect(keys.sort()).toEqual(['@next/next', 'fsd', 'jsx-a11y', 'react', 'react-hooks']);
+    expect(keys.sort()).toEqual(['@next/next', 'fsd', 'jsx-a11y', 'react-hooks']);
   });
 
-  it('core-web-vitals 규칙을 포함한다', () => {
-    expect(nextPreset[4].rules?.['@next/next/no-img-element']).toBeDefined();
-    expect(nextPreset[4].rules?.['@next/next/no-sync-scripts']).toBeDefined();
+  it('core-web-vitals 규칙을 포함하고 eslint-plugin-react 규칙은 없다', () => {
+    expect(nextPreset[3].rules?.['@next/next/no-img-element']).toBeDefined();
+    expect(nextPreset[3].rules?.['@next/next/no-sync-scripts']).toBeDefined();
+    const allRules = nextPreset.flatMap((config) => Object.keys(config.rules ?? {}));
+    expect(allRules.some((rule) => rule.startsWith('react/'))).toBe(false);
   });
 });
 ```
@@ -475,7 +462,7 @@ export default config;
 - [ ] **Step 7: 테스트 통과 확인**
 
 Run: `pnpm test`
-Expected: PASS (56개 + 신규 7개 = 63개)
+Expected: PASS (54개 + 신규 7개 = 61개)
 
 - [ ] **Step 8: 타입 체크와 린트 확인**
 
@@ -534,10 +521,11 @@ import { fileURLToPath } from 'node:url';
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '../src');
 
 const REACT_PACKAGES = [
-  'eslint-plugin-react',
   'eslint-plugin-react-hooks',
   'eslint-plugin-jsx-a11y',
   '@next/eslint-plugin-next',
+  // 프리셋에 포함하지 않지만, 되돌아오면 즉시 알아야 하므로 함께 감시한다(설계 2.1)
+  'eslint-plugin-react',
 ];
 
 const IMPORT_PATTERN = /import\s+(?:type\s+)?(?:[^'"]*?from\s*)?['"]([^'"]+)['"]/g;
@@ -582,14 +570,20 @@ describe('루트 진입점 의존성 격리', () => {
 
   it('탐지기가 실제로 동작한다 (src/react.ts에서는 검출된다)', () => {
     const bare = collectBareSpecifiers(resolve(SRC, 'react.ts'));
-    expect(bare).toContain('eslint-plugin-react');
     expect(bare).toContain('eslint-plugin-react-hooks');
   });
 
-  it('탐지기가 src/next.ts의 네 패키지를 모두 본다', () => {
+  it('탐지기가 src/next.ts의 세 패키지를 모두 본다', () => {
     const bare = collectBareSpecifiers(resolve(SRC, 'next.ts'));
-    for (const pkg of REACT_PACKAGES) {
-      expect(bare).toContain(pkg);
+    expect(bare).toContain('eslint-plugin-react-hooks');
+    expect(bare).toContain('eslint-plugin-jsx-a11y');
+    expect(bare).toContain('@next/eslint-plugin-next');
+  });
+
+  it('어느 엔트리도 eslint-plugin-react를 로드하지 않는다', () => {
+    // 설계 2.1: ESLint 10에서 크래시하므로 제외했다. 되돌아오면 여기서 잡힌다.
+    for (const entry of ['index.ts', 'react.ts', 'next.ts']) {
+      expect(collectBareSpecifiers(resolve(SRC, entry))).not.toContain('eslint-plugin-react');
     }
   });
 });
@@ -598,22 +592,22 @@ describe('루트 진입점 의존성 격리', () => {
 - [ ] **Step 2: 테스트 통과 확인**
 
 Run: `pnpm test`
-Expected: PASS (63개 + 신규 3개 = 66개)
+Expected: PASS (61개 + 신규 4개 = 65개)
 
 이 테스트는 Task 1~3이 올바르면 처음부터 통과한다. TDD의 red 단계가 없는 회귀 가드다.
 
 - [ ] **Step 3: 탐지기가 진짜 잡는지 수동 확인**
 
-`packages/eslint-plugin-fsd/src/index.ts` 맨 위에 임시로 다음 줄을 넣는다:
+`packages/eslint-plugin-fsd/src/index.ts` 맨 위에 임시로 다음 줄을 넣는다(설치돼 있는 패키지를 써야 모듈 해석 실패가 아니라 격리 단언이 실패한다):
 
 ```ts
-import react from 'eslint-plugin-react';
+import reactHooks from 'eslint-plugin-react-hooks';
 ```
 
 Run: `pnpm test`
 Expected: FAIL — "src/index.ts는 React 플러그인을 로드하지 않는다" 실패
 
-확인한 뒤 **그 줄을 반드시 되돌린다.** 되돌린 후 `pnpm test`가 다시 66개 통과해야 한다.
+확인한 뒤 **그 줄을 반드시 되돌린다.** 되돌린 후 `pnpm test`가 다시 65개 통과해야 한다.
 
 - [ ] **Step 4: 린트 확인**
 
@@ -705,7 +699,7 @@ const required = ['index.js','react.js','next.js','index.d.ts','react.d.ts','nex
 const missing = required.filter((f) => !existsSync(\`\${dist}/\${f}\`));
 if (missing.length > 0) throw new Error('누락: ' + missing.join(', '));
 
-const reactPkgs = ['eslint-plugin-react','eslint-plugin-jsx-a11y','@next/eslint-plugin-next'];
+const reactPkgs = ['eslint-plugin-react-hooks','eslint-plugin-jsx-a11y','@next/eslint-plugin-next'];
 const indexSrc = readFileSync(\`\${dist}/index.js\`, 'utf8');
 const leaked = reactPkgs.filter((p) => indexSrc.includes(p));
 if (leaked.length > 0) throw new Error('루트 산출물에 React 의존 유출: ' + leaked.join(', '));
@@ -723,7 +717,7 @@ Expected: `OK: 엔트리 3종 생성, 루트 산출물에 React 의존 없음`
 pnpm test
 pnpm lint
 ```
-Expected: 66개 통과, 린트 종료 코드 0
+Expected: 65개 통과, 린트 종료 코드 0
 
 - [ ] **Step 6: 커밋**
 
@@ -777,27 +771,41 @@ export default [...fsdReact];
 
 프리셋은 config **배열**이므로 스프레드(`...`)로 편다. `fsd.configs.recommended`는 단일 객체라 스프레드하지 않는다.
 
+**JSX/TSX 파서는 프리셋이 설정하지 않는다.** 프리셋 앞에 파서를 직접 지정하라. TypeScript 프로젝트 예시:
+
+```js
+import tseslint from 'typescript-eslint';
+import fsdNext from 'eslint-plugin-fsd/next';
+
+export default [
+  { files: ['**/*.{ts,tsx}'], languageOptions: { parser: tseslint.parser } },
+  ...fsdNext,
+];
+```
+
 서브패스별로 필요한 peer는 다음과 같다. 모두 optional이므로 쓰지 않는 서브패스의 패키지는 설치할 필요가 없다.
 
 | 서브패스 | 필요한 패키지 |
 |---|---|
 | `eslint-plugin-fsd` | 없음 |
-| `eslint-plugin-fsd/react` | `eslint-plugin-react`, `eslint-plugin-react-hooks` |
-| `eslint-plugin-fsd/next` | 위 2개 + `eslint-plugin-jsx-a11y`, `@next/eslint-plugin-next` |
+| `eslint-plugin-fsd/react` | `eslint-plugin-react-hooks` |
+| `eslint-plugin-fsd/next` | 위 1개 + `eslint-plugin-jsx-a11y`, `@next/eslint-plugin-next` |
 
 ```bash
 # Next.js 앱 기준
-pnpm add -D eslint-plugin-react eslint-plugin-react-hooks eslint-plugin-jsx-a11y @next/eslint-plugin-next
+pnpm add -D eslint-plugin-react-hooks eslint-plugin-jsx-a11y @next/eslint-plugin-next
 ```
 
 프리셋이 대신 해주는 일:
 
 - `ignores`를 FSD 규칙에만 건다. `@next/next` 규칙은 `app/`·`pages/`에서 그대로 동작한다.
-- `react-hooks` 규칙만 `.ts`/`.js`까지 적용한다. 커스텀 훅은 JSX 없는 파일에도 있기 때문이다.
-- React 17+ 자동 런타임을 가정해 `react/react-in-jsx-scope`와 `react/jsx-uses-react`를 끈다. 클래식 런타임을 쓴다면 프리셋 뒤에 두 규칙을 다시 켜라.
-- `settings.react.version`을 `detect`로 둔다.
+- `react-hooks` 규칙을 `.ts`/`.js`까지 적용한다. 커스텀 훅은 JSX 없는 파일에도 있기 때문이다.
+- `jsx-a11y` 규칙은 `.jsx`/`.tsx`로 좁힌다.
+- 상류 플러그인마다 다른 flat config 접근 경로(`configs.flat.*`, 최상위 `flatConfigs.*`, `configs['core-web-vitals']`)를 감춘다.
 
-> **peer 경고 안내**: `eslint-plugin-react`(7.37.5)와 `eslint-plugin-jsx-a11y`(6.10.2)는 아직 ESLint 10을 `peerDependencies`로 선언하지 않는다. ESLint 10에서 설치하면 경고가 나오지만 **규칙은 정상 동작한다.** 상류가 선언을 갱신하면 사라진다.
+> **`eslint-plugin-react`를 포함하지 않는 이유**: 7.37.5는 ESLint 10에서 제거된 `context.getFilename()`을 호출해 크래시한다(`settings.react.version: 'detect'` 경로). 직접 추가하려면 ESLint 9을 쓰거나 `version`을 명시값으로 고정해야 하며, 그래도 미가드 경로가 남아 있다.
+
+> **peer 경고 안내**: `eslint-plugin-jsx-a11y`(6.10.2)는 아직 ESLint 10을 `peerDependencies`로 선언하지 않는다. 설치 시 경고가 나오지만 제거된 ESLint API를 호출하지 않으므로 **정상 동작한다.** 상류가 선언을 갱신하면 사라진다.
 ````
 
 - [ ] **Step 2: 문서와 실제 동작이 일치하는지 확인**
@@ -808,13 +816,15 @@ README에 적은 규칙 이름이 실제 프리셋에 있는지 확인한다:
 node -e "
 import('./packages/eslint-plugin-fsd/dist/next.js').then(({ default: preset }) => {
   const rules = Object.assign({}, ...preset.map((c) => c.rules ?? {}));
-  console.log('react-in-jsx-scope =', rules['react/react-in-jsx-scope']);
-  console.log('jsx-uses-react     =', rules['react/jsx-uses-react']);
-  console.log('config 개수        =', preset.length);
+  const keys = preset.flatMap((c) => Object.keys(c.plugins ?? {})).sort();
+  console.log('config 개수      =', preset.length);
+  console.log('플러그인 키      =', JSON.stringify(keys));
+  console.log('rules-of-hooks   =', rules['react-hooks/rules-of-hooks']);
+  console.log('react/ 규칙 존재 =', Object.keys(rules).some((r) => r.startsWith('react/')));
 });
 "
 ```
-Expected: 두 규칙 모두 `0`, config 개수 `5`
+Expected: config 개수 `4`, 플러그인 키 `["@next/next","fsd","jsx-a11y","react-hooks"]`, `rules-of-hooks`는 정의됨, `react/ 규칙 존재`는 `false`
 
 - [ ] **Step 3: 커밋**
 
@@ -839,11 +849,13 @@ EOF
 
 ```bash
 pnpm lint     # oxlint && eslint . — 종료 코드 0
-pnpm test     # 66개 통과
+pnpm test     # 65개 통과
 pnpm build    # dist에 엔트리 3종 + dts 3종
 pnpm exec tsc -p packages/eslint-plugin-fsd/tsconfig.json --noEmit
 pnpm exec tsc -p packages/eslint-plugin-fsd/tests/tsconfig.json
 ```
+
+추가로 컨트롤러가 **런타임 스모크 검증**을 한 번 수행한다(설계 6.1): `next` 프리셋을 `ESLint` 인스턴스에 실어 실제 소스를 린트하고 fatal 오류가 없으며 각 플러그인 규칙이 최소 하나씩 리포트되는지 확인한다. 구조 단언만으로는 2.1절의 결함을 잡지 못했기 때문이다.
 
 작업 종료 후 CLAUDE.md 규칙에 따라 `work-log.md`에 기록을 추가하고 memory를 갱신한다.
 
@@ -851,11 +863,13 @@ pnpm exec tsc -p packages/eslint-plugin-fsd/tests/tsconfig.json
 
 | 스펙 섹션 | 담당 태스크 |
 |---|---|
+| 2.1 `eslint-plugin-react` 제외 | Task 2 (미포함), Task 4 (되돌아오면 실패하는 가드) |
 | 3.1 서브패스 export | Task 5 (매니페스트), Task 4 (격리 보증) |
 | 3.2 프리셋은 배열 / ignores 위치 | Task 2, Task 3 |
-| 3.3 JSX 자동 런타임 | Task 2 |
+| 3.3 JSX 파싱은 consumer 책임 | Task 6 (README 파서 설정 예시) |
 | 3.4 기존 API 불변 | Task 2 (테스트로 `configs.recommended` 동일성 단언) |
 | 4 패키지 매니페스트 | Task 2, 3 (peer), Task 5 (exports, tsup) |
 | 5 에러 처리 미가공 | 구현 없음 — 의도적. Task 6에서 설치 표로 대응 |
-| 6 테스트 전략 6개 항목 | Task 2, 3 (5개), Task 4 (루트 격리) |
+| 6 테스트 전략 6개 항목 | Task 2, 3 (4개), Task 4 (루트 격리 + react 제외 가드) |
+| 6.1 런타임 스모크 검증 | 컨트롤러가 Task 3 이후 수행, 원장에 기록 |
 | 7 문서 변경 | Task 6 |
