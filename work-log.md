@@ -31,7 +31,7 @@
   - 스크립트: `lint`를 `oxlint && eslint .`(빠른 쪽 먼저 실패시켜 느린 ESLint를 아끼는 순서)로 바꾸고 `lint:ox`/`lint:es`/`lint:fix` 추가.
   - 첫 린트에서 `@typescript-eslint/no-unnecessary-type-assertion` 5건 검출·수정: `parse-path.ts`의 `rel[0]!`(tsconfig에 `noUncheckedIndexedAccess`가 없어 무의미), 테스트 4곳의 `it as unknown as typeof RuleTester.it`. 전부 oxlint가 타입 정보 없이는 못 잡는 건이라 하이브리드에서 ESLint를 남긴 근거가 됨.
 - **검증**: `oxlint` 0.13s 통과, `eslint .` 통과, `tsc --noEmit`(src/tests) 통과, `pnpm test` 42/42 통과, `pnpm build` 성공.
-- **커밋**: 미커밋(작업 트리에 반영만)
+- **커밋**: `8e78c65`(타입 단언 정리), `68b7984`(하이브리드 구성), `e150ae3`(README), `271b9f5`(work-log). 이후 `16004bf`로 `.superpowers/**`를 ESLint ignores에 추가(ESLint는 `.gitignore`를 읽지 않아 스크래치 파일이 `projectService`에 걸려 lint를 깨뜨렸다).
 
 ### ESLint 10 업그레이드
 - **변경 파일**: `package.json`, `packages/eslint-plugin-fsd/package.json`, `packages/eslint-plugin-fsd/README.md`, `pnpm-lock.yaml`
@@ -46,13 +46,13 @@
 
 ## 2026-07-30
 
-### React/Next 프리셋 작업 (진행 중) — eslint-plugin-react ESLint 10 비호환 발견
-- **변경 파일**: `docs/superpowers/specs/2026-07-29-fsd-react-preset-design.md`, `docs/superpowers/plans/2026-07-29-fsd-react-preset.md`, `packages/eslint-plugin-fsd/src/lib/preset.ts`, `packages/eslint-plugin-fsd/src/react.ts`, `packages/eslint-plugin-fsd/tests/{preset,react-preset}.test.ts`, `packages/eslint-plugin-fsd/package.json`
-- **내용**: consumer용 React/Next flat config 프리셋을 서브패스 export(`eslint-plugin-fsd/react`, `/next`)로 추가하는 작업. 브레인스토밍 → 설계 → 계획 → Subagent-Driven 실행 순서로 진행.
-  - **핵심 설계 2건**: (1) 루트 진입점은 React 의존 0을 유지한다 — optional peer만 선언하고 static import하면 선언과 실제가 어긋나므로 모듈 경계로 보증한다. (2) 프리셋은 config **배열**이다 — `ignores`를 FSD config에만 둬야 `@next/next` 규칙이 `app/`·`pages/`에서 꺼지지 않는다.
-  - **실런타임 결함 발견**: 구조 단언 테스트 9개가 전부 통과한 상태에서, ESLint를 실제 실행해보니 `eslint-plugin-react@7.37.5`가 ESLint 10에서 크래시했다. `settings.react.version:'detect'` → `util/version.js:31`이 제거된 `context.getFilename()`을 호출. `version` 명시로 크래시는 피할 수 있으나 미가드 호출이 3곳 더 남아 사용자 결정에 따라 **프리셋에서 제외**. `jsx-a11y`는 제거된 API를 호출하지 않아 유지.
-  - peer 범위가 `^9.7`까지인 것을 "표기 지연"으로 본 초기 판단이 틀렸음을 문서에 명시하고, 설계에 **런타임 스모크 검증**(6.1절)을 절차로 추가.
-  - 프리셋 구성 확정: `/react` = `[FSD, react-hooks]`, `/next` = `[FSD, react-hooks, jsx-a11y, @next/next]`. JSX 파싱 설정은 consumer 책임.
-- **검증**: Task 1 완료(리뷰 clean), Task 2 리뷰 통과 후 요구사항 변경으로 수정 라운드 진행 중. 테스트 목표 65개.
-- **커밋**: `69b87f6`(설계 문서), `24027bb`(구현 계획), `0e66b2f`(Task 1 조립 헬퍼), `48c325e`(Task 2 초안), `7b9bee7`(설계·계획 개정)
-- **남은 작업**: Task 2 수정 라운드 → Task 3(next 프리셋) → Task 4(격리 회귀 테스트) → Task 5(exports·tsup) → Task 6(README) → 최종 리뷰
+### React/Next 프리셋 서브패스 export 추가 (완료)
+- **변경 파일**: `docs/superpowers/specs/2026-07-29-fsd-react-preset-design.md`, `docs/superpowers/plans/2026-07-29-fsd-react-preset.md`, `packages/eslint-plugin-fsd/src/{react,next}.ts`, `src/lib/preset.ts`, `src/types/eslint-plugin-jsx-a11y.d.ts`, `tests/{preset,react-preset,next-preset,entry-isolation}.test.ts`, `tests/tsconfig.json`, `package.json`, `tsup.config.ts`, `README.md`, `eslint.config.mjs`
+- **내용**: consumer용 React/Next flat config 프리셋을 서브패스 export(`eslint-plugin-fsd/react`, `/next`)로 추가. 브레인스토밍 → 설계 → 계획 → Subagent-Driven 실행(6개 태스크, 태스크별 리뷰) → 최종 전체 브랜치 리뷰 순서로 진행.
+  - **핵심 설계 3건**: (1) 루트 진입점은 React 의존 0을 유지한다 — optional peer만 선언하고 static import하면 선언과 실제가 어긋나므로 모듈 경계로 보증한다. (2) 프리셋은 config **배열**이다 — `ignores`를 FSD config에만 둬야 `@next/next` 규칙이 `app/`·`pages/`에서 꺼지지 않는다. (3) `eslint-plugin-react` 제외.
+  - **실런타임 결함 발견**: 구조 단언 테스트 9개가 전부 통과한 상태에서, ESLint를 실제 실행해보니 `eslint-plugin-react@7.37.5`가 ESLint 10에서 크래시했다. `settings.react.version:'detect'` → `util/version.js:31`이 제거된 `context.getFilename()`을 호출. `version` 명시로 그 크래시는 피할 수 있으나 미가드 호출이 3곳 더 남아 사용자 결정에 따라 **프리셋에서 제외**. `jsx-a11y`는 제거된 API를 호출하지 않아 유지. peer 범위가 `^9.7`까지인 것을 "표기 지연"으로 본 초기 판단이 틀렸음을 스펙 2.1절에 기록하고, 설계에 **런타임 스모크 검증**(6.1절)을 절차로 추가.
+  - **프리셋 구성**: `/react` = `[FSD, react-hooks]`(2개), `/next` = `[FSD, react-hooks, jsx-a11y, @next/next]`(4개). `ignores`는 FSD config에만, `@next/next`는 무스코프(라우팅 폴더에서 돌아야 함), `react-hooks`는 `.ts`/`.js`까지, `jsx-a11y`는 `.jsx`/`.tsx`만.
+  - **최종 리뷰(opus)에서 Important 5건 발견·수정**: (I1) 문서가 "프리셋은 JSX 파싱을 설정하지 않는다"고 했으나 `jsx-a11y`의 상류 config가 `ecmaFeatures.jsx`를 품고 있어 `/next`는 실제로 파싱을 켠다 — 컨트롤러의 런타임 스모크가 `/next`만 대상으로 해 부분적으로 우연히 통과했고, `/react`가 `.jsx` 파싱에 실패하는 사실을 끝까지 놓쳤다. (I2) `react-hooks` peer 하한 `^7.0.0`이 ESLint 10을 선언하지 않는 7.0.x를 허용해 2.1절의 교훈을 재도입 → `^7.1.0`으로 상향. (I3) `react-hooks` recommended가 16개 규칙(error 13/warn 3, React Compiler 규칙군 포함)을 켠다는 사실이 미문서화, 스펙 8절의 `recommended-latest` 비교도 부정확(차이는 `void-use-memo` 1건). (I4) 격리 가드가 denylist라 서브패스 스펙시파이어·목록 밖 패키지를 놓침 → allowlist(`['eslint']`)로 전환. (I5) work-log가 완료 작업을 미완으로 기록.
+- **검증**: `pnpm test` 42 → **67개** 통과, `pnpm lint`(oxlint+eslint) exit 0, 양쪽 `tsc` exit 0, `pnpm build` 성공. 산출물 격리 확인: `dist/index.js`의 실제 모듈 그래프를 재귀 추적해 React 패키지 참조 0건. 런타임 스모크: `/next`를 ESLint에 실어 `.jsx` 린트 → fatal 0건, 세 플러그인 규칙 모두 발화.
+- **커밋**: `69b87f6`(설계) → `1936172`(Task 6) + 최종 리뷰 수정. 이번 세션 커밋 20건 이상.
+- **follow-up**: CI 매트릭스(`eslint: [9, 10]`)로 v9 지원 주장 실체화, 배포 메타데이터(`license`/`description`/`repository`+LICENSE), `/react`에도 JSX `languageOptions`를 줄지 결정, `tsup` `splitting: false` 검토.
