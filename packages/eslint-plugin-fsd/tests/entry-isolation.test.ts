@@ -13,7 +13,15 @@ const REACT_PACKAGES = [
   'eslint-plugin-react',
 ];
 
-const IMPORT_PATTERN = /import\s+(?:type\s+)?(?:[^'"]*?from\s*)?['"]([^'"]+)['"]/g;
+// 모듈 스펙시파이어가 등장할 수 있는 위치를 직접 겨냥한다: from 절, bare/동적
+// import, require. import 키워드로 시작하는 패턴을 쓰면 재수출(export ... from)과
+// 동적 import(...)를 놓쳐 가드가 조용히 통과한다.
+const MODULE_SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"]([^'"]+)['"]/g;
+
+/** 소스 텍스트에서 모듈 스펙시파이어를 등장 순서대로 추출한다. */
+function extractSpecifiers(source: string): string[] {
+  return [...source.matchAll(MODULE_SPECIFIER)].map((match) => match[1]);
+}
 
 function resolveRelative(fromFile: string, specifier: string): string {
   const base = resolve(dirname(fromFile), specifier);
@@ -34,9 +42,7 @@ function collectBareSpecifiers(entry: string): string[] {
     if (visited.has(file)) continue;
     visited.add(file);
 
-    const source = readFileSync(file, 'utf8');
-    for (const match of source.matchAll(IMPORT_PATTERN)) {
-      const specifier = match[1];
+    for (const specifier of extractSpecifiers(readFileSync(file, 'utf8'))) {
       if (specifier.startsWith('.')) queue.push(resolveRelative(file, specifier));
       else bare.add(specifier);
     }
@@ -70,5 +76,33 @@ describe('루트 진입점 의존성 격리', () => {
     for (const entry of ['index.ts', 'react.ts', 'next.ts']) {
       expect(collectBareSpecifiers(resolve(SRC, entry))).not.toContain('eslint-plugin-react');
     }
+  });
+});
+
+describe('extractSpecifiers', () => {
+  it('정적 import·재수출·bare·동적 import를 모두 잡는다', () => {
+    // 이 테스트가 가드의 가드다. 여기서 놓치는 형태가 있으면 위 격리 테스트가
+    // 조용히 통과해버린다.
+    const source = [
+      "import a from 'pkg-default';",
+      "import { b } from 'pkg-named';",
+      "import type { C } from 'pkg-type';",
+      "import * as d from 'pkg-star';",
+      "import 'pkg-bare';",
+      "export { e } from 'pkg-reexport';",
+      "export * from 'pkg-star-reexport';",
+      "const f = await import('pkg-dynamic');",
+    ].join('\n');
+
+    expect(extractSpecifiers(source)).toEqual([
+      'pkg-default',
+      'pkg-named',
+      'pkg-type',
+      'pkg-star',
+      'pkg-bare',
+      'pkg-reexport',
+      'pkg-star-reexport',
+      'pkg-dynamic',
+    ]);
   });
 });
