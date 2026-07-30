@@ -19,8 +19,8 @@
 - 커밋 메시지는 conventional commits + 한글 본문. 커밋 끝에 다음 줄을 넣는다:
   `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`
 - 각 태스크 종료 시 `pnpm test`와 `pnpm lint`가 **둘 다 통과**해야 한다. `pnpm lint`는 `oxlint && eslint .`이다.
-- 상류 플러그인 버전은 이 값으로 고정한다: `eslint-plugin-react@^7.37.0`, `eslint-plugin-react-hooks@^7.0.0`, `eslint-plugin-jsx-a11y@^6.10.0`, `@next/eslint-plugin-next@^16.0.0`.
-- `eslint-plugin-react`는 severity를 **숫자**로 쓴다(`0` = off, `2` = error). 문자열 `'off'`/`'error'`가 아니다.
+- 상류 플러그인 버전은 이 값으로 고정한다: `eslint-plugin-react-hooks@^7.0.0`, `eslint-plugin-jsx-a11y@^6.10.0`, `@next/eslint-plugin-next@^16.0.0`, `@types/node@^24`(런타임 Node 24에 정렬).
+- **`eslint-plugin-react`는 이 프로젝트에서 쓰지 않는다.** ESLint 10에서 제거된 `context.getFilename()`을 호출해 크래시한다(설계 2.1). 어떤 태스크도 이를 도입하지 않는다.
 - 기존 `plugin.configs.recommended`는 **단일 객체 그대로 유지**한다. 배열로 바꾸지 않는다.
 
 ---
@@ -539,7 +539,15 @@ const REACT_PACKAGES = [
   'eslint-plugin-react',
 ];
 
-const IMPORT_PATTERN = /import\s+(?:type\s+)?(?:[^'"]*?from\s*)?['"]([^'"]+)['"]/g;
+// 모듈 스펙시파이어가 등장할 수 있는 위치를 직접 겨냥한다: from 절, bare/동적
+// import, require. import 키워드로 시작하는 패턴을 쓰면 재수출(export ... from)과
+// 동적 import(...)를 놓쳐 가드가 조용히 통과한다.
+const MODULE_SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"]([^'"]+)['"]/g;
+
+/** 소스 텍스트에서 모듈 스펙시파이어를 등장 순서대로 추출한다. */
+function extractSpecifiers(source: string): string[] {
+  return [...source.matchAll(MODULE_SPECIFIER)].map((match) => match[1]);
+}
 
 function resolveRelative(fromFile: string, specifier: string): string {
   const base = resolve(dirname(fromFile), specifier);
@@ -560,9 +568,7 @@ function collectBareSpecifiers(entry: string): string[] {
     if (visited.has(file)) continue;
     visited.add(file);
 
-    const source = readFileSync(file, 'utf8');
-    for (const match of source.matchAll(IMPORT_PATTERN)) {
-      const specifier = match[1];
+    for (const specifier of extractSpecifiers(readFileSync(file, 'utf8'))) {
       if (specifier.startsWith('.')) queue.push(resolveRelative(file, specifier));
       else bare.add(specifier);
     }
@@ -598,12 +604,40 @@ describe('루트 진입점 의존성 격리', () => {
     }
   });
 });
+
+describe('extractSpecifiers', () => {
+  it('정적 import·재수출·bare·동적 import를 모두 잡는다', () => {
+    // 이 테스트가 가드의 가드다. 여기서 놓치는 형태가 있으면 위 격리 테스트가
+    // 조용히 통과해버린다.
+    const source = [
+      "import a from 'pkg-default';",
+      "import { b } from 'pkg-named';",
+      "import type { C } from 'pkg-type';",
+      "import * as d from 'pkg-star';",
+      "import 'pkg-bare';",
+      "export { e } from 'pkg-reexport';",
+      "export * from 'pkg-star-reexport';",
+      "const f = await import('pkg-dynamic');",
+    ].join('\n');
+
+    expect(extractSpecifiers(source)).toEqual([
+      'pkg-default',
+      'pkg-named',
+      'pkg-type',
+      'pkg-star',
+      'pkg-bare',
+      'pkg-reexport',
+      'pkg-star-reexport',
+      'pkg-dynamic',
+    ]);
+  });
+});
 ```
 
 - [ ] **Step 2: 테스트 통과 확인**
 
 Run: `pnpm test`
-Expected: PASS (61개 + 신규 4개 = 65개)
+Expected: PASS (61개 + 신규 5개 = 66개)
 
 이 테스트는 Task 1~3이 올바르면 처음부터 통과한다. TDD의 red 단계가 없는 회귀 가드다.
 
@@ -618,7 +652,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 Run: `pnpm test`
 Expected: FAIL — "src/index.ts는 React 플러그인을 로드하지 않는다" 실패
 
-확인한 뒤 **그 줄을 반드시 되돌린다.** 되돌린 후 `pnpm test`가 다시 65개 통과해야 한다.
+확인한 뒤 **그 줄을 반드시 되돌린다.** 되돌린 후 `pnpm test`가 다시 66개 통과해야 한다.
 
 - [ ] **Step 4: 린트 확인**
 
@@ -732,7 +766,7 @@ Expected: `OK: 엔트리 3종 생성, 루트 산출물에 React 의존 없음`
 pnpm test
 pnpm lint
 ```
-Expected: 65개 통과, 린트 종료 코드 0
+Expected: 66개 통과, 린트 종료 코드 0
 
 - [ ] **Step 6: 커밋**
 
@@ -864,7 +898,7 @@ EOF
 
 ```bash
 pnpm lint     # oxlint && eslint . — 종료 코드 0
-pnpm test     # 65개 통과
+pnpm test     # 66개 통과
 pnpm build    # dist에 엔트리 3종 + dts 3종
 pnpm exec tsc -p packages/eslint-plugin-fsd/tsconfig.json --noEmit
 pnpm exec tsc -p packages/eslint-plugin-fsd/tests/tsconfig.json
