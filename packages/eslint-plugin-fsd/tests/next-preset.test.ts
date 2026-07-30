@@ -29,6 +29,14 @@ describe('next 프리셋', () => {
     expect(nextPreset[2].files).toEqual(['**/*.{jsx,tsx}']);
   });
 
+  it('jsx-a11y config의 JSX 파싱 languageOptions가 부수적으로 딸려온다', () => {
+    // scopeToFiles는 상류 config를 얕은 복사한다. jsx-a11y의 flatConfigs.recommended가
+    // languageOptions.parserOptions.ecmaFeatures.jsx를 갖고 있는 한, /next는
+    // 설계하지 않은 채로 JSX 파싱을 얻는다(설계 문서 3.3절). upstream이 이 필드를
+    // 빼면 여기서 즉시 드러나야 한다.
+    expect(nextPreset[2].languageOptions).toEqual({ parserOptions: { ecmaFeatures: { jsx: true } } });
+  });
+
   it('세 플러그인 네임스페이스가 fsd와 충돌 없이 등록된다', () => {
     const keys = nextPreset.flatMap((config) => Object.keys(config.plugins ?? {}));
     expect(keys.sort()).toEqual(['@next/next', 'fsd', 'jsx-a11y', 'react-hooks']);

@@ -52,11 +52,13 @@ function collectBareSpecifiers(entry: string): string[] {
 }
 
 describe('루트 진입점 의존성 격리', () => {
-  it('src/index.ts는 React 플러그인을 로드하지 않는다', () => {
-    const bare = collectBareSpecifiers(resolve(SRC, 'index.ts'));
-    for (const pkg of REACT_PACKAGES) {
-      expect(bare).not.toContain(pkg);
-    }
+  it('src/index.ts의 bare specifier는 eslint 하나뿐이다 (allowlist)', () => {
+    // 지켜야 할 불변식은 "이 네 패키지가 없다"가 아니라 "eslint 외 서드파티
+    // 의존성이 전혀 없다"이다. denylist는 서브패스 지정자(예:
+    // 'eslint-plugin-react-hooks/foo')나 목록에 없는 React 인접 패키지
+    // (eslint-plugin-react-refresh 등), require.resolve 형태를 놓친다.
+    // allowlist는 이런 우회를 구조적으로 차단한다.
+    expect(collectBareSpecifiers(resolve(SRC, 'index.ts')).sort()).toEqual(['eslint']);
   });
 
   it('탐지기가 실제로 동작한다 (src/react.ts에서는 검출된다)', () => {
@@ -73,8 +75,11 @@ describe('루트 진입점 의존성 격리', () => {
 
   it('어느 엔트리도 eslint-plugin-react를 로드하지 않는다', () => {
     // 설계 2.1: ESLint 10에서 크래시하므로 제외했다. 되돌아오면 여기서 잡힌다.
+    // REACT_PACKAGES의 마지막 원소가 바로 그 감시 대상이다.
+    const excludedForever = REACT_PACKAGES.at(-1)!;
+    expect(excludedForever).toBe('eslint-plugin-react');
     for (const entry of ['index.ts', 'react.ts', 'next.ts']) {
-      expect(collectBareSpecifiers(resolve(SRC, entry))).not.toContain('eslint-plugin-react');
+      expect(collectBareSpecifiers(resolve(SRC, entry))).not.toContain(excludedForever);
     }
   });
 });

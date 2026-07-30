@@ -2,6 +2,7 @@
 
 - 날짜: 2026-07-29
 - 개정: 2026-07-30 — `eslint-plugin-react`를 프리셋에서 제외 (2.1절 참조). 구현 중 실런타임 검증에서 ESLint 10 비호환이 드러났다.
+- 개정: 2026-07-30 — 최종 리뷰 반영: `/next`의 JSX 파싱이 jsx-a11y의 부수 효과임을 명시(2.1·3.3절), `eslint-plugin-react-hooks` peer 하한을 `^7.1.0`으로 상향(2·4절), `react-hooks` recommended/recommended-latest 차이를 실측치로 정정(8절).
 - 상태: 확정 (구현 진행 중)
 - 목표: `eslint-plugin-fsd`가 consumer(React/Next.js 앱)용 flat config 프리셋을 서브패스로 제공한다. FSD 규칙과 React 생태계 규칙을 한 번에 켜되, React를 쓰지 않는 consumer에게는 어떤 부담도 지우지 않는다.
 
@@ -35,7 +36,7 @@ FSD는 프론트엔드 아키텍처이고 실사용 대상은 대부분 React/Ne
 
 | 플러그인 | 버전 | flat config 접근 경로 | 플러그인 키 | ESLint 10 peer | 채택 |
 |---|---|---|---|---|---|
-| `eslint-plugin-react-hooks` | 7.1.1 | `configs.flat.recommended`, `configs.flat['recommended-latest']` | `react-hooks` | ✅ `^10.0.0` 포함 | ✅ |
+| `eslint-plugin-react-hooks` | 7.1.1 | `configs.flat.recommended`, `configs.flat['recommended-latest']` | `react-hooks` | ✅ `^10.0.0` 포함(7.1.0부터 — 7.0.x는 미포함) | ✅ |
 | `eslint-plugin-jsx-a11y` | 6.10.2 | **`flatConfigs.recommended`** (최상위) | `jsx-a11y` | ❌ `^9`까지 | ✅ |
 | `@next/eslint-plugin-next` | 16.2.12 | `configs['core-web-vitals']`, `configs.recommended` | `@next/next` | peer 선언 없음 | ✅ |
 | `eslint-plugin-react` | 7.37.5 | `configs.flat.recommended`, `configs.flat['jsx-runtime']` | `react` | ❌ `^9.7`까지 | ❌ 제외 (2.1) |
@@ -45,6 +46,7 @@ FSD는 프론트엔드 아키텍처이고 실사용 대상은 대부분 React/Ne
 1. **패키지마다 규약이 다르다.** `configs.flat.*`, 최상위 `flatConfigs.*`, `configs.*`. 이걸 감싸주는 것이 프리셋의 실질적 가치다.
 2. `eslint-plugin-react-hooks`의 `.d.ts`는 flat config 타입을 `plugins: { react: any }`로 적어두었으나 **실제 구현은 `react-hooks` 키로 등록**한다. 타입이 부정확하다.
 3. `eslint-plugin-react-hooks` v7은 `@babel/core`, `@babel/parser`, `hermes-parser`, `zod`, `zod-validation-error`를 런타임 의존성으로 가진다(React Compiler 분석용). 무거우므로 optional peer가 타당하다.
+4. `eslint-plugin-react-hooks`의 ESLint 10 peer 선언은 7.1.0부터 들어갔다. 7.0.0·7.0.1은 `peerDependencies.eslint`에 `^10.0.0`이 없다. 따라서 peer 하한을 `^7.0.0`이 아니라 `^7.1.0`으로 잡는다 — 2.1절의 교훈("선언 누락을 단순 지연으로 보지 말고 런타임으로 검증하라")을 매니페스트에도 그대로 적용한 것이다. 실제 검증은 7.1.1로 수행했다.
 
 ### 2.1 `eslint-plugin-react` 제외 결정 (2026-07-30)
 
@@ -70,7 +72,7 @@ contextOrFilename.getFilename is not a function
 
 이 저장소는 ESLint 10을 대상으로 하므로, 잠재 크래시 경로를 품은 플러그인을 프리셋으로 재배포하지 않는다. `eslint-plugin-react`를 제외한다.
 
-**잃는 것:** `react/jsx-key`, `react/no-children-prop` 등 recommended 규칙. 그리고 이 config가 제공했던 `languageOptions.parserOptions.ecmaFeatures.jsx` — 즉 **JSX 파싱 설정**(3.3절).
+**잃는 것:** `react/jsx-key`, `react/no-children-prop` 등 recommended 규칙, 그리고 이 config가 제공했던 `languageOptions.parserOptions.ecmaFeatures.jsx` — 즉 **JSX 파싱 설정**. 단, `/next` 서브패스는 이걸 그대로 잃지 않는다. `eslint-plugin-jsx-a11y`(6.10.2) 의 `flatConfigs.recommended`가 같은 필드(`languageOptions.parserOptions.ecmaFeatures.jsx: true`)를 갖고 있고, `/next`가 이 config를 `scopeToFiles`로 얕은 복사하면서 그 필드를 그대로 들고 오기 때문에 `**/*.{jsx,tsx}`에서 JSX 파싱이 부수적으로 되살아난다. 이는 설계가 아니라 jsx-a11y의 upstream config에 얹혀가는 **부수 효과**이며, `/react`에는 jsx-a11y가 없으므로 해당하지 않는다. 자세한 내용과 이 부수 효과에 기대면 안 되는 이유는 3.3절 참조.
 
 `jsx-a11y`도 ESLint 10을 peer로 선언하지 않지만, 제거된 `context.*` API를 **한 번도 호출하지 않는다**(조사 완료). 표기만 뒤처진 경우이므로 유지한다. README에 경고가 예상된 것임을 명시한다.
 
@@ -112,11 +114,15 @@ src/lib/preset.ts           엔트리가 공유하는 조립 헬퍼
 
 `react-hooks`만 `.js`/`.ts`까지 포함하는 이유: 커스텀 훅은 JSX 없는 `.ts` 파일에도 존재하며, `rules-of-hooks`는 거기서도 유효하다.
 
-### 3.3 JSX 파싱은 consumer 책임
+### 3.3 JSX 파싱 — `/react`는 consumer 책임, `/next`는 jsx-a11y의 부수 효과로 일부 커버
 
-`eslint-plugin-react`를 제외한 결과, 프리셋은 JSX 파싱 설정을 제공하지 않는다. 기본 파서(espree)는 `ecmaFeatures.jsx` 없이는 JSX를 파싱하지 못한다.
+`eslint-plugin-react`를 제외한 결과, 이 패키지가 **설계 차원에서** 제공하는 JSX 파싱 설정은 없다. 기본 파서(espree)는 `ecmaFeatures.jsx` 없이는 JSX를 파싱하지 못한다.
 
-프리셋이 파서를 강제하지 않는 것이 옳다. TypeScript 프로젝트는 어차피 `typescript-eslint`의 파서를 쓰고, 그 선택은 consumer의 것이다. README에 **프리셋 앞에 파서 설정이 필요하다**고 명시하고 예시를 준다.
+다만 실제 동작은 서브패스마다 다르다. `/next`가 포함하는 `eslint-plugin-jsx-a11y@6.10.2`의 `flatConfigs.recommended`는 `languageOptions.parserOptions.ecmaFeatures.jsx: true`를 갖고 있다. `lib/preset.ts`의 `scopeToFiles`는 상류 config 객체를 얕은 복사(`{ ...config, files }`)하므로 이 필드도 그대로 딸려온다. 그 결과 `/next`는 `**/*.{jsx,tsx}`에서 JSX 파싱이 **부수적으로** 켜진다 — 이 패키지가 의도적으로 설계한 동작이 아니라 jsx-a11y의 upstream config에 얹혀가는 부수 효과다. jsx-a11y가 그 필드를 바꾸거나 빼면 예고 없이 사라질 수 있으므로, 이 부수 효과에 기대는 것은 권장하지 않는다.
+
+`/react`는 jsx-a11y를 포함하지 않으므로 이 부수 효과가 없다. `.jsx`를 `/react`로 린트하려면 consumer가 파서를 직접 설정해야 한다.
+
+프리셋이 파서 설정을 스스로 강제하지 않는다는 원칙 자체는 유지한다 — TypeScript 프로젝트는 어차피 `typescript-eslint`의 파서를 쓰고, 그 선택은 consumer의 것이다. README에는 **두 서브패스의 차이를 정직하게** 적고, 프리셋 앞에 파서 설정이 필요하다는 안내와 예시를 준다.
 
 이전 개정에서 다루던 JSX 자동 런타임(`react/react-in-jsx-scope` off)은 `eslint-plugin-react` 제외와 함께 무의미해졌다. 해당 규칙 자체가 없다.
 
@@ -137,7 +143,7 @@ src/lib/preset.ts           엔트리가 공유하는 조립 헬퍼
   },
   "peerDependencies": {
     "eslint": "^9.0.0 || ^10.0.0",
-    "eslint-plugin-react-hooks": "^7.0.0",
+    "eslint-plugin-react-hooks": "^7.1.0",
     "eslint-plugin-jsx-a11y": "^6.10.0",
     "@next/eslint-plugin-next": "^16.0.0"
   },
@@ -205,5 +211,5 @@ README에 다음을 추가한다.
 
 - `eslint-plugin-react`가 ESLint 10 호환 버전을 내면 프리셋 포함을 재검토한다. 판단 기준은 peer 선언이 아니라 **실런타임 검증**이다 — 2.1의 교훈.
 - `jsx-a11y`가 ESLint 10 peer를 선언하면 README의 경고 안내를 제거한다.
-- `react-hooks`의 `recommended` 대신 `recommended-latest`(최신 React Compiler 규칙)를 쓸지는 v0.2에서 재검토한다. 초기 릴리스는 보수적으로 `recommended`를 쓴다.
+- `react-hooks`의 `recommended` 대신 `recommended-latest`를 쓸지는 v0.2에서 재검토한다. 둘의 차이는 `recommended`가 이미 React Compiler 규칙 전체(13개 error + 3개 warn, 총 16개)를 포함하고 있어 크지 않다 — `recommended-latest`(17개)에만 있는 규칙은 `react-hooks/void-use-memo` 하나뿐이다(7.1.1 기준 실측). 초기 릴리스는 이 한 규칙 차이만큼만 보수적으로 `recommended`를 쓴다.
 - Vue/Svelte 프리셋은 요청이 있을 때 같은 서브패스 패턴으로 추가한다.
