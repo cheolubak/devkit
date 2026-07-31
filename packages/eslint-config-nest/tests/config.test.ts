@@ -55,4 +55,21 @@ describe('런타임 검증', () => {
     const ruleIds = messages.map((m) => m.ruleId);
     expect(ruleIds).toContain('zod/no-any-schema');
   });
+
+  it('Nest 관용구 파일에서 에러가 하나도 없다', async () => {
+    // 이 가드가 깨지면 설정 자체를 쓸 수 없다. 생성자 파라미터 프로퍼티,
+    // 데코레이터만 있는 빈 모듈 클래스, DI 주입이 모두 깨끗해야 한다.
+    const messages = await lintFixture('src/idioms.ts');
+    const reported = messages.map((m) => `${m.ruleId ?? 'fatal'}: ${m.message}`);
+    expect(reported).toEqual([]);
+  });
+
+  it('Nest 테스트 파일에서 에러가 하나도 없다', async () => {
+    // 설계 4.4. jest의 expect(service.method) 패턴이 unbound-method를
+    // 발화시키는데, 이는 테스트 파일의 정당한 관용구다. 완화가 실제로
+    // 적용됐는지 여기서 고정한다.
+    const messages = await lintFixture('src/user.service.spec.ts');
+    const reported = messages.map((m) => `${m.ruleId ?? 'fatal'}: ${m.message}`);
+    expect(reported).toEqual([]);
+  });
 });

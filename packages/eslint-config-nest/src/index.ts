@@ -41,6 +41,22 @@ const config: Linter.Config[] = [
       '@typescript-eslint/require-await': 'error',
     },
   },
+
+  {
+    // 테스트 파일 완화. 픽스처(idioms.ts) 실측 결과 프로덕션 관용구
+    // (생성자 파라미터 프로퍼티, 데코레이터만 있는 빈 모듈 클래스 등)는
+    // 베이스라인과 충돌하지 않았다 — 끌 규칙이 없었다.
+    //
+    // 유일하게 발화한 것은 테스트 파일(user.service.spec.ts)의
+    // unbound-method다. jest의 `expect(service.method)`와 같은 형태로
+    // 메서드 참조를 단언 함수에 넘기는 것은 정당한 테스트 관용구이지만,
+    // unbound-method는 이를 실제 this 바인딩 오류로 오판한다. 설계 4.4 참조.
+    name: 'nest/test-idioms',
+    files: ['**/*.spec.ts', '**/*.e2e-spec.ts'],
+    rules: {
+      '@typescript-eslint/unbound-method': 'off',
+    },
+  },
 ];
 
 export default config;
