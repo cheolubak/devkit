@@ -100,7 +100,20 @@ zod를 optional로 만들고 `.`/`./zod`로 나누는 안도 검토했으나, zo
 4. (a)로 판정된 것만 끄고, 주석에 어떤 관용구 때문인지 적는다.
 5. 다시 린트해 관용구 파일 에러 0건을 확인한다.
 
-**확인 대상 후보** (발화 여부는 실측으로 확정하며, 이 목록에 없다고 넘어가지 않는다): `@typescript-eslint/unbound-method`(메서드 참조 전달), `no-extraneous-class`(데코레이터만 있는 `@Module` 클래스), `parameter-properties`(생성자 파라미터 프로퍼티), `no-unsafe-*`(데코레이터 메타데이터), `require-await`(구현이 아직 동기인 `async` 핸들러), `no-empty-function`(빈 생성자).
+**확인 대상 후보** (발화 여부는 실측으로 확정하며, 이 목록에 없다고 넘어가지 않는다).
+
+> **2026-07-31 정정:** 초판은 아래 여섯 개를 나란히 나열했으나, 그중 **셋은 `recommendedTypeChecked`에 애초에 포함되지 않는다**(실측 확인). 베이스라인에 없는 규칙은 발화할 수 없으므로 "발화하지 않았다"가 아무것도 증명하지 않는다. 이 구분을 흐린 채로 두면 음성 결과가 실제보다 강해 보인다.
+
+| 후보 | 베이스라인 포함 | 대상 관용구 |
+|---|---|---|
+| `@typescript-eslint/unbound-method` | ✅ error | 메서드 참조 전달 |
+| `@typescript-eslint/no-unsafe-*` | ✅ error | 데코레이터 메타데이터, 느슨한 요청 바디 |
+| `@typescript-eslint/require-await` | ✅ error | 구현이 아직 동기인 `async` 핸들러 |
+| `@typescript-eslint/no-extraneous-class` | ❌ 미포함(`strict`) | 데코레이터만 있는 `@Module` 클래스 |
+| `@typescript-eslint/parameter-properties` | ❌ 미포함(`stylistic`) | 생성자 파라미터 프로퍼티 |
+| `@typescript-eslint/no-empty-function` | ❌ 미포함(`stylistic`) | 빈 생성자 |
+
+**따라서 "충돌 없음" 결과를 서술할 때는 범위를 명시해야 한다** — "베이스라인이 실제로 켜는 규칙 중, 이 픽스처가 노출하는 패턴에 대해 충돌이 없었다"이지 "NestJS와 완전히 호환됨을 증명했다"가 아니다. 픽스처가 노출하지 않는 위험군(대표적으로 `@Body()` DTO 같은 느슨한 타입 경로에서의 `no-unsafe-*`)은 미시험 상태로 남는다.
 
 ### 4.3 Nest에서 가장 값어치 있는 규칙
 
