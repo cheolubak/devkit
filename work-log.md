@@ -96,3 +96,16 @@
 - **검증**: `pnpm test` 77/77, `pnpm lint`·`pnpm build` 통과, `tsc` 4개 프로젝트 통과, `npm pack --dry-run`으로 tarball 정상 생성 확인(10파일/4파일).
 - **커밋**: `d8952a9` — `main`에 fast-forward 머지 완료
 - **남은 것**: 배포하려면 `npm login`으로 `@devbak` 스코프 소유 계정 로그인 필요(현재 미로그인).
+
+### devkit 로드맵 및 Phase 1·2 설계 확정
+- **변경 파일**: `docs/superpowers/specs/2026-07-31-devkit-roadmap-design.md`(신규), `work-log.md`
+- **내용**: 이 저장소를 ESLint 패키지 모음에서 Next.js/NestJS 공용 개발 표준 툴킷(`@devbak/*`)으로 확장하는 4단계 로드맵과, Phase 1·2의 상세 설계를 확정.
+  - **실측 선행**: `~/Documents/develop`의 28개 프로젝트 의존성을 스캔해 근거를 세웠다. `prettier@3`이 16개 프로젝트에 각자 존재(공통분모 1위), ESLint가 8(6개)/9(9개)/10(2개)로 3중 파편화, NestJS 3개(`account-api`/`devlog-api`/`eungam-api`)는 **전부 eslint@8 + legacy `.eslintrc.js`**, 테스트 러너는 프론트=vitest·백엔드=jest로 깔끔히 갈림.
+  - **NestJS 3개 계측이 규칙 후보를 걸러냈다**: (1) 배럴 `index.ts`가 **통틀어 0개** → FSD의 `no-public-api-sidestep`에 대응하는 "모듈 Public API 강제" 규칙 기각. (2) **`class-validator`를 아예 안 쓰고** `@Body(new ZodValidationPipe(schema))` 패턴이 지배적 → "DTO에 class-validator 데코레이터 요구" 규칙을 만들었다면 소비자 전체가 위반이 될 뻔했다. `eslint-config-nest` 설계 3절이 zod를 전제한 것과 독립적으로 같은 결론에 도달. (3) `devlog-api`의 `AppController`가 `PrismaService`를 직접 주입 → R1의 실제 검출 사례.
+  - **로드맵 순서를 작성 도중 뒤집었다**: 초판은 `eslint-plugin-nest-arch`를 Phase 1로 놓았으나, `git rebase origin/main`으로 `eslint-config-nest`가 들어오면서 **완성됐지만 소비자가 0인 패키지**가 이미 있다는 사실이 드러났다. 소비자를 만들기 전에 새 패키지를 더 만들면 미사용 패키지가 둘이 된다. 게다가 `eslint-config-nest`는 peer가 `eslint: ^10` 전용인데 소비자 후보 3개가 전부 eslint@8이라 **구조적으로 쓸 수 없는 상태**였다. → Phase 1을 "소비자 활성화"(ESLint 8→10 마이그레이션 + 설정 패키지 추출), Phase 2를 `nest-arch`로 재배치. 마이그레이션이 `nest-arch`의 오탐 기준선도 만들어주므로 정보 흐름도 맞다.
+  - **Phase 2 규칙 4개 확정**: `no-persistence-in-controller`(error), `no-untyped-payload`(error), `no-cross-module-controller-import`(error), `no-direct-env-access`(warn). 핵심 결정은 **"클래스 역할은 오직 데코레이터로 판정한다"** — Nest는 경로가 아니라 `@Controller()`/`@Injectable()`이 역할을 선언하며, 이 덕분에 규칙이 단일 파일만 보면 되고 타입 정보가 불필요해진다(이미 타입 인식이라 느린 `eslint-config-nest`와 함께 켜도 추가 부담 없음).
+  - **기각한 규칙을 스펙에 명시**: `thin-controller`는 "얼마나 thin해야 thin인가"가 주관적이라 오탐 후 규칙이 꺼지는 결말이 예상되어 기각하고, 의도 중 객관적으로 판정 가능한 부분만 R1이 대신한다. `no-http-artifacts-in-service`는 타입 정보가 필요해 follow-up으로 미룸.
+  - **셀프 리뷰에서 내부 모순 1건 수정**: 4.1절이 "파일명과 경로는 판정에 쓰지 않는다"고 선언했는데 R3·R4는 실제로 경로를 쓴다. 원칙을 "클래스 역할 판정"으로 한정하고, R3가 파일명 관습에 의존하는 것이 안전한 이유(오차가 false negative 방향으로만 난다)를 명시.
+  - **추측성 서술 2건을 실측으로 대체**: `**/tests/fixtures/**`가 `eslint.config.mjs`·`.oxlintrc.json` 양쪽에 이미 있고 패키지 경로를 앵커하지 않아 새 패키지도 자동 커버됨을 확인. `eslint-plugin-fsd`의 `license`/`description`/`repository`/`keywords`/`engines`가 **전부 비어 있음**을 확인(`eslint-config-nest`는 5개 모두 보유) → Phase 1에서 정렬.
+- **커밋**: `64c26fd` (브랜치 `feature/devkit-roadmap`, main 미머지)
+- **블로커**: 두 패키지 모두 미배포 상태라, Phase 1에서 소비자 프로젝트가 설치하려면 npm 배포 또는 `pnpm link`/`file:` 로컬 검증 경로를 먼저 정해야 한다.
