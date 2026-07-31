@@ -72,4 +72,14 @@
   - **핵심 설계**: 켜는 것만큼 끄는 것이 값어치다. 어떤 규칙이 Nest 관용구(생성자 파라미터 프로퍼티, 데코레이터만 있는 빈 `@Module` 클래스, 메서드 참조 전달)와 충돌하는지 추측하지 않고 디스크 픽스처에 실제 ESLint를 돌려 정한다. 결정 절차 5단계를 스펙·계획에 못박았고, 발화가 오탐인지 픽스처가 나쁜지 구분하는 판단을 포함한다.
   - 픽스처는 `@nestjs/*`를 설치하지 않고 데코레이터를 로컬 스텁으로 재현한다(출처는 규칙 판정에 무관). 반면 `zod`는 실제 설치 — 미해결 모듈은 `any`가 되어 `no-unsafe-*`가 무더기로 발화해 오탐 가드를 무력화한다.
 - **커밋**: `e11ec1a`(설계 문서), `b4dd59b`(구현 계획)
-- **남은 작업**: Task 1(스캐폴딩+베이스라인) → Task 2(픽스처+측정) → Task 3(실측 기반 조정) → Task 4(README). 테스트 67 → 73 목표.
+
+### eslint-config-nest 구현 완료
+- **변경 파일**: `packages/eslint-config-nest/**`(신규 패키지: `src/index.ts`, `tests/config.test.ts`, `tests/fixtures/nest-app/**`, `package.json`, `tsconfig.json`, `tests/tsconfig.json`, `tsup.config.ts`, `README.md`), `eslint.config.mjs`, `.oxlintrc.json`, `pnpm-lock.yaml`
+- **내용**: Subagent-Driven으로 4개 태스크를 실행하고 최종 전체 브랜치 리뷰까지 완료. 테스트 67 → **77개**.
+  - **config 구성**: `typescript-eslint` `recommendedTypeChecked` + `eslint-plugin-zod` `recommended`(30개) + Nest 치명 규칙 3종(`no-floating-promises`·`no-misused-promises`·`require-await`) 명시 고정. 자체적으로 끈 규칙은 **단 하나** — `@typescript-eslint/unbound-method`, `*.spec.ts`/`*.e2e-spec.ts` 스코프.
+  - **"측정한 것만 끈다" 방법론**: 디스크 픽스처에 실제 ESLint를 돌려 발화한 것만 조정. 발화가 (a) Nest 관용구 오탐인지 (b) 픽스처가 나쁜지 구분하고 (b)면 픽스처를 고쳤다. 실제로 Task 2에서 데코레이터 스텁의 미사용 파라미터가 `no-unused-vars`를 발화시켰는데, 실제 Nest 코드는 데코레이터를 소비할 뿐 정의하지 않으므로 (b)로 판정해 픽스처를 분리했다 — 규칙을 껐다면 모든 consumer가 값어치 있는 규칙을 잃었을 것이다.
+  - **최종 리뷰가 Critical 1건 발견**: `recommended-type-checked`에 `files` 제한이 없어 타입 인식 규칙이 `.js`/`.mjs`/`.cjs`에도 걸리는데 `projectService`는 `.ts`에만 켜져 있었다. 타입 정보 없는 타입 인식 규칙은 경고가 아니라 **예외를 던지므로**, consumer가 `eslint .`를 돌리면 자기 `eslint.config.mjs`에서 종료 코드 2로 크래시했다. 74개 테스트가 전부 초록인 상태에서 살아 있었고, 하네스가 손으로 고른 `.ts` 경로만 린트해 이 부류를 구조적으로 못 잡았기 때문이다. `disableTypeChecked`를 `.js/.mjs/.cjs`에 적용하고, `lintFiles(['.'])`로 프로젝트 전체를 린트하는 회귀 테스트를 함께 넣었다.
+  - **npm 이름 선점 발견**: `eslint-config-nest`(v0.0.8, 2022)와 `eslint-plugin-fsd`(v1.0.1)가 이미 존재한다. 사고 방지로 `private: true`만 넣고 이름 결정은 보류.
+- **검증**: `pnpm test` 77/77, `pnpm lint`(oxlint+eslint) exit 0, `pnpm build` 성공, 양쪽 `tsc --noEmit` exit 0.
+- **커밋**: `6271c46`(스캐폴딩) → `0fb79df`(최종 리뷰 수정). 브랜치 `feature/eslint-config-nest`, 총 13커밋.
+- **follow-up**: npm 이름 결정(스코프 전환/개명/비공개), 픽스처 보강(느슨한 `@Body()` DTO 경로로 `no-unsafe-*` 시험, `@UseGuards` + `canActivate(): Promise<boolean>`로 `no-misused-promises` 시험, TypeORM 엔티티), 배포 메타데이터(LICENSE 파일).
