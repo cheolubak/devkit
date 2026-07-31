@@ -1,0 +1,12 @@
+{
+  // 빌드용 tsconfig(../tsconfig.json)는 rootDir=src라 tests를 포함하지 않는다.
+  // 타입 인식 린팅이 테스트 파일도 볼 수 있도록 별도 프로젝트를 둔다.
+  // fixtures는 제외한다 — 자체 tsconfig를 갖고 있고 저장소 린트 대상도 아니다.
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false
+  },
+  "include": ["."],
+  "exclude": ["fixtures"]
+}
