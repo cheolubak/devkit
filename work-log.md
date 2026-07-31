@@ -56,3 +56,20 @@
 - **검증**: `pnpm test` 42 → **67개** 통과, `pnpm lint`(oxlint+eslint) exit 0, 양쪽 `tsc` exit 0, `pnpm build` 성공. 산출물 격리 확인: `dist/index.js`의 실제 모듈 그래프를 재귀 추적해 React 패키지 참조 0건. 런타임 스모크: `/next`를 ESLint에 실어 `.jsx` 린트 → fatal 0건, 세 플러그인 규칙 모두 발화.
 - **커밋**: `69b87f6`(설계) → `1936172`(Task 6) + 최종 리뷰 수정. 이번 세션 커밋 20건 이상.
 - **follow-up**: CI 매트릭스(`eslint: [9, 10]`)로 v9 지원 주장 실체화, 배포 메타데이터(`license`/`description`/`repository`+LICENSE), `/react`에도 JSX `languageOptions`를 줄지 결정, `tsup` `splitting: false` 검토.
+
+## 2026-07-31
+
+### React/Next 프리셋 main 머지
+- **내용**: `feature/eslint-plugin-fsd`를 `main`에 **fast-forward** 머지(merge commit 없음, CLAUDE.md 규칙 준수). 머지된 결과에서 테스트 67/67·lint·build·양쪽 tsc 재검증 후 feature 브랜치 삭제. `origin/main`이 존재하지 않아 통합은 전부 로컬이며 푸시하지 않았다.
+- **커밋**: `main` HEAD = `ef06507` (총 40커밋)
+
+### eslint-config-nest 설계·계획 (구현 대기)
+- **변경 파일**: `docs/superpowers/specs/2026-07-31-eslint-config-nest-design.md`, `docs/superpowers/plans/2026-07-31-eslint-config-nest.md`
+- **내용**: NestJS 백엔드용 ESLint 공유 설정을 **별도 패키지** `packages/eslint-config-nest`로 만드는 설계와 4개 태스크 구현 계획. 브랜치 `feature/eslint-config-nest`.
+  - **별도 패키지인 이유(실측)**: `eslint-plugin-fsd`에 `/nestjs` 서브패스를 만들 수 없다. FSD 규칙이 NestJS 전형 구조에서 오탐한다 — `entities`와 `shared`가 FSD 레이어명이면서 동시에 NestJS에서 가장 흔한 폴더명이라, TypeORM 엔티티 상호 참조(관계 매핑에 필수) 같은 정상 코드에 `no-cross-imports`가 발화한다. `src/modules/`·`src/common/`·`src/app.module.ts`는 무반응.
+  - **zod 전용**: 사용자 스택이 zod이므로 `@darraghor/eslint-plugin-nestjs-typed`를 제외했다(가치의 대부분이 class-validator 데코레이터 규칙이고 `class-validator`를 필수 peer로 요구하며 peer 상한도 무제한). 대신 `eslint-plugin-zod`(peer 전부 optional, `^10` 명시, 규칙 40개 중 recommended 30개)를 쓴다.
+  - **ESLint 10 전용**: `peerDependencies`에 `^9`를 넣지 않는다. 검증하지 않은 범위를 지원한다고 주장하지 않기 위해서이며, `eslint-plugin-fsd`가 최종 리뷰에서 받은 지적을 반영한 것이다.
+  - **핵심 설계**: 켜는 것만큼 끄는 것이 값어치다. 어떤 규칙이 Nest 관용구(생성자 파라미터 프로퍼티, 데코레이터만 있는 빈 `@Module` 클래스, 메서드 참조 전달)와 충돌하는지 추측하지 않고 디스크 픽스처에 실제 ESLint를 돌려 정한다. 결정 절차 5단계를 스펙·계획에 못박았고, 발화가 오탐인지 픽스처가 나쁜지 구분하는 판단을 포함한다.
+  - 픽스처는 `@nestjs/*`를 설치하지 않고 데코레이터를 로컬 스텁으로 재현한다(출처는 규칙 판정에 무관). 반면 `zod`는 실제 설치 — 미해결 모듈은 `any`가 되어 `no-unsafe-*`가 무더기로 발화해 오탐 가드를 무력화한다.
+- **커밋**: `e11ec1a`(설계 문서), `b4dd59b`(구현 계획)
+- **남은 작업**: Task 1(스캐폴딩+베이스라인) → Task 2(픽스처+측정) → Task 3(실측 기반 조정) → Task 4(README). 테스트 67 → 73 목표.
