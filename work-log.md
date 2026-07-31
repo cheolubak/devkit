@@ -107,5 +107,5 @@
   - **기각한 규칙을 스펙에 명시**: `thin-controller`는 "얼마나 thin해야 thin인가"가 주관적이라 오탐 후 규칙이 꺼지는 결말이 예상되어 기각하고, 의도 중 객관적으로 판정 가능한 부분만 R1이 대신한다. `no-http-artifacts-in-service`는 타입 정보가 필요해 follow-up으로 미룸.
   - **셀프 리뷰에서 내부 모순 1건 수정**: 4.1절이 "파일명과 경로는 판정에 쓰지 않는다"고 선언했는데 R3·R4는 실제로 경로를 쓴다. 원칙을 "클래스 역할 판정"으로 한정하고, R3가 파일명 관습에 의존하는 것이 안전한 이유(오차가 false negative 방향으로만 난다)를 명시.
   - **추측성 서술 2건을 실측으로 대체**: `**/tests/fixtures/**`가 `eslint.config.mjs`·`.oxlintrc.json` 양쪽에 이미 있고 패키지 경로를 앵커하지 않아 새 패키지도 자동 커버됨을 확인. `eslint-plugin-fsd`의 `license`/`description`/`repository`/`keywords`/`engines`가 **전부 비어 있음**을 확인(`eslint-config-nest`는 5개 모두 보유) → Phase 1에서 정렬.
-- **커밋**: `64c26fd` (브랜치 `feature/devkit-roadmap`, main 미머지)
+- **커밋**: `ec4665a` (브랜치 `feature/devkit-roadmap`, main 미머지)
 - **블로커**: 두 패키지 모두 미배포 상태라, Phase 1에서 소비자 프로젝트가 설치하려면 npm 배포 또는 `pnpm link`/`file:` 로컬 검증 경로를 먼저 정해야 한다.
