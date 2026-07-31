@@ -19,6 +19,11 @@ describe('eslint-config-nest', () => {
       projectService: true,
     });
   });
+
+  it('zod recommended 규칙 30개를 켠다', () => {
+    const ruleNames = config.flatMap((c) => Object.keys(c.rules ?? {}));
+    expect(ruleNames.filter((r) => r.startsWith('zod/'))).toHaveLength(30);
+  });
 });
 
 const FIXTURE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), 'fixtures/nest-app');
@@ -35,6 +40,9 @@ async function lintFixture(relativePath: string): Promise<Linter.LintMessage[]> 
     overrideConfig: config,
   });
   const results = await eslint.lintFiles([relativePath]);
+  // 파일이 조용히 린트에서 빠지면(예: ignore 매칭) messages가 빈 배열로
+  // 남아 "위반 0건" 가드가 아무것도 검증하지 않은 채 통과해버린다.
+  expect(results).toHaveLength(1);
   return results[0]?.messages ?? [];
 }
 
@@ -71,5 +79,21 @@ describe('런타임 검증', () => {
     const messages = await lintFixture('src/user.service.spec.ts');
     const reported = messages.map((m) => `${m.ruleId ?? 'fatal'}: ${m.message}`);
     expect(reported).toEqual([]);
+  });
+
+  it('프로덕션 파일에서는 unbound-method가 살아 있다', async () => {
+    // nest/test-idioms의 unbound-method 완화는 *.spec.ts·*.e2e-spec.ts
+    // 로만 스코핑돼야 한다. 스코프가 프로덕션 파일로 새면 이 규칙이
+    // 여기서 더 이상 잡히지 않는다.
+    const messages = await lintFixture('src/unbound.ts');
+    expect(messages.map((m) => m.ruleId)).toContain('@typescript-eslint/unbound-method');
+  });
+
+  it('프로젝트 전체를 린트해도 크래시하지 않는다', async () => {
+    // consumer는 파일을 골라 린트하지 않는다. `eslint .` 와 같은 형태로
+    // 돌려야 타입 정보가 없는 .js/.mjs 설정 파일에서 터지는 문제를
+    // 잡을 수 있다.
+    const eslint = new ESLint({ cwd: FIXTURE_ROOT, overrideConfigFile: true, overrideConfig: config });
+    await expect(eslint.lintFiles(['.'])).resolves.toBeDefined();
   });
 });

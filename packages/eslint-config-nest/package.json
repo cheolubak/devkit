@@ -1,6 +1,17 @@
 {
   "name": "eslint-config-nest",
   "version": "0.1.0",
+  "private": true,
+  "description": "NestJS 백엔드용 ESLint 공유 설정 (ESLint 10 flat config 전용, 타입 인식 + zod DTO 검증)",
+  "license": "MIT",
+  "keywords": [
+    "eslint",
+    "eslint-config",
+    "eslint-flat-config",
+    "nestjs",
+    "typescript-eslint",
+    "zod"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -13,6 +24,9 @@
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  },
   "scripts": {
     "build": "tsup"
   },

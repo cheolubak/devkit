@@ -595,6 +595,8 @@ Task 2가 측정한 발화 목록을 근거로, **실제로 오탐한 규칙만*
 
 **확인 대상 후보** (발화 여부는 실측으로 확정하며, 이 목록에 없는 규칙이 발화해도 같은 절차로 판단한다): `@typescript-eslint/unbound-method`(메서드 참조 전달), `no-extraneous-class`(데코레이터만 있는 `@Module` 클래스), `parameter-properties`(생성자 파라미터 프로퍼티), `no-unsafe-*`(데코레이터 메타데이터), `require-await`, `no-empty-function`(빈 생성자).
 
+> **2026-07-31 정정:** 위 여섯 개 중 셋(`no-extraneous-class`·`parameter-properties`·`no-empty-function`)은 `recommendedTypeChecked`에 애초에 포함되지 않는다. 어느 셋인지와 그 근거는 스펙 §4.2의 표(`docs/superpowers/specs/2026-07-31-eslint-config-nest-design.md`)를 참조 — 이 목록만 보면 여섯 개 모두가 같은 층위인 것처럼 읽혀 오해를 준다.
+
 - [ ] **Step 1: 실패하는 테스트 작성**
 
 `packages/eslint-config-nest/tests/config.test.ts`의 `런타임 검증` describe 안에 추가한다:

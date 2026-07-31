@@ -12,7 +12,7 @@ import zod from 'eslint-plugin-zod';
 const config: Linter.Config[] = [
   {
     name: 'nest/language-options',
-    files: ['**/*.ts'],
+    files: ['**/*.{ts,mts,cts}'],
     languageOptions: {
       parserOptions: {
         projectService: true,
@@ -21,6 +21,16 @@ const config: Linter.Config[] = [
   },
 
   ...(tseslint.configs.recommendedTypeChecked as unknown as Linter.Config[]),
+
+  {
+    // typescript-eslint의 타입 인식 config는 files 제한이 없어 .js/.mjs/.cjs
+    // 에도 적용되는데, projectService는 .ts에만 켜져 있어 타입 정보가 없다.
+    // 그대로 두면 consumer의 eslint.config.mjs·jest.config.js에서 ESLint가
+    // 크래시한다. 타입 정보가 없는 파일에서는 타입 인식 규칙을 끈다.
+    ...tseslint.configs.disableTypeChecked,
+    name: 'nest/untyped-files',
+    files: ['**/*.{js,mjs,cjs}'],
+  },
 
   // eslint-plugin-zod의 recommended는 단일 flat config 객체이며 files에
   // .ts가 이미 포함돼 있다. 스코프를 다시 씌우지 않는다.
@@ -34,7 +44,7 @@ const config: Linter.Config[] = [
     // 들어 있지만, 상류가 recommended 구성을 바꿔도 이 셋만은 유지된다는
     // 의도를 코드로 고정한다. 설계 4.3 참조.
     name: 'nest/critical',
-    files: ['**/*.ts'],
+    files: ['**/*.{ts,mts,cts}'],
     rules: {
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
