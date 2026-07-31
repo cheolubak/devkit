@@ -82,4 +82,17 @@
   - **npm 이름 선점 발견**: `eslint-config-nest`(v0.0.8, 2022)와 `eslint-plugin-fsd`(v1.0.1)가 이미 존재한다. 사고 방지로 `private: true`만 넣고 이름 결정은 보류.
 - **검증**: `pnpm test` 77/77, `pnpm lint`(oxlint+eslint) exit 0, `pnpm build` 성공, 양쪽 `tsc --noEmit` exit 0.
 - **커밋**: `6271c46`(스캐폴딩) → `0fb79df`(최종 리뷰 수정). 브랜치 `feature/eslint-config-nest`, 총 13커밋.
-- **follow-up**: npm 이름 결정(스코프 전환/개명/비공개), 픽스처 보강(느슨한 `@Body()` DTO 경로로 `no-unsafe-*` 시험, `@UseGuards` + `canActivate(): Promise<boolean>`로 `no-misused-promises` 시험, TypeORM 엔티티), 배포 메타데이터(LICENSE 파일).
+- **follow-up**: 픽스처 보강(느슨한 `@Body()` DTO 경로로 `no-unsafe-*` 시험, `@UseGuards` + `canActivate(): Promise<boolean>`로 `no-misused-promises` 시험, TypeORM 엔티티), 배포 메타데이터(LICENSE 파일).
+
+### 두 패키지를 @devbak 스코프로 전환
+- **변경 파일**: `packages/eslint-plugin-fsd/{package.json,src/index.ts,README.md}`, `packages/eslint-config-nest/{package.json,README.md,tests/config.test.ts}`
+- **내용**: 무스코프 이름 `eslint-plugin-fsd`(v1.0.1)와 `eslint-config-nest`(v0.0.8, 2022)가 **둘 다 npm에 타인 선점**돼 그대로는 배포 불가였다. `@devbak/eslint-plugin-fsd`·`@devbak/eslint-config-nest`로 전환(두 스코프 이름 모두 미등록 확인).
+  - `eslint-config-nest`의 `private: true` 제거 — 이름 충돌 방지용이었고 스코프 전환으로 이유가 사라짐.
+  - 두 패키지에 `publishConfig.access: "public"` 추가. 스코프 패키지는 기본이 restricted라 없으면 공개 배포 안 됨.
+  - 두 패키지에 `prepublishOnly: "pnpm build"` 추가. `files: ["dist"]`인데 `dist`가 gitignore 대상이라 빌드 없이 publish하면 **빈 패키지**가 나감(최종 리뷰 I3 지적).
+  - 플러그인 `meta.name`을 패키지명과 일치.
+  - **규칙 접두어 `fsd/`는 불변** — flat config에서 규칙명은 `plugins` 키로 정해지므로 패키지명 변경의 영향을 받지 않는다. 기존 consumer 설정 그대로 동작.
+  - `docs/superpowers/` 설계·계획 문서와 이 work-log의 과거 항목은 당시 결정을 담은 이력이라 수정하지 않음.
+- **검증**: `pnpm test` 77/77, `pnpm lint`·`pnpm build` 통과, `tsc` 4개 프로젝트 통과, `npm pack --dry-run`으로 tarball 정상 생성 확인(10파일/4파일).
+- **커밋**: `d8952a9` — `main`에 fast-forward 머지 완료
+- **남은 것**: 배포하려면 `npm login`으로 `@devbak` 스코프 소유 계정 로그인 필요(현재 미로그인).
