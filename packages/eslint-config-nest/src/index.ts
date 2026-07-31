@@ -43,9 +43,15 @@ const config: Linter.Config[] = [
   },
 
   {
-    // 테스트 파일 완화. 픽스처(idioms.ts) 실측 결과 프로덕션 관용구
-    // (생성자 파라미터 프로퍼티, 데코레이터만 있는 빈 모듈 클래스 등)는
-    // 베이스라인과 충돌하지 않았다 — 끌 규칙이 없었다.
+    // 테스트 파일 완화. 픽스처(idioms.ts) 실측 결과, 베이스라인이 실제로
+    // 켜는 규칙 중에서는 프로덕션 관용구와 충돌하는 것이 없었다 — 끌
+    // 규칙이 없었다. 단 이 검증 범위는 recommendedTypeChecked가 켜는
+    // 규칙으로 한정된다: no-extraneous-class·parameter-properties·
+    // no-empty-function은 애초에 recommendedTypeChecked에 포함돼 있지
+    // 않아 시험 대상이 아니었고(발화하지 않은 게 아니라 켜져 있지 않았을
+    // 뿐), no-unsafe-* 계열은 켜져 있지만 픽스처가 any나 느슨한 요청
+    // 바디 타입을 노출하지 않아 미시험이다 — 실제 프로젝트의 @Body()
+    // DTO 경로 등에서는 발화할 수 있다.
     //
     // 유일하게 발화한 것은 테스트 파일(user.service.spec.ts)의
     // unbound-method다. jest의 `expect(service.method)`와 같은 형태로
