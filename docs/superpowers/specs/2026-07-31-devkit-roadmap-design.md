@@ -2,7 +2,8 @@
 
 - 날짜: 2026-07-31
 - 개정: 2026-07-31 — 초판은 `packages/eslint-config-nest`가 없는 저장소 상태를 전제로 작성됐다. 작성 중 `git rebase origin/main`으로 해당 패키지와 그 설계 문서가 들어오면서 로드맵 순서를 뒤집었다(3.2절). 초판의 Phase 1(`eslint-plugin-nest-arch`)은 Phase 2로 내려갔다.
-- 상태: 사용자 리뷰 대기
+- 개정: 2026-07-31 — **배포를 목표에서 제외**한다. npm publish 대신 로컬 링크로 소비한다(2.1·4.3절). 이로써 초판이 유일한 블로커로 지목했던 배포 경로 미결이 해소됐다.
+- 상태: 확정
 - 목표: 이 저장소를 ESLint 패키지 모음에서, Next.js/React 프론트엔드와 NestJS 백엔드를 함께 지원하는 개발 표준 툴킷(`@devbak/*`) 모노레포로 확장한다.
 
 이 문서는 두 층위를 담는다. 3절은 **전체 로드맵**이고, 4~5절은 **Phase 1·2의 상세 설계**다. Phase 3~4는 각 단계에 도달할 때 자체 설계 문서를 갖는다(3.4절).
@@ -50,11 +51,15 @@
 
 - 소비자는 **작성자 본인의 개인 프로젝트들**이고, 부차 목표는 **설계 깊이를 보여주는 포트폴리오**다.
 - 사내 표준화나 타인 강제는 목표가 아니다. 따라서 **옵션을 최소화하고 취향을 명시적으로 박은(opinionated) 설계**를 택한다. 범용성을 위한 확장점은 실제 필요가 생길 때만 추가한다(YAGNI).
-- 배포는 기존 관행을 그대로 따른다 — `@devbak` 스코프, `publishConfig.access: public`, npm 공개 배포.
+- **배포하지 않는다.** npm publish는 목표가 아니며, 소비는 로컬 링크로 한다(4.2절). 이 결정이 갖는 실질적 의미는 두 가지다.
+  - **버전 관리 부담이 사라진다.** semver, 변경 로그, 하위 호환 유지, 배포 전 검증 매트릭스가 전부 불필요해진다. 규칙을 바꾸고 싶으면 바꾸고 소비자 3개를 고치면 끝이다.
+  - **대신 "빌드 산출물이 최신인가"라는 새 운영 요구사항이 생긴다**(4.2절). 레지스트리가 하던 일을 사람이 해야 한다.
+- `package.json`의 `publishConfig.access`·`prepublishOnly`·`files`는 **그대로 둔다.** 지금은 휴면 상태지만 제거 비용과 나중에 되살리는 비용이 둘 다 있고, 남겨두는 비용은 0이다.
 
 ### 2.2 명시적 비범위
 
-- private registry / 사내 배포 파이프라인
+- **npm 배포 및 그에 딸린 일체** — semver 정책, 변경 로그, CI 배포 파이프라인, ESLint 버전 지원 매트릭스
+- private registry / Verdaccio 같은 로컬 레지스트리 — 소비자가 3~5개뿐이라 링크로 충분하다
 - 타인을 위한 광범위한 설정 옵션 · 마이그레이션 가이드
 - ESLint 9 이하 지원 — 소비자 프로젝트를 10으로 올리는 쪽을 택한다(Phase 1). `eslint-config-nest`가 이미 `^10.0.0` 전용이므로 선택의 여지가 없다.
 
@@ -66,8 +71,9 @@
 
 ```
 Phase 1  소비자 활성화                       (2~3일)
-         NestJS 3개 프로젝트 ESLint 8 → 10 flat config 마이그레이션
-         + @devbak/{tsconfig, prettier-config, jest-config, vitest-config}
+         NestJS 3개 프로젝트를 link: 로 연결 + ESLint 8 → 10 flat config 마이그레이션
+         + @devbak/{tsconfig, prettier-config, jest-config}
+         (vitest-config는 프론트를 손대는 시점에 — 4.6절)
    │
    └─▶ Phase 2  @devbak/eslint-plugin-nest-arch   (1~2주)
           │        아키텍처 경계 규칙 4개
@@ -104,7 +110,47 @@ Phase 1  소비자 활성화                       (2~3일)
 
 `@devbak/eslint-config-nest`가 실제 프로젝트에서 돌아가게 만들고, 그 과정에서 반복적으로 필요해지는 설정을 패키지로 추출한다. **패키지를 먼저 설계하고 적용하는 것이 아니라, 적용하면서 중복을 발견해 추출한다.** 순서가 반대면 쓰이지 않는 옵션이 붙는다.
 
-### 4.2 마이그레이션 대상과 순서
+### 4.2 소비 방식 — 로컬 링크
+
+배포하지 않으므로 소비자가 패키지를 어떻게 찾을지를 설계해야 한다. 소비자 프로젝트는 전부 `~/Documents/develop/` 바로 아래에 있고 툴킷 저장소도 같은 위치(`~/Documents/develop/eslint`)이므로 **상대 경로가 안정적**이다.
+
+**pnpm `link:` 프로토콜**을 쓴다.
+
+```jsonc
+// devlog-api/package.json
+{
+  "devDependencies": {
+    "@devbak/eslint-config-nest": "link:../eslint/packages/eslint-config-nest"
+  }
+}
+```
+
+`link:`는 심볼릭 링크를 걸므로 툴킷을 고치면 **재설치 없이 즉시 반영된다.** 개발 중인 패키지를 소비하면서 동시에 고치는 지금 상황에 정확히 맞는다.
+
+#### 반드시 지켜야 할 운영 요구사항: `dist`가 최신이어야 한다
+
+이 방식에는 함정이 하나 있고, 반드시 문서화해야 한다.
+
+패키지들은 `main`/`exports`가 `./dist/*`를 가리키고 **`dist`는 `.gitignore` 대상**이다. 배포 경로에서는 `prepublishOnly: "pnpm build"`가 이를 보장했지만, **`link:` 의존은 어떤 라이프사이클 스크립트도 실행하지 않는다.** 따라서:
+
+- 툴킷 저장소에서 `pnpm build`를 하지 않으면 소비자 쪽 ESLint가 **모듈 해석 실패로 죽는다.**
+- 툴킷 소스를 고치고 빌드하지 않으면 소비자는 **조용히 옛 규칙으로 린트한다.** 이쪽이 더 위험하다 — 에러가 아니라 잘못된 통과를 만든다.
+
+대응은 두 가지다.
+
+1. 툴킷 저장소 루트에 `dev` 스크립트(`tsup --watch`)를 두고, 소비자를 손볼 때는 켜 둔다.
+2. 소비자의 `lint` 스크립트가 툴킷 빌드에 의존하게 만들지 **않는다** — 저장소 경계를 넘는 스크립트 의존은 소비자를 툴킷 없이는 못 쓰는 물건으로 만든다. 대신 4.7절 완료 기준에 "빌드 후 검증"을 명시한다.
+
+#### 채택하지 않은 대안
+
+| 대안 | 기각 사유 |
+| --- | --- |
+| `file:` 프로토콜 | pnpm에서 디렉토리 대상 `file:`은 `link:`와 사실상 같게 동작해 구분 실익이 없다. 의도가 더 분명한 `link:`를 쓴다 |
+| `pnpm link --global` | 전역 상태에 의존해 어떤 프로젝트가 무엇에 연결됐는지 `package.json`에 남지 않는다. 반년 뒤 자신이 추적 불가능해진다 |
+| `pnpm pack` + tarball | 재현 가능하지만 고칠 때마다 pack·재설치가 필요하다. 활발히 개발 중인 지금은 마찰이 이득보다 크다 |
+| git 의존성 (`github:...`) | npm/pnpm이 저장소 **하위 디렉토리** 패키지를 안정적으로 지원하지 않는다. 모노레포라 불가 |
+
+### 4.3 마이그레이션 대상과 순서
 
 `devlog-api` → `account-api` → `eungam-api` 순으로 한 번에 하나씩 진행한다.
 
@@ -112,13 +158,17 @@ Phase 1  소비자 활성화                       (2~3일)
 
 각 프로젝트에서 수행할 것:
 
-1. `eslint@8` → `^10`, `@typescript-eslint/*@7` 개별 패키지 → `typescript-eslint@^8` 통합 패키지로 교체
-2. `.eslintrc.js` 삭제, `eslint.config.mjs` 신규 작성 — 내용은 `@devbak/eslint-config-nest` spread 한 줄이 기본
-3. **`eslint-plugin-prettier`와 `eslint-config-prettier` 제거** (4.4절)
-4. `pnpm lint` 실행 후 위반 전수 분류 (4.3절)
-5. `package.json`의 `lint` 스크립트를 flat config 방식으로 교체 — 현재 `eslint "{src,apps,libs,test}/**/*.ts" --fix`처럼 glob을 넘기는데, flat config에서는 `eslint .`과 설정 파일의 `files`/`ignores`로 대상을 정하는 것이 정석이다
+1. 툴킷 저장소에서 `pnpm build` 선행 (4.2절)
+2. `eslint@8` → `^10`, `@typescript-eslint/*@7` 개별 패키지 → `typescript-eslint@^8` 통합 패키지로 교체
+3. `@devbak/eslint-config-nest`를 `link:`로 추가하고, 그 패키지의 필수 peer 4개(`eslint`, `typescript-eslint`, `eslint-plugin-zod`, `zod`)를 소비자에 설치. `zod`는 세 프로젝트 중 `devlog-api`에만 이미 있다
+4. `.eslintrc.js` 삭제, `eslint.config.mjs` 신규 작성 — 내용은 `@devbak/eslint-config-nest` spread 한 줄이 기본
+5. **`eslint-plugin-prettier`와 `eslint-config-prettier` 제거** (4.5절)
+6. `pnpm lint` 실행 후 위반 전수 분류 (4.4절)
+7. `package.json`의 `lint` 스크립트를 flat config 방식으로 교체 — 현재 `eslint "{src,apps,libs,test}/**/*.ts" --fix`처럼 glob을 넘기는데, flat config에서는 `eslint .`과 설정 파일의 `files`/`ignores`로 대상을 정하는 것이 정석이다
 
-### 4.3 위반 분류 — 이 단계의 진짜 산출물
+3번은 주의가 필요하다. `eslint-config-nest`는 peer 4개가 **전부 필수**이고 `peerDependenciesMeta`가 없다(그 설계 5절). `link:` 의존은 peer 자동 설치가 레지스트리 설치와 다르게 동작할 수 있으므로, 링크 후 실제로 해석되는지 확인한 뒤 다음 단계로 넘어간다.
+
+### 4.4 위반 분류 — 이 단계의 진짜 산출물
 
 마이그레이션 후 나오는 위반을 **한 건씩** 세 갈래로 판정하고 기록한다.
 
@@ -132,7 +182,7 @@ Phase 1  소비자 활성화                       (2~3일)
 
 `no-floating-promises`(그 문서가 "이 패키지의 존재 이유"로 지목한 규칙)가 실제 프로젝트에서 몇 건을 잡는지는 이 단계의 가장 흥미로운 지표다. 결과를 `work-log.md`에 남긴다.
 
-### 4.4 `eslint-plugin-prettier` 제거의 근거
+### 4.5 `eslint-plugin-prettier` 제거의 근거
 
 `devlog-api`는 `eslint-plugin-prettier` + `eslint-config-prettier` 조합으로 포맷 위반을 ESLint 에러로 띄운다. 이를 걷어내는 것은 취향이 아니다.
 
@@ -142,7 +192,7 @@ Phase 1  소비자 활성화                       (2~3일)
 
 포맷은 `prettier --check`(CI)와 `prettier --write`(로컬)로 분리한다.
 
-### 4.5 추출할 설정 패키지
+### 4.6 추출할 설정 패키지
 
 마이그레이션 중 **세 프로젝트에서 반복되는 것만** 패키지로 뽑는다. 한 곳에서만 필요한 것은 뽑지 않는다.
 
@@ -155,9 +205,10 @@ Phase 1  소비자 활성화                       (2~3일)
 
 `@devbak/prettier-config`는 `prettier-plugin-tailwindcss` 포함 여부에서 프론트/백엔드가 갈린다. 백엔드에는 불필요하므로 **Phase 1에서는 플러그인 없는 단일 export만** 만들고, 프론트용 변형은 필요해질 때 서브패스로 추가한다.
 
-### 4.6 Phase 1 완료 기준
+### 4.7 Phase 1 완료 기준
 
-- NestJS 3개 프로젝트에서 `pnpm lint` exit 0, `pnpm build` 성공, 기존 테스트 전부 통과
+- 툴킷 저장소에서 `pnpm build` 후, NestJS 3개 프로젝트에서 `pnpm lint` exit 0, `pnpm build` 성공, 기존 테스트 전부 통과
+- **`dist`를 지우고 다시 빌드해도 3개 프로젝트가 정상 동작함** — `link:` 배선이 우연히 캐시된 산출물에 기대고 있지 않은지 확인하는 유일한 방법이다(4.2절)
 - 위반 분류 결과가 `work-log.md`에 기록됨 — (a)/(b)/(c) 건수와 대표 사례
 - (b)로 판정된 항목이 `eslint-config-nest` 픽스처에 회귀 테스트로 추가됨
 - 추출한 설정 패키지가 3개 프로젝트에서 실제로 소비됨 (선언만 하고 미사용인 패키지가 없을 것)
@@ -343,6 +394,7 @@ packages/eslint-plugin-nest-arch/
 
 - **서브패스 export 없음.** `eslint-plugin-fsd`가 `/react`·`/next`를 나눈 것은 React 생태계 플러그인을 optional peer로 격리하기 위해서였다. nest-arch는 상류 플러그인 의존이 전혀 없으므로 진입점 하나면 충분하다.
 - **peer는 `eslint: ^10.0.0`뿐이다.** `eslint-config-nest`의 선례를 따른다 — 검증하지 않은 버전 범위를 선언하지 않는다. `eslint-plugin-fsd`가 `^9 || ^10`을 선언하면서 v9를 검증한 적이 없다는 지적을 받았던 문제를 반복하지 않는다.
+- **`publishConfig`·`prepublishOnly`는 형식만 유지한다.** 배포하지 않으므로 실행되지 않는다(2.1절). 소비자는 `link:`로 연결하며, 그에 따르는 `dist` 최신성 요구사항이 이 패키지에도 똑같이 적용된다(4.2절).
 - **`@nestjs/*`에 의존하지 않는다** — 데코레이터 이름을 문자열로 판정하므로 NestJS 설치 여부와 무관하다.
 - `configs.recommended`: R1·R2·R3 = `error`, R4 = `warn`. `ignores`는 두지 않는다(FSD와 달리 라우팅 폴더 같은 오탐 원천이 없다).
 
@@ -406,8 +458,10 @@ TypeScript 데코레이터를 파싱해야 하므로 `RuleTester`에 `@typescrip
 ## 7. 미결 사항
 
 - **저장소 이름.** 현재 `github.com/cheolubak/eslint`인데 이미 내용이 ESLint 설정·플러그인 둘 다이고 곧 CLI까지 들어온다. GitHub은 rename 시 리다이렉트를 제공하므로 안전하다. 워크스페이스 `package.json`의 `name`(`eslint-workspace` → `devkit-workspace`)과 함께 Phase 1 착수 시점에 결정한다.
-- **npm 배포.** 두 패키지 모두 `npm login` 미완료로 미배포 상태다. Phase 1에서 소비자 프로젝트가 실제로 설치하려면 배포가 선행돼야 한다 — 또는 `pnpm link` / `file:` 프로토콜로 로컬 검증 후 배포하는 순서를 택한다. **Phase 1 착수 전에 결정해야 하는 유일한 블로커다.**
-- **`@devbak/eslint-plugin-fsd`의 남은 follow-up** — CI 매트릭스(`eslint: [9, 10]`), `/react`의 JSX `languageOptions`, `tsup` `splitting: false`. 여기에 더해 **배포 메타데이터가 통째로 비어 있음을 확인했다** — `license`·`description`·`repository`·`keywords`·`engines`가 전부 없다. `eslint-config-nest`는 이 다섯을 모두 갖췄으므로 두 패키지의 매니페스트 품질이 어긋나 있다. Phase 1에서 함께 맞춘다.
+- ~~**npm 배포**~~ — **해소됨(2026-07-31).** 배포하지 않기로 확정했고 `link:` 프로토콜로 소비한다(2.1·4.2절). 초판이 지목한 유일한 블로커였다.
+- **`@devbak/eslint-plugin-fsd`의 남은 follow-up** — CI 매트릭스(`eslint: [9, 10]`), `/react`의 JSX `languageOptions`, `tsup` `splitting: false`. 여기에 더해 `license`·`description`·`repository`·`keywords`·`engines`가 **전부 비어 있음을 확인했다**(`eslint-config-nest`는 다섯 모두 보유).
+  - 단 배포하지 않기로 한 이상 이 항목들의 우선순위는 **낮다.** `description` 정도만 저장소를 다시 열었을 때 자신에게 쓸모가 있고, 나머지는 레지스트리 소비자를 위한 것이다. CI 매트릭스도 마찬가지로 **불필요해졌다** — 지원 버전을 주장할 대상이 없고, 소비자 3개가 전부 ESLint 10이다.
+  - 오히려 `eslint-plugin-fsd`의 peer가 `^9.0.0 || ^10.0.0`인데 v9를 검증한 적이 없다는 기존 지적은, **v9 지원 주장을 철회하고 `^10.0.0`으로 좁히는 것**으로 해소하는 편이 낫다. CI로 실체화하는 것보다 싸고 정직하다. Phase 1에서 처리한다.
 - **R4를 `error`로 승격할지** — Phase 2 드라이런 결과를 보고 판단한다.
 - **`no-http-artifacts-in-service`** — 타입 인식 규칙을 별도 서브패스(`/type-checked`)로 제공할지. `eslint-config-nest`가 이미 타입 인식이므로 소비자에게 추가 부담은 없다. Phase 2 이후 결정.
 - **oxlint 통합** — `eslint-config-nest` 9절의 미결 사항이며, 커스텀 플러그인 규칙을 oxlint jsPlugins로 노출할 수 있는지는 별도 조사가 필요하다.
