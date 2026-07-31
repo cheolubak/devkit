@@ -22,7 +22,7 @@
 - `eslint` peer는 **`^10.0.0`만** 선언한다. `^9`를 넣지 않는다 — 이 패키지는 v9에서 검증하지 않는다.
 - **`class-validator`와 `@darraghor/eslint-plugin-nestjs-typed`를 도입하지 않는다.** 설계 3.1 참조.
 - 상류 버전 고정: `typescript-eslint@^8.0.0`, `eslint-plugin-zod@^4.0.0`, `zod@^4.0.0`, `@types/node@^24`(런타임 Node 24에 정렬).
-- 테스트 총 개수: 현재 저장소 전체 **67개**. Task 1 후 69, Task 2 후 72, Task 3 후 73.
+- 테스트 총 개수: 현재 저장소 전체 **67개**. Task 1 후 69, Task 2 후 72, Task 3 후 74.
 
 ## 상류 사실 (실물 확인 완료, 추측 아님)
 
@@ -607,7 +607,18 @@ Task 2가 측정한 발화 목록을 근거로, **실제로 오탐한 규칙만*
     const reported = messages.map((m) => `${m.ruleId ?? 'fatal'}: ${m.message}`);
     expect(reported).toEqual([]);
   });
+
+  it('Nest 테스트 파일에서 에러가 하나도 없다', async () => {
+    // 설계 4.4. jest의 expect(service.method) 패턴이 unbound-method를
+    // 발화시키는데, 이는 테스트 파일의 정당한 관용구다. 완화가 실제로
+    // 적용됐는지 여기서 고정한다.
+    const messages = await lintFixture('src/user.service.spec.ts');
+    const reported = messages.map((m) => `${m.ruleId ?? 'fatal'}: ${m.message}`);
+    expect(reported).toEqual([]);
+  });
 ```
+
+두 번째 테스트가 필요한 이유: 설계 4.4의 테스트 파일 완화가 실제로 동작하는지 아무것도 검증하지 않으면, 완화 config를 넣었는데 `files` 패턴이 틀려 적용되지 않아도 알 수 없다. 완화를 넣었다면 이 테스트가 그것을 고정하고, 넣지 않기로 했다면 이 테스트가 실패하므로 결정을 강제로 마주하게 된다.
 
 - [ ] **Step 2: 테스트가 실패하는지 확인**
 
@@ -639,7 +650,7 @@ Expected: FAIL — 관용구 파일에서 발화한 규칙들이 배열로 출�
 - [ ] **Step 4: 테스트 통과 확인**
 
 Run: `pnpm test`
-Expected: PASS (72개 + 신규 1개 = **73개**)
+Expected: PASS (72개 + 신규 2개 = **74개**)
 
 관용구 파일이 0건이 되었는데 `no-floating-promises`·zod 단언(Task 2)이 여전히 통과하는지 확인한다. 규칙을 과하게 껐다면 그쪽이 먼저 깨진다.
 
@@ -794,7 +805,7 @@ EOF
 
 ```bash
 pnpm lint     # oxlint && eslint . — 종료 코드 0
-pnpm test     # 73개 통과
+pnpm test     # 74개 통과
 pnpm build    # 두 패키지 모두 빌드
 pnpm exec tsc -p packages/eslint-config-nest/tsconfig.json --noEmit
 pnpm exec tsc -p packages/eslint-config-nest/tests/tsconfig.json
