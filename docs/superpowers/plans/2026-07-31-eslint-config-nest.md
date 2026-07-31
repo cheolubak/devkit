@@ -271,6 +271,7 @@ EOF
 
 **Files:**
 - Create: `packages/eslint-config-nest/tests/fixtures/nest-app/tsconfig.json`
+- Create: `packages/eslint-config-nest/tests/fixtures/nest-app/src/decorator-stubs.ts`
 - Create: `packages/eslint-config-nest/tests/fixtures/nest-app/src/idioms.ts`
 - Create: `packages/eslint-config-nest/tests/fixtures/nest-app/src/violations.ts`
 - Create: `packages/eslint-config-nest/tests/fixtures/nest-app/src/schema.ts`
@@ -323,11 +324,18 @@ EOF
 
 - [ ] **Step 3: Nest 관용구 픽스처 작성**
 
-`packages/eslint-config-nest/tests/fixtures/nest-app/src/idioms.ts`:
+> **2026-07-31 개정:** 데코레이터 **정의(스텁)**와 **사용(관용구)**을 서로 다른 파일로 분리한다. 초판은 둘을 `idioms.ts` 한 파일에 뒀는데, 스텁의 미사용 파라미터(`_meta`, `_prefix`)가 `no-unused-vars` 2건을 만들었다. **실제 Nest 코드는 데코레이터를 소비할 뿐 정의하지 않으므로** 이 발화는 Nest 관용구와 무관한 픽스처 인공물이고, Task 3이 그것을 "Nest 오탐"으로 오독하면 실존하지 않는 상황에 맞춰 규칙을 끄게 된다. 측정 대상 파일은 사용부만 담아야 한다.
+
+`packages/eslint-config-nest/tests/fixtures/nest-app/src/decorator-stubs.ts` — 데코레이터 **정의**. 측정 대상이 아니다:
 
 ```ts
-// Nest 관용구를 의존성 없이 재현한다. 데코레이터의 출처는 규칙 판정에
-// 영향을 주지 않으므로 @nestjs/* 를 설치하지 않는다.
+// Nest 데코레이터를 의존성 없이 재현한 스텁. 데코레이터의 출처는 규칙
+// 판정에 영향을 주지 않으므로 @nestjs/* 를 설치하지 않는다.
+//
+// 이 파일은 측정 대상이 아니다. 실제 Nest 코드는 데코레이터를 소비할 뿐
+// 정의하지 않으므로, 여기서 나오는 발화(미사용 파라미터 등)는 스텁이
+// 만들어낸 인공물이지 Nest 관용구가 아니다. 관용구 측정은 idioms.ts에서만
+// 한다.
 export function Injectable(): ClassDecorator {
   return () => undefined;
 }
@@ -343,6 +351,14 @@ export function Controller(_prefix: string): ClassDecorator {
 export function Get(): MethodDecorator {
   return () => undefined;
 }
+```
+
+`packages/eslint-config-nest/tests/fixtures/nest-app/src/idioms.ts` — 데코레이터 **사용**. 이 파일이 오탐 가드의 대상이다:
+
+```ts
+// 실제 Nest 코드가 하는 일만 담는다: 데코레이터를 소비하고, 생성자
+// 주입을 쓰고, 서비스·컨트롤러·모듈을 선언한다.
+import { Controller, Get, Injectable, Module } from './decorator-stubs';
 
 export interface User {
   id: string;
