@@ -10,7 +10,7 @@
     "es2024": true,
     "node": true
   },
-  "ignorePatterns": ["**/dist/**", "**/node_modules/**", "coverage/**"],
+  "ignorePatterns": ["**/dist/**", "**/node_modules/**", "coverage/**", "**/tests/fixtures/**"],
   "rules": {
     // tsconfig target이 ES2022라 toSorted(ES2023)를 쓸 수 없다
     "unicorn/no-array-sort": "off"
