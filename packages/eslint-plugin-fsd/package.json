@@ -1,5 +1,5 @@
 {
-  "name": "eslint-plugin-fsd",
+  "name": "@devbak/eslint-plugin-fsd",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -21,8 +21,12 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "tsup"
+    "build": "tsup",
+    "prepublishOnly": "pnpm build"
   },
   "peerDependencies": {
     "@next/eslint-plugin-next": "^16.0.0",

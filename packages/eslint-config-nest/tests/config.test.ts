@@ -5,7 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import config from '../src/index';
 
-describe('eslint-config-nest', () => {
+describe('@devbak/eslint-config-nest', () => {
   it('flat config 배열을 기본 export한다', () => {
     expect(Array.isArray(config)).toBe(true);
     expect(config.length).toBeGreaterThan(0);

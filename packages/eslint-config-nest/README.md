@@ -1,11 +1,11 @@
-# eslint-config-nest
+# @devbak/eslint-config-nest
 
 NestJS 백엔드용 ESLint 공유 설정 (ESLint 10 flat config 전용).
 
 ## 설치
 
 ```bash
-pnpm add -D eslint-config-nest eslint typescript-eslint eslint-plugin-zod zod
+pnpm add -D @devbak/eslint-config-nest eslint typescript-eslint eslint-plugin-zod zod
 ```
 
 peer 4개가 모두 **필수**다. optional은 없다.
@@ -21,7 +21,7 @@ peer 4개가 모두 **필수**다. optional은 없다.
 
 ```js
 // eslint.config.js
-import nest from 'eslint-config-nest';
+import nest from '@devbak/eslint-config-nest';
 
 export default [...nest];
 ```
@@ -35,7 +35,7 @@ export default [...nest];
 루트가 아닌 위치에서 실행한다면 직접 지정한다:
 
 ```js
-import nest from 'eslint-config-nest';
+import nest from '@devbak/eslint-config-nest';
 
 export default [
   ...nest,
