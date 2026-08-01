@@ -127,6 +127,15 @@
 - **다음**: 구현 계획 작성 → 설정 패키지 3개 → CLI 원자 연산 → 레시피 3종 순서
 - **미결**: `eslint-config-nest`가 Nest 런타임 전역(`sourceType: 'commonjs'`, `globals.node`+`globals.jest`)을 담는지 구현 첫 단계에서 확인 필요. 로드맵 Phase 1 Task 2~10(기존 3개 프로젝트 마이그레이션)은 취소가 아니라 이 작업 뒤로 미뤄졌다.
 
+### @devbak/tsconfig 패키지 추가 (Task 1)
+- **변경 파일**: `packages/tsconfig/{package.json,base.json,nest.json,next.json,lib.json,README.md,tests/config.test.ts,tests/tsconfig.json}`(신규), `.gitignore`, `eslint.config.mjs`, `.oxlintrc.json`, `docs/superpowers/plans/2026-08-01-devkit-template.md`
+- **내용**: `nest`·`next`·`lib` 3개 프리셋 + 공통 기반 `base`로 구성된, 빌드 없는 순수 JSON tsconfig 프리셋 패키지. `nest`는 `base`를 extends하지 않는다(`module: nodenext` 등 서로 다른 축이 많아 상속이 오히려 복잡해서). `next`·`lib`은 `base`를 extends한다.
+  - **경로 옵션의 위험한 기준선을 여기서 처음 확정**: `extends`로 참조되는 tsconfig의 상대 경로(`include`/`exclude` 등)는 **그 파일 자신의 위치**를 기준으로 해석된다 — 소비자 프로젝트 위치가 아니다. `base.json`에 있던 `exclude: ["node_modules", "dist"]`가 실제로는 `packages/tsconfig/node_modules`·`packages/tsconfig/dist`를 가리켜 소비자 프로젝트에서는 **완전히 무의미**했다. 이 결함을 계획 자체에서 먼저 잡아 `exclude`를 프리셋에서 빼기로 계획 텍스트를 갱신한 뒤(커밋 `95a3634`) 구현에 반영했다(`ae2c711`). 이후 Task 2(jest `rootDir`)·Task 3(vitest `include`)가 반대 방향(소비자 기준)임을 실측으로 확인해 "도구마다 다르므로 일반화 금지"라는 원칙이 여기서 나왔다.
+  - `.claude/worktrees/`(다른 세션이 만든 워크트리, `node_modules` 없음)가 루트 `pnpm lint`의 `projectService`를 깨뜨려 저장소 전체 린트가 막힌 인프라 문제를 별도로 처리(`68add0b`) — `.superpowers/`와 같은 부류로 `.gitignore`·`eslint.config.mjs`·`.oxlintrc.json` 3곳에서 제외.
+- **검증**: `pnpm vitest run packages/tsconfig` 4/4(실제 `tsc` 실행 — 데코레이터 통과·strict 위반 검출·JSX 통과·`noUncheckedIndexedAccess` 검출), `pnpm lint`·`pnpm build` 통과.
+- **커밋**: `535c84d..ae2c711`(사전 계획 결함 수정 포함) — 브랜치 `feature/devkit-roadmap`, main 미머지
+- **후속 판단(Task 13)**: `/lib` 서브패스는 이 계획의 3개 레시피(nest·next·monorepo) 중 어디에서도 소비되지 않는다. 완료 기준 6번은 패키지 단위 기준이라 위반은 아니며(`@devbak/tsconfig` 자체는 nest·next가 쓴다), 로드맵이 예정한 "순수 라이브러리" 프로젝트 유형(미구현)을 위해 남겨둔다. 설계 문서 9절에 기록.
+
 ### @devbak/jest-config 패키지 추가 (Task 2)
 - **변경 파일**: `packages/jest-config/{package.json,nest.js,nest-e2e.js,README.md,tsconfig.json,tests/config.test.ts,tests/tsconfig.json}`(신규), `eslint.config.mjs`, `.gitignore`, `package.json`, `pnpm-lock.yaml`
 - **내용**: `nest new`의 인라인 `jest` 블록·`test/jest-e2e.json`을 CJS `module.exports`로 재노출하는 빌드 없는 패키지. `devkit-cli`가 생성할 NestJS 프로젝트가 `jest.config.js`에서 `require('@devbak/jest-config/nest')`로 소비한다.
@@ -145,3 +154,104 @@
   - `jsdom`은 `next` 프리셋만 요구하므로 `peerDependenciesMeta`로 optional 처리하고 워크스페이스 루트에 `pnpm add -D -w jsdom@^25` 추가.
 - **검증**: `pnpm vitest run packages/vitest-config` 3/3, `pnpm lint`(oxlint+eslint) exit 0, `pnpm test`(루트, `--passWithNoTests`) 92/92 통과.
 - **커밋**: `06367cc` (브랜치 `feature/devkit-roadmap`, main 미머지)
+
+### devkit-cli 패키지 뼈대 + 타입 + 진입점 (Task 4)
+- **변경 파일**: `packages/devkit-cli/{package.json,tsup.config.ts,tsconfig.json,src/{bin.ts,index.ts,types.ts},tests/{bin.test.ts,tsconfig.json},templates/}`(신규), 루트 `package.json`(`devbak` 스크립트)
+- **내용**: `Ctx`·`Step`·`Recipe`·`RecipeOptions`·`ProjectType` 타입 정의, `findToolkitRoot()`(툴킷 루트 탐색), `assertDistFresh()`(`src`/`dist` mtime 비교로 시작 시 거부). `main()`은 `RECIPES`를 빈 객체로 남겨 Task 8이 배선하도록 브리프가 지시한 대로 비워둠.
+- **핵심 실측**: `pnpm lint`는 `oxlint && eslint .`라서 **oxlint가 실패하면 ESLint가 아예 돌지 않는다.** oxlint는 포팅한 core 규칙을 `eslint(rule-name)` 형식으로 출력해 언뜻 ESLint가 돈 것처럼 보이므로, ESLint 단독 검증은 반드시 `pnpm lint:es`로 해야 한다는 함정을 여기서 처음 확인했다(이후 모든 태스크가 이 구분을 지킴). 대조 실험(`.oxlintrc.json`·`eslint.config.mjs` 양쪽의 `templates` glob을 제거)으로 `lint:es`가 픽스처 경로를 지목하며 exit 1이 됨을 확인해 인과를 확정 — oxlint는 자기 설정 파일만 읽으므로(`eslint.config.mjs`를 안 읽음) 양쪽에 같은 패턴이 필요하다.
+- **디스패치 오류를 브리프가 막음**: 컨트롤러가 "브리프 Step 7이 RECIPES를 빈 객체로 두라 한다"고 착각(실제로는 Task 8 내용)했으나, 구현자가 브리프 원문을 최종 근거로 삼아 정확히 판단 — 브리프-우선 원칙이 컨트롤러 기억 오류의 전파를 막은 사례.
+- **fix round**: templates glob 필요성을 5조건 대조 실험으로 검증(커밋 `6a573c5`).
+- **deferred**: `assertDistFresh`가 `dist/bin.js`는 있고 `src/`가 없을 때 가공 없는 `ENOENT`를 던짐; `assertDistFresh` 자체에는 테스트가 없음(`findToolkitRoot`만 있음); `findToolkitRoot`의 에러 문구가 "찾지 못했습니다...찾았습니다"로 한국어 자기모순(브리프 원문 유래, 계획 결함).
+- **커밋**: `e199343..6a573c5` (브랜치 `feature/devkit-roadmap`, main 미머지)
+
+### mergeJson 연산 추가 (Task 5)
+- **변경 파일**: `packages/devkit-cli/src/ops/merge-json.ts`(신규), `tests/merge-json.test.ts`(신규)
+- **내용**: JSON 파일에 패치를 재귀 병합하는 원자 연산. `null` 값은 키 삭제, `required`는 병합 후 존재해야 할 경로를 선언해 위반 시 실패시킨다(6.2절 규약의 시작점).
+- **계획 자체에서 발견한 버그**: `applyPatch({}, {a:{b:null}})`가 `{"a":{"b":null}}`을 반환 — 부모 경로(`a`)가 대상에 없으면 패치 서브트리를 통째로 대입해 중첩 `null`이 삭제 대신 **값으로 기록**됐다. 현재 3개 레시피는 부모 경로가 전부 이미 존재해 실피해가 0이었지만, 이후 레시피 작성자가 "null은 어디서나 삭제된다"고 가정했다면 조용히 깨진 JSON을 만들 뻔했다. 사용자 승인을 받아 계획 텍스트를 먼저 고치고(`8c1b977`) 재귀 삭제로 수정(`d204ed0`).
+- **재리뷰 판정**: 회귀 테스트 3개 중 2개는 수정 전 구현에서 실제로 실패하는 진짜 회귀 테스트, 3번째("기존 키의 중첩 null")는 수정 전에도 통과했을 비회귀 고정(non-regression pin) — 결함은 아니나 회귀 검출력은 2개뿐이라고 기록.
+- **커밋**: `178dce0..d204ed0` (브랜치 `feature/devkit-roadmap`, main 미머지)
+
+### removeFiles·copyOverlay·makeDirs 연산 추가 (Task 6)
+- **변경 파일**: `packages/devkit-cli/src/ops/{remove-files.ts,copy-overlay.ts,make-dirs.ts}`(신규), `tests/fs-ops.test.ts`(신규), `templates/`(픽스처)
+- **내용**: 3개 원자 fs 연산. `assertInside()`로 `targetDir` 밖 경로 탈출을 거부하고, `required` 규약을 `removeFiles`까지 확장.
+- **리뷰어가 구현자의 "순차가 설계 의도" 주장을 반박**: 세 루프 항목 전부 서로 의존성이 없음(`rm`은 `force:true`, `mkdir`는 `recursive:true`로 멱등, `copyTree`는 형제 엔트리 독립)이 근거. `Promise.all`로 병렬화해 `no-await-in-loop` 경고를 제거했으나(`cc0ffee`), 이것이 **로그 순서 보장을 실제로 깨뜨렸다** — `removeFiles`·`makeDirs`가 async 콜백 안에서 `logs.push()`를 부작용으로 실행해, `Promise.all`이 배열 순서만 보장하고 콜백 내부 실행 시점(libuv 스레드풀)은 보장하지 않는다는 사실이 드러남. 반환값 배열 기반으로 순서를 재구성해 구조적으로 해결(`f243bd7`).
+- **deferred**: `copyOverlay`의 `describe()`가 변수 값은 빼고 키만 노출; `required` 경로가 여럿 누락되면 어느 `stat`이 먼저 settle되느냐로 에러 메시지 경로가 결정(순차일 땐 결정적이었음); `Promise.all`은 throw 이후에도 형제 작업을 취소하지 않음; `copyTree`의 fan-out에 상한 없음(현재 템플릿 크기에서는 무해).
+- **이월(Task 8로)**: `copyOverlay`의 `templatesRoot()`가 `import.meta.url` 기준 dist 상대경로를 쓰는데, 당시 `src/ops/*`가 어떤 tsup 엔트리에도 안 붙어 있어 번들 여부 미확인 — Task 8에서 엔트리 연결 후 실빌드로 재검증하도록 명시.
+- **이월(Task 12로)**: `copyOverlay`의 `run()` 경로에 자동 테스트가 0개(그레이 확인) — `templatesRoot()`가 dist를 전제해 vitest에서는 ENOENT. 3개 레시피 전부 이 연산으로 템플릿을 배선하므로 e2e가 반드시 덮어야 함.
+- **커밋**: `38d3467..f243bd7` (2 fix rounds, 브랜치 `feature/devkit-roadmap`, main 미머지)
+
+### linkDeps 연산 추가 (Task 7)
+- **변경 파일**: `packages/devkit-cli/src/ops/link-deps.ts`(신규), `tests/link-deps.test.ts`(신규)
+- **내용**: 소비자 `package.json`과 툴킷 패키지 디렉터리 사이의 `link:` 상대경로를 계산하는 연산. 7절이 요구하는 깊이 2종(루트 직속·`apps/web` 같은 중첩)을 모두 계산할 수 있어야 한다.
+- **재리뷰가 검출력을 보강**: `normalizeToPosix`를 `linkSpec`에서 추출해 별도로 테스트 — `win32.relative`는 호스트 플랫폼과 무관하게 백슬래시를 반환하므로, 이 테스트는 실제로 macOS에서 실행되면서도 Windows 경로 정규화를 플랫폼 독립적으로 검증한다. 공개 시그니처는 불변.
+- **parked → Task 13이 확정**: Windows를 지원 대상으로 볼 것인가 — 로드맵 2.1절이 소비자를 전부 macOS 개인 프로젝트로 한정하므로 **미지원으로 확정**하되, 이미 정확하고 테스트도 있는 정규화 코드는 제거 실익이 없어 유지(설계 9절에 기록).
+- **parked → Task 11로 이월, Task 13이 재확인**: `linkDeps.run`이 항상 `ctx.targetDir` 기준으로 `linkSpec`을 계산하는데 `file`이 중첩 경로(`apps/web/package.json`)면 pnpm은 그 파일 자신의 위치 기준으로 `link:`를 해석해 어긋난다. 현재 세 레시피는 `compose`로 자식 `ctx`를 만들어 기본 파일에만 쓰므로 이 조합을 타지 않는다 — 결함이 아니라 새 레시피 작성 시 주의할 함정으로 설계 9절에 남김.
+- **커밋**: `e183b1c..a15c10d` (브랜치 `feature/devkit-roadmap`, main 미머지)
+
+### delegate 연산 + run 실행기 + CLI 진입점 (Task 8)
+- **변경 파일**: `packages/devkit-cli/src/{ops/delegate.ts,run.ts,bin.ts,ops/index.ts}`, `tests/{run.test.ts,bin.test.ts}`(신규)
+- **내용**: `delegate()`(외부 명령 위임), `compose()`/`scaffold()`(레시피 단계 조합기), `main()`이 `RECIPES` 레지스트리와 CLI 인자 파싱을 배선.
+- **Task 6 이월 항목 해소**: `templatesRoot()`의 dist 상대경로가 옳음을 실빌드로 확인 — `dist/`에 `bin.js`·`index.js`·`chunk-*.js`가 전부 평평하게 배치되므로 `../templates`가 정확히 `packages/devkit-cli/templates`를 가리킨다. 실빌드 산출물을 동적 import해 `copyOverlay`를 실제로 실행시키고 `ENOENT` 경로로 확인(경로를 읽기만 한 게 아니라 실행 검증).
+- **리뷰어 실증**: `run.test.ts`의 목에서 `async`를 제거하자 `run`이 `Promise.all`로 병렬화되는 회귀에 대해 테스트가 **통과하게 됐다.** async 함수의 `throw`는 거부된 Promise로 변환돼 `.map()`을 멈추지 않지만, 동기 `throw`는 `.map()` 자체를 멈춰 later 스파이가 호출되지 않는다 — 린트(`require-await`)를 만족시키려는 수정이 테스트 검출력을 정확히 무력화한 사례. `async` 복원 + 순서 테스트 보강으로 해결.
+- `ops/index.ts` 재export가 5개 op 파일의 실제 export와 전부 일치(드리프트 0)를 리뷰어가 대조 확인.
+- **커밋**: `37658d1..3d8ea72` (브랜치 `feature/devkit-roadmap`, main 미머지)
+
+### nest 레시피와 템플릿 추가 (Task 9)
+- **변경 파일**: `packages/devkit-cli/src/recipes/nest.ts`(신규), `templates/nest/*`(신규), `tests/recipe-nest.test.ts`(신규)
+- **내용**: `nest new --strict --skip-git --skip-install -p pnpm` → `.prettierrc` 제거(required) → `copyOverlay('nest')` → `mergeJson`(package.json) → `linkDeps`(4개) → `makeDirs`(src/modules, src/common) → install/lint/build.
+- **실제 생성 2회가 계획 실측이 놓친 것 2건을 드러냄**: (1) jest 설정의 `require()`가 `no-require-imports`에 걸림 (2) `nest new`의 `main.ts`가 `bootstrap()`을 await 없이 호출해 `no-floating-promises`(우리는 error, NestJS 자신은 warn)에 걸림.
+- **리뷰 Important 3건, 전부 즉시 반영**: (1) `zod`가 `devDependencies`에 있어 `pnpm install --prod`에서 런타임 크래시 → `dependencies`로 이동 (2) `test/jest-e2e.json` 잔여(오버레이가 `jest-e2e.config.js`로 대체하는데 구 파일이 안 지워짐) → 제거 추가 (3) `main.ts` 오버레이가 설계 3.2절("애플리케이션 코드는 건드리지 않는다")과 충돌 → **사용자 판정**: 오버레이 유지 + `copyOverlay`에 `expectUpstream`(sha256 고정 드리프트 감지) 추가. `nest new`의 `main.ts`가 바뀌면 조용히 덮어쓰지 않고 실패한다.
+- **계획 결함 누적 6건째**: `s.label.includes('lint')`가 `'eslint-config-nest'`와, `includes('install')`이 `'--skip-install'`과 부분 일치해 테스트가 오탐 — 정확 일치로 수정.
+- **deferred**: `assertNoDrift`·`removeFiles`가 `stat` 실패를 전부 "파일 부재"로 취급(`EACCES` 오인 가능, Task 6 선례와 동일 패턴이라 수용); `copy-overlay-drift.test.ts`가 `assertNoDrift`를 직접 호출해 `copyOverlay(...).run()`을 통한 실제 배선은 Task 12 e2e만 덮음.
+- **커밋**: `ce8bb04..f901cfa` (브랜치 `feature/devkit-roadmap`, main 미머지)
+
+### next 레시피와 템플릿 추가 (Task 10)
+- **변경 파일**: `packages/devkit-cli/src/recipes/next.ts`(신규), `templates/next/*`(신규), `tests/recipe-next.test.ts`(신규)
+- **내용**: `create-next-app@latest --ts --app --src-dir --tailwind --no-eslint ...` → AGENTS.md/CLAUDE.md 제거(required) → `copyOverlay('next')` → `mergeJson` → `linkDeps` → FSD 레이어(`pages` 대신 `views`) → install/lint/build.
+- **브리프 결함 2건을 구현자가 실행 중 잡음**: (1) `@devbak/eslint-plugin-fsd/next`에 파서가 없어 브리프 템플릿 그대로면 `next.config.ts`·`layout.tsx`가 "Unexpected token {"로 파싱 실패 — `jsx-a11y`가 JSX는 되게 하지만 TS 타입 주석은 espree가 모른다. `typescript-eslint` recommended(비타입체크)를 템플릿에 추가해 해결. (2) 브리프의 skipInstall 테스트가 `label.includes('lint')`를 써서 `'@devbak/eslint-plugin-fsd'`와 부분 일치 — 계획 결함 6번의 재발, 디스패치 경고 덕에 즉시 발견.
+- **FSD 양방향 검증**: 고의 위반(shared→features)에서 `fsd/no-higher-level-imports` 발화, 위반 제거 후 원 생성물(`src/app/` 라우팅 포함) exit 0 — 오탐 없음.
+- **Task 13 이월 항목 해소 여기서 답이 정해짐**: "next | tsconfig | 확인 필요" → **뺀다**. `create-next-app`의 tsconfig를 덮어쓰지 않기로 했으므로(Next가 관리하는 `.next/types/**` 항목이 있어서) `@devbak/tsconfig`에 소비처가 없다.
+- **follow-up(범위 밖)**: `@devbak/eslint-config-next` 패키지로 `eslint-config-nest`와 대칭을 맞출지 — 현재는 생성물 템플릿에 `typescript-eslint`를 인라인. 이 계획의 패키지 4개 범위 밖.
+- **커밋**: `f901cfa..e43bcb7` (fix 라운드 없음, 브랜치 `feature/devkit-roadmap`, main 미머지)
+
+### monorepo 레시피와 템플릿 추가 (Task 11)
+- **변경 파일**: `packages/devkit-cli/src/recipes/monorepo.ts`(신규), `templates/monorepo/*`(신규), `tests/recipe-monorepo.test.ts`(신규)
+- **내용**: 루트 `copyOverlay('monorepo')` → `makeDirs`(apps/packages) → `compose`로 next 레시피를 `apps/web`에 합성(ctx 리매핑) → `apps/web/pnpm-workspace.yaml`·`eslint.config.mjs` 제거(required) → `mergeJson`(apps/web을 catalog: 참조로) → `linkDeps`(루트) → install/lint/build.
+- **설계 4.1절 가설이 실제로 검증됨**: `next.ts` 무수정(git log로 확인), `compose` + ctx 리매핑 한 줄로 로직 복제 0건.
+- **Important**: `apps/web/package.json`에 `typescript-eslint`가 고아로 남음(eslint·prettier는 null로 뺐는데 이것만 빠뜨림, `eslint.config.mjs`를 지웠으므로 쓸 곳이 없음) → null로 수정.
+- **컨트롤러가 직접 재현·확정한 결함**: 생성물에 `"type"` 필드가 없어 Vite의 config 로더가 `vitest.config.ts`를 CJS로 번들링하고, externalize-deps가 ESM 전용인 `@devbak/vitest-config`를 `require()`로 로드하려다 실패("resolved to an ESM file", 2026-08-01 실측). `next.ts`의 `mergeJson`에 `"type": "module"`을 추가해 해결 — next 레시피 자체가 고쳤으므로 monorepo가 합성할 때도 `applyPatch`의 spread 특성으로 자동 상속됨을 `merge-json.ts` 소스로 확인.
+- **설계 5.4절의 근거가 틀렸음이 여기서 드러남**: "create-next-app이 테스트를 안 만들어 vitest가 실패한다"던 원문 근거가 부정확 — 실제로는 config 로딩 단계에서 죽었을 뿐 `passWithNoTests`와 무관했다. 결정(자가검증에서 `pnpm test` 제외)은 유지, 근거 서술은 Task 13이 정정.
+- **확인된 사실**: `create-next-app` 산출물의 확장자 분포는 svg 5·md 3·tsx 2·ts 2·json 2·yaml 1·mjs 1·ico 1·gitignore 1·css 1 — `.js`/`.cjs` **0개**. `"type": "module"`이 안전한 근거.
+- **의도된 비대칭**: 루트=CJS(`"type"` 없음)·`apps/web`=ESM(`"type": "module"`)이 패키지 경계별 해석이라 정상 — 나중에 "통일"하지 않도록 Task 13이 `templates/monorepo/CLAUDE.md`에 명시.
+- **Task 13 이월 항목 해소**: 루트 `linkDeps`의 `'tsconfig'`도 소비처가 없음(루트에 tsconfig.json 자체가 없음) — 제거.
+- **커밋**: `75466cb..aaf28d0` (브랜치 `feature/devkit-roadmap`, main 미머지)
+
+### 실생성 통합 테스트 추가 — 3층 e2e (Task 12)
+- **변경 파일**: `packages/devkit-cli/tests/e2e/create.e2e.test.ts`(신규), `vitest.e2e.config.ts`(신규), `package.json`(`test:e2e` 스크립트), `README.md`(디스크 제약 설명)
+- **내용**: nest·next·monorepo 3개 유형 실제 생성 + 안전장치(기존 디렉토리 거부) 총 5개 테스트. 각 생성물에서 install→lint→build→(전부) test까지 실제 실행.
+- **이월 6건 전부 이 층에서 덮음**: (1) 오버레이 배선을 내용 수준으로 단언(`_gitignore` 부재+`.gitignore` 존재, `CLAUDE.md`에 치환된 이름 존재+`__NAME__` 부재) (2) 생성물의 `pnpm test`가 "테스트 0개 exit 0"이지만 config 로드 **성공**을 증명 — 원 결함(Task 11)은 로드 단계에서 죽었으므로 두 상태를 구분해야 함 (3) 모노레포 FSD가 규칙명(`fsd/no-higher-level-imports`)을 문자열로 단언 (4) eslint config 잔여물·lint 스크립트 키 충돌 없음 (5) `.js` 검사가 `node_modules`·`.next`·`dist`·`.turbo`·`out`·`.git` 제외 (6) `copyOverlay`의 `run()` 경로가 여기서 처음 실행 검증됨(Task 6·9 이월 항목 해소).
+- **Important**: e2e의 `afterEach`가 실패 시에도 생성물을 무조건 삭제해, 설계 6.3절("생성물은 지우지 않는다 — 지우면 디버깅이 불가능해진다")을 **하네스만** 어기고 있었다(CLI 런타임 자체는 지킴, `rmSync` 없음 확인). `RUN_ID` 접미사 + 조건부 정리로 수정.
+- **실측**: 5/5 통과, 96.79초(warm pnpm store). 디스크 여유가 6.1GiB뿐이라 세 유형을 동시에 만들면 소진 위험 — README에 명시. 실측 수치 자체(6.1GiB)는 README에는 박지 않고 리포트에만 남김("이 정도면 충분"으로 오독될 수 있어서).
+- **커밋**: `78d2953..10465e3` (2 fix rounds, 브랜치 `feature/devkit-roadmap`, main 미머지)
+
+### 최종 검증 및 기록 (Task 13)
+- **변경 파일**: `packages/devkit-cli/src/recipes/{next.ts,monorepo.ts}`, `packages/devkit-cli/tests/__snapshots__/{recipe-next.test.ts.snap,recipe-monorepo.test.ts.snap}`, `packages/devkit-cli/templates/monorepo/CLAUDE.md`, `docs/superpowers/specs/2026-08-01-devkit-template-design.md`, `work-log.md`
+- **내용**: 새 기능 없이 12개 태스크의 이월 6건을 처리하고 완료 기준 7개를 전수 확인.
+  - **(이월 1) 미사용 `tsconfig` linkDeps 제거**: `next.ts`와 `monorepo.ts`(루트) 양쪽에서 `@devbak/tsconfig`를 링크했지만 실제 소비처(`extends`)가 없음을 확인(Task 10·11이 이미 이유를 밝혀둔 것을 실행). 두 파일의 `linkDeps` 목록에서 `'tsconfig'`를 빼고 스냅샷 2개를 갱신 — diff는 정확히 그 한 줄뿐임을 확인.
+  - **(이월 2) 설계 5.4절 서술 정정**: "create-next-app이 테스트를 안 만들어 vitest가 실패한다"는 원문을 "생성물에 `"type"`이 없어 config 로딩이 CJS/ESM 충돌로 죽었다(Task 11 실측), `passWithNoTests`와 무관했다"로 교체. 자가검증에서 `pnpm test`를 빼는 **결정은 유지**하고(3층 e2e가 이제 이 범위를 덮음), "배제가 실제 결함을 가렸다"는 교훈을 명시했다.
+  - **(이월 3) work-log 중복 정리**: Task 2·3 구현자가 미리 커밋한 항목(`0d2ed2f`, `d41c269`)은 지우지 않고 그대로 두었다 — 실제로 중복이나 모순은 없었고(Task 1·4~13 항목이 아예 없었던 것뿐), 이번에 Task 1·4~13을 시간순으로 채워 넣어 전체 기록을 일관되게 완성했다.
+  - **(이월 4) `dist` 삭제 후 재빌드 검증**: `packages/*/dist`를 전부 옮겨 지운 뒤(주의: `rm -rf`가 이 세션의 권한 정책에서 거부되어 `mv`로 대체) `pnpm build`로 처음부터 재생성, 그 산출물로 `pnpm devbak create devkit-final-check --type nest`를 실행 — install/lint/build 전부 exit 0. 캐시된 산출물에 우연히 기대던 배선이 아님을 확인.
+  - **(이월 5) 모듈 타입 비대칭 문서화**: `templates/monorepo/CLAUDE.md`에 "루트=CJS/`apps/web`=ESM은 의도된 비대칭이며 통일하면 `pnpm test`가 다시 깨진다"는 절을 추가.
+  - **(이월 6) 완료 기준 7개 전수 확인**: 아래 참조 — **7개 전부 통과.**
+- **완료 기준 확인 결과**:
+  1. 3개 유형 실생성 → `pnpm lint`·`pnpm build` exit 0, nest는 `pnpm test`까지 — `pnpm test:e2e` 5/5(113초)로 통과 확인
+  2. 모노레포 `pnpm install`이 중첩 워크스페이스 경고 없이 완료 — e2e monorepo 테스트로 확인
+  3. Next 생성물에서 FSD 규칙이 실제로 발화(고의 위반 테스트) — e2e로 확인, 이번 세션의 Task 10 실측과 일치
+  4. Nest 생성물에서 `no-floating-promises` 발화 — Task 9 실측 + e2e로 확인
+  5. `dist` 삭제 후 재빌드해도 생성물 정상 동작 — 이번 세션에서 직접 재현(위 이월 4)
+  6. 설정 패키지 4개 전부 실제로 소비(선언만 하고 미사용 0) — 이월 1로 확보. `@devbak/tsconfig/lib` 서브패스는 미소비지만 패키지 단위 기준이라 위반 아님(설계 9절에 기록)
+  7. `pnpm lint`(oxlint+eslint) 경고 0·에러 0, `pnpm build`, `tsc --noEmit`(devkit-cli 본체·테스트 tsconfig 둘 다) 통과 — 이번 세션에서 재확인
+  - **참고**: `dist` 신선도 가드도 실제로 동작함을 별도 확인(`touch src/bin.ts` → `pnpm devbak create` 즉시 거부, 디렉토리 미생성 — 8절 완료 기준 목록엔 없지만 6.3절 실패 목록 항목이라 함께 검증).
+- **테스트 개수**: 92(Task 3 시점) → **165**(단위/스냅샷) + **5**(e2e, 별도 실행) — 최종.
+- **검증**: `pnpm build`·`pnpm lint`(oxlint+eslint, 경고 0)·`pnpm test` 165/165·`pnpm test:e2e` 5/5·`tsc --noEmit` 2개 프로젝트 전부 통과.
+- **커밋**: (아래 참조)

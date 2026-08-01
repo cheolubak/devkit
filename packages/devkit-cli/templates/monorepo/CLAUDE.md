@@ -30,3 +30,14 @@ packages/       공유 패키지 (필요할 때 추가)
 
 `apps/web`은 Feature-Sliced Design을 따른다. 자세한 내용은
 `apps/web`의 레이어 구조와 `@devbak/eslint-plugin-fsd` 규칙을 참고하라.
+
+## 모듈 타입 — 루트는 CJS, apps/web은 ESM (의도된 비대칭)
+
+루트 `package.json`에는 `"type"`이 없고(CJS) `apps/web/package.json`에는
+`"type": "module"`이 있다(ESM). **통일하지 마라.** `apps/web`이 ESM인 이유는
+Vite의 config 로더가 `vitest.config.ts`를 번들링할 때 ESM 전용인
+`@devbak/vitest-config`를 `require()`가 아니라 `import`로 로드해야 하기
+때문이다 — `"type"`을 빼면(또는 루트와 맞추겠다고 지우면) 그 즉시
+"resolved to an ESM file" 에러로 `pnpm test`가 다시 깨진다. 패키지
+경계(루트/`apps/web`)마다 Node가 독립적으로 모듈 시스템을 해석하므로 이
+비대칭은 정상이며, 두 곳이 각자 자기 안에서만 일관되면 충분하다.

@@ -313,7 +313,7 @@ mergeJson('package.json', {
 
 이 단계가 필요한 이유는 이 작업의 검증 논리 전체가 여기 걸려 있기 때문이다 — 1.3절이 "갓 생성된 프로젝트에서 `pnpm lint`가 exit 0이 아니면 그것은 무조건 설정의 문제다"라고 주장했다. 그 주장을 CLI가 매 실행마다 실제로 시험하게 만든다.
 
-**`pnpm test`는 포함하지 않는다.** `nest new`는 샘플 spec을 함께 만들지만 `create-next-app`은 테스트를 하나도 만들지 않아, 갓 생성된 Next 앱에서 vitest는 "테스트 0개"로 실패한다. 이 저장소 루트가 같은 이유로 `--passWithNoTests`를 붙인 전례가 있다(work-log 2026-07-26). 생성물의 `test` 스크립트에 그 플래그를 넣어 실패를 감추는 것보다, 자가검증에서 빼고 8절 완료 기준에서 사람이 확인하는 편이 정직하다.
+**`pnpm test`는 포함하지 않는다.** `nest new`는 샘플 spec을 함께 만들지만 `create-next-app`은 테스트를 하나도 만들지 않는다 — 다만 이 문서가 처음 적었던 근거("갓 생성된 Next 앱에서 vitest가 '테스트 0개'로 실패한다")는 **틀렸다**. Task 11에서 실측한 실제 결함은 `passWithNoTests`와 무관했다: 생성물에 `"type"` 필드가 없어 CJS로 취급되고, Vite의 config 로더가 `vitest.config.ts`를 CJS로 번들링하면서 externalize-deps가 ESM 전용인 `@devbak/vitest-config`를 `require()`로 로드하려다 실패했다. 이 결함은 Task 11에서 `"type": "module"`을 생성물에 심어 고쳤다(5.2절 mergeJson). 결정 자체(자가검증에서 `pnpm test` 제외)는 바꾸지 않는다 — 지금은 3층 e2e(7절, Task 12)가 매 유형에서 `pnpm test`까지 실행해 이 범위를 덮는다. 다만 **이 배제가 잘못된 근거로 정당화된 채 남아 있었기 때문에, 자가검증 범위 밖에서 실제로 생성물을 깨뜨리던 config 로딩 결함이 한동안 드러나지 않았다** — 배제 결정 자체와 그 결정을 뒷받침한 설명은 별개로 검증해야 한다는 교훈이다.
 
 `--no-verify` 플래그로 건너뛸 수 있다. 오프라인이거나 위임 대상만 빠르게 확인할 때 쓴다.
 
@@ -394,7 +394,12 @@ removeFiles(['pnpm-workspace.yaml'], { required: true })
 
 ## 9. 미결 사항 / follow-up
 
-- **`eslint-config-nest`가 Nest 런타임 전역을 담는가** — `nest new`의 기본 config는 `sourceType: 'commonjs'`와 `globals.node`+`globals.jest`를 설정한다(2.1절). 우리 config가 이를 담지 않으면 생성물이 `no-undef` 등으로 깨질 수 있다. 구현 첫 단계에서 확인한다
+- **`eslint-config-nest`가 Nest 런타임 전역을 담는가 — 해소됨.** 담지 않고, 그래도 문제가 없다. `packages/eslint-config-nest/src/index.ts`는 `js.configs.recommended`(또는 `eslint:recommended`)를 spread하지 않고 `tseslint.configs.recommendedTypeChecked`만 쓴다. `no-undef`는 eslint 코어 recommended 세트에서 오는 규칙이라 애초에 켜지지 않으므로, `nest new`의 `sourceType: 'commonjs'`/`globals.node`+`globals.jest` 전제가 없어도 무관하다. Task 9 Step 7과 Task 13의 재검증(dist 삭제 후 재빌드 → 실생성 → `pnpm lint` exit 0) 둘 다에서 `no-undef` 부류 오류가 나지 않음을 실제로 확인했다
 - 로드맵 Phase 1 Task 2~10 (기존 3개 프로젝트 마이그레이션) — 이 작업 후로 미뤄졌을 뿐 취소되지 않았다
 - `devkit generate` 서브커맨드 (로드맵 Phase 3의 제너레이터) — CLI 구조가 수용하도록 설계했으나 구현하지 않는다
 - 모노레포에 NestJS 앱을 함께 두는 유형(`apps/api` + `apps/web`) — 수요가 실제로 생길 때 추가한다. 현재는 Next 단일 앱 모노레포만 지원한다
+- **`@devbak/tsconfig`의 `/lib` 서브패스는 이 계획의 3개 레시피 중 어디에서도 소비되지 않는다.** `/nest`·`/next`만 실제로 링크·`extends`된다. 완료 기준 6번("설정 패키지 4개가 전부 실제로 소비됨")은 패키지 단위 기준이라 위반은 아니다 — `@devbak/tsconfig` 자체는 nest·next 레시피가 쓴다. `/lib`은 로드맵이 예정한 "순수 TypeScript 라이브러리" 프로젝트 유형(현재 미구현, 8절 완료 기준 밖)을 위해 미리 준비된 서브패스로 남겨둔다. 그 유형이 구현되지 않는 채로 오래 남으면 그때 제거를 재검토한다
+- **Windows 지원 여부 — 미지원으로 확정, 코드는 유지.** `linkDeps`의 POSIX 경로 정규화(Task 7)는 로드맵 2.1절이 소비자를 "작성자 본인의 개인 프로젝트"(전부 macOS)로 한정하므로 현재는 검증 대상이 아니다. 다만 정규화 코드를 빼는 비용 대비 이득이 없어(테스트 포함 이미 존재하고 정확) 유지한다. Windows 소비자가 실제로 생기면 그때 CI로 검증한다
+- **`linkDeps`가 중첩 경로(`file`이 하위 디렉토리를 가리키는 경우) 배선을 잘못 계산할 수 있는 함정 — 미해소, 현재는 무해.** `linkSpec`은 항상 `ctx.targetDir` 기준으로 상대경로를 계산하는데, `file`이 `ctx.targetDir` 하위의 중첩 위치(예: `apps/web/package.json`)면 pnpm은 그 `package.json` 자신의 위치를 기준으로 `link:`를 해석해 어긋난다(Task 7 재리뷰). 현재 세 레시피는 `linkDeps`를 항상 각 `package.json`과 같은 깊이의 `ctx`(compose로 리매핑된 자식 ctx, 또는 루트 ctx)에서만 호출해 이 조합을 타지 않는다. 새 레시피를 추가할 때 반드시 확인할 것
+- **`apps/web`의 `next start`(빌드 후 프로덕션 런타임) — 미검증.** 자가검증과 e2e는 전부 `next build`까지만 확인한다. 빌드가 전부 로드·번들하므로 위험은 낮게 평가하나, 기술적으로 확인된 경로는 아니다
+- `@devbak/eslint-config-next` 패키지로 `eslint-config-nest`와 대칭을 맞출지 — 현재는 next 템플릿에 `typescript-eslint`를 인라인한다(Task 10). 이 계획의 패키지 4개 범위 밖이라 만들지 않았다. 수요가 쌓이면 별도 작업으로 뽑는다
