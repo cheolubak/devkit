@@ -51,6 +51,17 @@ describe('monorepo 레시피', () => {
     expect(detail.required).toBe(true);
   });
 
+  it('apps/web/eslint.config.mjs를 지우므로 eslint·prettier·typescript-eslint를 전부 devDependencies에서 뺀다', () => {
+    // 루트가 담당한다. 앱에서 중복 선언하지 않는다 — 셋 다 같은 이유다.
+    // typescript-eslint는 apps/web/eslint.config.mjs가 파서로 쓰던 것인데
+    // 그 파일 자체를 지웠으니 앱에는 쓸 곳이 없다(리뷰 Finding 1).
+    const merge = monorepoRecipe().find((s) => s.kind === 'mergeJson');
+    const detail = merge?.describe() as { patch: { devDependencies: Record<string, unknown> } };
+    expect(detail.patch.devDependencies.eslint).toBeNull();
+    expect(detail.patch.devDependencies.prettier).toBeNull();
+    expect(detail.patch.devDependencies['typescript-eslint']).toBeNull();
+  });
+
   it('루트와 apps/web에 각각 link: 배선을 한다', () => {
     // catalog:가 link:를 거부하므로 각자 선언해야 한다(설계 2.3절).
     const links = monorepoRecipe().filter((s) => s.kind === 'linkDeps');

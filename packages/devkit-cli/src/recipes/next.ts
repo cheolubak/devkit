@@ -39,6 +39,12 @@ export const nextRecipe: Recipe = (options = {}) => {
     // 없으면 .ts/.tsx의 타입 문법을 espree가 파싱하지 못해 eslint가 죽는다
     // (Task 10 Step 7 실측).
     mergeJson({
+      // create-next-app은 "type"을 넣지 않아 프로젝트가 CJS로 취급된다.
+      // 그러면 Vite의 config 로더가 vitest.config.ts를 CJS로 번들링하고,
+      // externalize-deps가 ESM 전용 @devbak/vitest-config를 require()로
+      // 로드하려다 실패한다("resolved to an ESM file", 2026-08-01 실측).
+      // create-next-app 산출물에 .js 파일이 없으므로(전부 .ts/.tsx/.mjs) 안전하다.
+      type: 'module',
       prettier: '@devbak/prettier-config',
       scripts: {
         lint: 'eslint .',

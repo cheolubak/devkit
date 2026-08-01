@@ -61,6 +61,8 @@ export const monorepoRecipe: Recipe = (options = {}) => {
           // 루트가 담당한다. 앱에서 중복 선언하지 않는다.
           eslint: null,
           prettier: null,
+          // apps/web/eslint.config.mjs를 제거하므로 앱에는 쓸 곳이 없다. 루트가 담당한다.
+          'typescript-eslint': null,
         },
         scripts: {
           lint: null,

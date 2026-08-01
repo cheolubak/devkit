@@ -61,4 +61,15 @@ describe('next 레시피', () => {
     expect(steps.some(isInstallStep)).toBe(true);
     expect(steps.some(isVerifyStep)).toBe(false);
   });
+
+  it('package.json에 "type": "module"을 심는다', () => {
+    // create-next-app 산출물은 "type"이 없어 CJS로 취급된다. Vite가
+    // vitest.config.ts를 CJS로 번들링하면 externalize-deps가 ESM 전용인
+    // @devbak/vitest-config를 require()로 로드하려다 실패한다(2026-08-01 실측,
+    // "@devbak/vitest-config/next" resolved to an ESM file). create-next-app
+    // 산출물엔 .js 파일이 없어(전부 .ts/.tsx/.mjs) 안전하다.
+    const merge = nextRecipe().find((s) => s.kind === 'mergeJson');
+    const detail = merge?.describe() as { patch: { type?: string } };
+    expect(detail.patch.type).toBe('module');
+  });
 });
