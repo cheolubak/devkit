@@ -16,3 +16,13 @@ export {
   UnknownCategoryError,
   type Category,
 } from './lib/categories.js';
+
+export {
+  InvalidMarkerError,
+  markerPatch,
+  MissingMarkerError,
+  PROJECT_TYPES,
+  readMarker,
+  type DevkitMarker,
+  type ProjectType,
+} from './lib/marker.js';
