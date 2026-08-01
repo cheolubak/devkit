@@ -1574,7 +1574,7 @@ Windows에서 `path.relative`는 `\`를 쓰므로 POSIX 구분자로 정규화�
 `packages/devkit-cli/tests/link-deps.test.ts`:
 
 ```ts
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -1617,11 +1617,7 @@ describe('linkDeps', () => {
     created.push(dir);
     const toolkit = join(dir, 'eslint');
     const project = join(dir, 'my-api');
-    writeFileSync(
-      join(dir, 'placeholder'),
-      '', // dir 자체는 존재해야 한다
-    );
-    require('node:fs').mkdirSync(project, { recursive: true });
+    mkdirSync(project, { recursive: true });
     writeFileSync(
       join(project, 'package.json'),
       JSON.stringify({ name: 'my-api', devDependencies: { typescript: '^5.7.3' } }, null, 2),
@@ -1701,8 +1697,6 @@ export function linkDeps(packages: string[], options: LinkDepsOptions = {}): Ste
 
 Run: `pnpm vitest run packages/devkit-cli/tests/link-deps.test.ts`
 Expected: PASS (5개 테스트)
-
-테스트의 `require('node:fs').mkdirSync` 부분이 ESM에서 실패하면 상단 import를 `import { mkdirSync } from 'node:fs'`로 바꾸고 해당 줄을 `mkdirSync(project, { recursive: true })`로 고친다.
 
 - [ ] **Step 5: 검증 후 커밋**
 
