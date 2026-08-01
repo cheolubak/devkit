@@ -49,11 +49,15 @@ describe('nest 리뷰어 에이전트', () => {
   });
 
   it('설계 3.2절의 4개 관점을 모두 갖는다', async () => {
+    // 반드시 `## 보는 것` 이후로 스코프한다. 문서 전체를 검사하면
+    // 금지 목록에 우연히 같은 단어가 있을 때 관점 절을 지워도 통과하는
+    // 항상-통과 단언이 된다.
     const doc = await readReviewer('nest');
-    expect(doc).toContain('크로스 파일 아키텍처');
-    expect(doc).toContain('조용한 실패');
-    expect(doc).toContain('테스트 공백');
-    expect(doc).toContain('의도와 구현의 불일치');
+    const observed = doc.slice(doc.indexOf('## 보는 것'));
+    expect(observed).toContain('크로스 파일 아키텍처');
+    expect(observed).toContain('조용한 실패');
+    expect(observed).toContain('테스트 공백');
+    expect(observed).toContain('의도와 구현의 불일치');
   });
 
   it('설계 3.4절의 NestJS 고유 관점을 갖는다', async () => {
