@@ -32,6 +32,10 @@ export default tseslint.config(
       // devkit-cli/templates/는 생성물에 복사될 파일들이다. 이 저장소의
       // tsconfig 어디에도 속하지 않으므로 projectService가 실패해 ESLint가
       // 크래시한다(eslint-config-nest 최종 리뷰가 잡은 Critical과 같은 부류).
+      // .oxlintrc.json의 ignorePatterns가 buildFromOxlintConfigFile을 통해
+      // ESLint에도 주입되므로 이 항목은 실질적으로 중복이지만, 저장소 기존
+      // 관행(tests/fixtures, tests/.fixtures 모두 양쪽에 명시)을 따라 여기에도
+      // 명시적으로 남긴다 — 실측으로 양쪽 다 단독으로 통과시킴을 확인했다.
       '**/templates/**',
     ],
   },
