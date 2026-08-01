@@ -1122,7 +1122,7 @@ async function collectOverlayFiles(): Promise<{ type: string; relPath: string }[
     const entries = await readdir(root, { recursive: true, withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isFile()) continue;
-      const absDir = entry.parentPath ?? entry.path;
+      const absDir = entry.parentPath;
       const relPath = `${absDir}/${entry.name}`.slice(root.length + 1);
       collected.push({ type: type.name, relPath });
     }
@@ -1151,7 +1151,9 @@ describe('오버레이 카테고리 커버리지', () => {
 });
 ```
 
-`readdir`의 `recursive: true`와 `parentPath`는 Node 20.12+/22+ API다. `package.json`의 `engines`가 `^20.19.0 || ^22.13.0 || >=24`이므로 안전하다. `entry.path`는 구버전 이름이라 폴백으로 둔다.
+`readdir`의 `recursive: true`와 `parentPath`는 Node 20.12+/22+ API다. `package.json`의 `engines`가 `^20.19.0 || ^22.13.0 || >=24`이므로 안전하다.
+
+**`entry.path` 폴백을 두지 않는다.** 초판은 구버전 이름을 폴백으로 뒀으나 두 가지가 틀렸다 — `engines` 하한이 이미 `parentPath` 도입 이후라 폴백이 커버할 구간이 없고, `@types/node@24`의 `Dirent`에는 `path`가 아예 없어 `tsc`가 `TS2339`로 실패한다. vitest 는 타입 체크 없이 트랜스파일만 하므로 테스트 76개가 전부 초록인 상태로 이 결함을 통과시켰고, `tsc --noEmit` 게이트가 처음 잡았다.
 
 - [ ] **Step 4: 테스트 실행 — 통과해야 한다**
 
