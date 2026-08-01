@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { mkdir, stat } from 'node:fs/promises';
+import { basename, dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
+import { run } from './run.js';
+import type { Ctx, ProjectType, Recipe } from './types.js';
 
 /**
  * pnpm-workspace.yaml을 상위로 탐색해 툴킷 저장소 루트를 찾는다.
@@ -44,4 +49,67 @@ export function assertDistFresh(pkgDir: string): void {
   if (newestMtime(join(pkgDir, 'src')) > statSync(distBin).mtimeMs) {
     throw new Error('devkit-cli의 dist가 src보다 오래됐습니다. `pnpm build`를 먼저 실행하세요.');
   }
+}
+
+const RECIPES: Partial<Record<ProjectType, Recipe>> = {
+  // Task 9~11에서 채운다
+};
+
+export async function main(argv: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      type: { type: 'string' },
+      'no-verify': { type: 'boolean', default: false },
+    },
+  });
+
+  const [command, name] = positionals;
+  if (command !== 'create' || name === undefined) {
+    throw new Error('사용법: pnpm devbak create <name> --type <nest|next|monorepo> [--no-verify]');
+  }
+
+  const type = values.type as ProjectType | undefined;
+  if (type === undefined || !(type in RECIPES)) {
+    throw new Error(`--type은 nest · next · monorepo 중 하나여야 합니다 (받은 값: ${String(type)}).`);
+  }
+
+  const pkgDir = join(dirname(fileURLToPath(import.meta.url)), '..');
+  assertDistFresh(pkgDir);
+
+  const toolkitRoot = findToolkitRoot(pkgDir);
+  const targetDir = resolve(dirname(toolkitRoot), name);
+
+  const exists = await stat(targetDir).then(
+    () => true,
+    () => false,
+  );
+  if (exists) {
+    throw new Error(`${targetDir}가 이미 존재합니다. 덮어쓰지 않습니다.`);
+  }
+  await mkdir(dirname(targetDir), { recursive: true });
+
+  const ctx: Ctx = {
+    targetDir,
+    toolkitRoot,
+    name,
+    log: (message) => {
+      process.stdout.write(`${message}\n`);
+    },
+  };
+
+  const recipe = RECIPES[type];
+  if (recipe === undefined) throw new Error(`레시피가 아직 구현되지 않았습니다: ${type}`);
+
+  await run(recipe({ skipVerify: values['no-verify'] === true }), ctx);
+  ctx.log(`\n완료. cd ${targetDir}`);
+}
+
+const isDirectRun = process.argv[1] !== undefined && import.meta.url.endsWith(basename(process.argv[1]));
+if (isDirectRun) {
+  main(process.argv.slice(2)).catch((error: unknown) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  });
 }

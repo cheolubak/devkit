@@ -1,0 +1,10 @@
+export { mergeJson, applyPatch, hasPath } from './merge-json.js';
+export type { Json, JsonObject, MergeJsonOptions } from './merge-json.js';
+export { removeFiles, assertInside } from './remove-files.js';
+export type { RemoveFilesOptions } from './remove-files.js';
+export { copyOverlay, templateFileName } from './copy-overlay.js';
+export { makeDirs } from './make-dirs.js';
+export { linkDeps, linkSpec } from './link-deps.js';
+export type { LinkDepsOptions } from './link-deps.js';
+export { delegate, scaffold } from './delegate.js';
+export type { DelegateOptions } from './delegate.js';
