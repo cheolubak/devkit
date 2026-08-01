@@ -16,7 +16,7 @@ async function collectOverlayFiles(): Promise<{ type: string; relPath: string }[
     const entries = await readdir(root, { recursive: true, withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isFile()) continue;
-      const absDir = entry.parentPath ?? entry.path;
+      const absDir = entry.parentPath;
       const relPath = `${absDir}/${entry.name}`.slice(root.length + 1);
       collected.push({ type: type.name, relPath });
     }
