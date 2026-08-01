@@ -1248,7 +1248,20 @@ git commit -m "feat: mergeJson 연산 추가 (null은 키 삭제, required로 �
 
   /** '_'로 시작하는 파일명은 '.'으로 바꿔 복사한다 (_gitignore → .gitignore). */
   export function templateFileName(name: string): string;
-  export function copyOverlay(template: string, vars?: Record<string, string>): Step;
+  export interface CopyOverlayOptions {
+    /**
+     * 덮어쓸 대상의 드리프트 감지. 키는 targetDir 기준 상대경로,
+     * 값은 덮어쓰기 전 그 파일이 가질 것으로 기대하는 내용의 sha256.
+     * 실제와 다르면 던진다 — 공식 CLI가 그 파일을 바꿨다는 뜻이고,
+     * 우리 오버레이가 그 변화를 조용히 버리게 되기 때문이다.
+     */
+    expectUpstream?: Record<string, string>;
+  }
+  export function copyOverlay(
+    template: string,
+    vars?: Record<string, string>,
+    options?: CopyOverlayOptions,
+  ): Step;
 
   export function makeDirs(paths: string[]): Step;
   ```
@@ -2222,7 +2235,10 @@ export const nestRecipe: Recipe = (options = {}) => {
     ]),
 
     // .prettierrc는 package.json의 "prettier" 키로 대체한다. 파일이 하나 준다.
-    removeFiles(['.prettierrc'], { required: true }),
+    // test/jest-e2e.json은 @devbak/jest-config/nest-e2e로 "교체"되므로
+    // 남기면 안 된다(설계 2.1절). 새 파일만 만들고 옛 파일을 두면
+    // IDE가 자동 탐지해 옛 설정으로 e2e를 돌릴 수 있다.
+    removeFiles(['.prettierrc', 'test/jest-e2e.json'], { required: true }),
 
     // eslint.config.mjs를 덮어쓴다. nest new는 flat config를 만들지만
     // eslint-plugin-prettier가 얹힌 상태다(설계 2.1절).
@@ -2239,6 +2255,11 @@ export const nestRecipe: Recipe = (options = {}) => {
           eslint: '^10.8.0',
           'typescript-eslint': '^8.65.0',
           'eslint-plugin-zod': '^4.9.0',
+        },
+        // zod는 런타임 의존이다. 서비스·컨트롤러가 import하므로
+        // devDependencies에 두면 `pnpm install --prod`(NestJS Docker 빌드의
+        // 표준)에서 설치되지 않아 Cannot find module 'zod'로 죽는다.
+        dependencies: {
           zod: '^4.4.3',
         },
         jest: null,
