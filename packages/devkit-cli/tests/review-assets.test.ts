@@ -55,4 +55,14 @@ describe('nest 리뷰어 에이전트', () => {
     expect(doc).toContain('테스트 공백');
     expect(doc).toContain('의도와 구현의 불일치');
   });
+
+  it('설계 3.4절의 NestJS 고유 관점을 갖는다', async () => {
+    // 4관점 골격만으로는 next판과 구별되지 않는다. 설계 3.4절이
+    // nest 리뷰어에 배정한 고유 관점이 실제 문서에 있어야 한다.
+    const doc = await readReviewer('nest');
+    const observed = doc.slice(doc.indexOf('## 보는 것'));
+    expect(observed).toContain('zod');
+    expect(observed).toContain('트랜잭션');
+    expect(observed).toContain('e2e');
+  });
 });
