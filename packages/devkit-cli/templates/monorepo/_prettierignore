@@ -1,0 +1,6 @@
+.turbo/
+dist/
+.next/
+out/
+coverage/
+pnpm-lock.yaml

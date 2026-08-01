@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { mkdir, stat } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { pathExists } from './ops/path-exists.js';
 import { monorepoRecipe } from './recipes/monorepo.js';
 import { nestRecipe } from './recipes/nest.js';
 import { nextRecipe } from './recipes/next.js';
@@ -76,7 +77,7 @@ export async function main(argv: string[]): Promise<void> {
   }
 
   const type = values.type as ProjectType | undefined;
-  if (type === undefined || !(type in RECIPES)) {
+  if (type === undefined || !Object.hasOwn(RECIPES, type)) {
     throw new Error(`--type은 nest · next · monorepo 중 하나여야 합니다 (받은 값: ${String(type)}).`);
   }
 
@@ -86,10 +87,7 @@ export async function main(argv: string[]): Promise<void> {
   const toolkitRoot = findToolkitRoot(pkgDir);
   const targetDir = resolve(dirname(toolkitRoot), name);
 
-  const exists = await stat(targetDir).then(
-    () => true,
-    () => false,
-  );
+  const exists = await pathExists(targetDir);
   if (exists) {
     throw new Error(`${targetDir}가 이미 존재합니다. 덮어쓰지 않습니다.`);
   }

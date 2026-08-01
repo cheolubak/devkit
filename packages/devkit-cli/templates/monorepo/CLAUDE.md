@@ -41,3 +41,11 @@ Vite의 config 로더가 `vitest.config.ts`를 번들링할 때 ESM 전용인
 "resolved to an ESM file" 에러로 `pnpm test`가 다시 깨진다. 패키지
 경계(루트/`apps/web`)마다 Node가 독립적으로 모듈 시스템을 해석하므로 이
 비대칭은 정상이며, 두 곳이 각자 자기 안에서만 일관되면 충분하다.
+
+## @devbak 의존
+
+루트와 `apps/web`의 `package.json` 모두 `@devbak/*`를 `link:` 상대경로로
+선언한다. 두 곳은 툴킷(`~/Documents/develop/eslint`)까지의 깊이가 달라
+경로도 다르다 — 루트는 `link:../eslint/packages/...`, `apps/web`은
+`link:../../../eslint/packages/...`(위로 두 단계 더). 이 프로젝트를 다른
+위치로 옮기면 두 곳의 경로가 모두 깨진다.

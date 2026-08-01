@@ -1,6 +1,7 @@
-import { rm, stat } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import type { Ctx, Step } from '../types.js';
+import { pathExists } from './path-exists.js';
 
 /**
  * relativePath가 targetDir 안에 있는지 검증하고 절대경로를 반환한다.
@@ -34,10 +35,7 @@ export function removeFiles(paths: string[], options: RemoveFilesOptions = {}): 
       const logs = await Promise.all(
         paths.map(async (path): Promise<string | undefined> => {
           const full = assertInside(ctx.targetDir, path);
-          const exists = await stat(full).then(
-            () => true,
-            () => false,
-          );
+          const exists = await pathExists(full);
           if (!exists) {
             if (required) {
               throw new Error(

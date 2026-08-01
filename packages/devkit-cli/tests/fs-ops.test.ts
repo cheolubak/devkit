@@ -1,10 +1,11 @@
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { assertInside, removeFiles } from '../src/ops/remove-files.js';
 import { templateFileName } from '../src/ops/copy-overlay.js';
 import { makeDirs } from '../src/ops/make-dirs.js';
+import { pathExists } from '../src/ops/path-exists.js';
 import type { Ctx } from '../src/types.js';
 
 const created: string[] = [];
@@ -17,6 +18,36 @@ function makeCtx(logger?: (msg: string) => void): Ctx {
 
 afterEach(() => {
   for (const dir of created.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+describe('pathExists', () => {
+  it('있는 경로는 true', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'devbak-exists-'));
+    created.push(dir);
+    expect(await pathExists(dir)).toBe(true);
+  });
+
+  it('ENOENT(없음)는 false', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'devbak-exists-'));
+    created.push(dir);
+    expect(await pathExists(join(dir, 'nope'))).toBe(false);
+  });
+
+  it('ENOENT·ENOTDIR 이외의 에러는 다시 던진다 — 권한 문제를 "없음"으로 읽지 않는다', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'devbak-exists-'));
+    created.push(dir);
+    const locked = join(dir, 'locked');
+    mkdirSync(locked);
+    writeFileSync(join(locked, 'file.txt'), '');
+    // 디렉토리의 실행(x) 권한을 빼면 그 안의 파일을 stat할 때 EACCES가 난다.
+    // `.then(() => true, () => false)` 관용구라면 이것도 "없음"으로 읽었을 것이다.
+    chmodSync(locked, 0o000);
+    try {
+      await expect(pathExists(join(locked, 'file.txt'))).rejects.toMatchObject({ code: 'EACCES' });
+    } finally {
+      chmodSync(locked, 0o755);
+    }
+  });
 });
 
 describe('assertInside', () => {

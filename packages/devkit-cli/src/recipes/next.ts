@@ -38,33 +38,40 @@ export const nextRecipe: Recipe = (options = {}) => {
     // @devbak/eslint-plugin-fsd는 파서를 제공하지 않아(consumer 책임) 이게
     // 없으면 .ts/.tsx의 타입 문법을 espree가 파싱하지 못해 eslint가 죽는다
     // (Task 10 Step 7 실측).
-    mergeJson({
-      // create-next-app은 "type"을 넣지 않아 프로젝트가 CJS로 취급된다.
-      // 그러면 Vite의 config 로더가 vitest.config.ts를 CJS로 번들링하고,
-      // externalize-deps가 ESM 전용 @devbak/vitest-config를 require()로
-      // 로드하려다 실패한다("resolved to an ESM file", 2026-08-01 실측).
-      // create-next-app 산출물에 .js 파일이 없으므로(전부 .ts/.tsx/.mjs) 안전하다.
-      type: 'module',
-      prettier: '@devbak/prettier-config',
-      scripts: {
-        lint: 'eslint .',
-        format: 'prettier --write .',
-        'format:check': 'prettier --check .',
-        typecheck: 'tsc --noEmit',
-        test: 'vitest run',
-        'test:watch': 'vitest',
+    mergeJson(
+      {
+        // create-next-app은 "type"을 넣지 않아 프로젝트가 CJS로 취급된다.
+        // 그러면 Vite의 config 로더가 vitest.config.ts를 CJS로 번들링하고,
+        // externalize-deps가 ESM 전용 @devbak/vitest-config를 require()로
+        // 로드하려다 실패한다("resolved to an ESM file", 2026-08-01 실측).
+        // create-next-app 산출물에 .js 파일이 없으므로(전부 .ts/.tsx/.mjs) 안전하다.
+        type: 'module',
+        prettier: '@devbak/prettier-config',
+        scripts: {
+          lint: 'eslint .',
+          format: 'prettier --write .',
+          'format:check': 'prettier --check .',
+          typecheck: 'tsc --noEmit',
+          test: 'vitest run',
+          'test:watch': 'vitest',
+        },
+        devDependencies: {
+          eslint: '^10.8.0',
+          'typescript-eslint': '^8.65.0',
+          vitest: '^2.1.0',
+          jsdom: '^25.0.0',
+          prettier: '^3.4.2',
+          '@next/eslint-plugin-next': '^16.0.0',
+          'eslint-plugin-jsx-a11y': '^6.10.0',
+          'eslint-plugin-react-hooks': '^7.1.0',
+        },
       },
-      devDependencies: {
-        eslint: '^10.8.0',
-        'typescript-eslint': '^8.65.0',
-        vitest: '^2.1.0',
-        jsdom: '^25.0.0',
-        prettier: '^3.4.2',
-        '@next/eslint-plugin-next': '^16.0.0',
-        'eslint-plugin-jsx-a11y': '^6.10.0',
-        'eslint-plugin-react-hooks': '^7.1.0',
-      },
-    }),
+      // create-next-app이 devDependencies.next 없이 dependencies.next만 심으므로
+      // scripts.build와 함께 여기서 확인한다 — next.ts는 이 파일을 처음 쓰는
+      // 레시피이고, monorepo 레시피만 dependencies.next를 확인해왔다(설계 6.2절
+      // 이 레시피별로 고르지 않게 적용된 사례).
+      { required: ['dependencies.next', 'scripts.build'] },
+    ),
 
     // 'tsconfig'는 링크하지 않는다 — create-next-app의 tsconfig.json을
     // 덮어쓰지 않기로 했으므로(Next가 관리하는 .next/types/** 항목이 있어서)

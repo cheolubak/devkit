@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
-import { readdir, readFile, writeFile, mkdir, stat } from 'node:fs/promises';
+import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Ctx, Step } from '../types.js';
+import { pathExists } from './path-exists.js';
 
 /** '_' 접두어를 '.'으로 바꾼다. _gitignore → .gitignore */
 export function templateFileName(name: string): string {
@@ -56,11 +57,7 @@ export async function assertNoDrift(targetDir: string, expectUpstream: Record<st
   await Promise.all(
     Object.entries(expectUpstream).map(async ([relPath, expectedHash]) => {
       const full = join(targetDir, relPath);
-      const exists = await stat(full).then(
-        () => true,
-        () => false,
-      );
-      if (!exists) return;
+      if (!(await pathExists(full))) return;
 
       const actual = createHash('sha256').update(await readFile(full, 'utf8')).digest('hex');
       if (actual !== expectedHash) {

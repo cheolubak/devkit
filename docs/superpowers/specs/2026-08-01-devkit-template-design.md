@@ -347,7 +347,7 @@ removeFiles(['pnpm-workspace.yaml'], { required: true })
 | --- | --- |
 | 대상 디렉토리가 이미 존재 | 시작 전 거부. 덮어쓰기 없음 |
 | 공식 CLI가 non-zero 종료 | 즉시 중단. **생성물은 지우지 않는다** — 지우면 디버깅이 불가능해진다 |
-| 경로 탈출 (`../`) | `removeFiles`·`copyOverlay`가 `targetDir` 밖이면 거부 |
+| 경로 탈출 (`../`) | `removeFiles`·`makeDirs`가 `targetDir` 밖이면 거부. `copyOverlay`는 이 검사가 없다 — 복사할 항목 이름이 항상 우리 자신의 `templates/` 트리에서만 오고 사용자 입력이 섞이지 않아 탈출 가능성이 없기 때문이다(리뷰로 확인됨, `assertInside` 호출을 추가하지 않기로 함) |
 | `required` 위반 | 레시피명 · 단계 번호 · 기대한 대상 · 다음 행동을 출력 |
 | `pnpm install` 실패 | 생성물 유지 + 수동 `pnpm install` 안내. **부분 성공을 성공이라 말하지 않는다** |
 | `devkit-cli`의 `dist`가 `src`보다 오래됨 | 시작 시 mtime 비교 → **중단**하고 `pnpm build` 요구 |
@@ -398,8 +398,9 @@ removeFiles(['pnpm-workspace.yaml'], { required: true })
 - 로드맵 Phase 1 Task 2~10 (기존 3개 프로젝트 마이그레이션) — 이 작업 후로 미뤄졌을 뿐 취소되지 않았다
 - `devkit generate` 서브커맨드 (로드맵 Phase 3의 제너레이터) — CLI 구조가 수용하도록 설계했으나 구현하지 않는다
 - 모노레포에 NestJS 앱을 함께 두는 유형(`apps/api` + `apps/web`) — 수요가 실제로 생길 때 추가한다. 현재는 Next 단일 앱 모노레포만 지원한다
-- **`@devbak/tsconfig`의 `/lib` 서브패스는 이 계획의 3개 레시피 중 어디에서도 소비되지 않는다.** `/nest`·`/next`만 실제로 링크·`extends`된다. 완료 기준 6번("설정 패키지 4개가 전부 실제로 소비됨")은 패키지 단위 기준이라 위반은 아니다 — `@devbak/tsconfig` 자체는 nest·next 레시피가 쓴다. `/lib`은 로드맵이 예정한 "순수 TypeScript 라이브러리" 프로젝트 유형(현재 미구현, 8절 완료 기준 밖)을 위해 미리 준비된 서브패스로 남겨둔다. 그 유형이 구현되지 않는 채로 오래 남으면 그때 제거를 재검토한다
+- **`@devbak/tsconfig`의 `/next`·`/lib`·`base.json`은 이 계획의 3개 레시피 중 어디에서도 소비되지 않는다 — 갱신됨.** 커밋 `caca9aa`(next·monorepo 레시피에서 미사용 linkDeps 제거)로 실제 링크·`extends`는 `/nest` 하나뿐이다: `templates/nest/tsconfig.json`만 `@devbak/tsconfig/nest`를 `extends`한다. `/next`는 create-next-app의 `tsconfig.json`을 덮어쓰지 않기로 한 결정(Task 13 Step 4)에 따라 소비처가 없고, `/lib`과 `base.json`(nest.json은 base.json을 extends하지 않고 독립적이다)도 소비처가 없다. `@devbak/vitest-config/node`도 마찬가지로 소비처가 없다(next.ts가 쓰는 것은 `/next`뿐). 완료 기준 6번("설정 패키지 4개가 전부 실제로 소비됨")은 패키지 단위 기준이라 위반은 아니다 — `@devbak/tsconfig` 자체는 nest 레시피가 쓴다. 미사용 서브패스들은 로드맵이 예정한 프로젝트 유형(예: "순수 TypeScript 라이브러리", 현재 미구현, 8절 완료 기준 밖)을 위해 미리 준비된 채로 남겨둔다 — 지금 지우지 않는다. 그 유형들이 구현되지 않는 채로 오래 남으면 그때 제거를 재검토한다
 - **Windows 지원 여부 — 미지원으로 확정, 코드는 유지.** `linkDeps`의 POSIX 경로 정규화(Task 7)는 로드맵 2.1절이 소비자를 "작성자 본인의 개인 프로젝트"(전부 macOS)로 한정하므로 현재는 검증 대상이 아니다. 다만 정규화 코드를 빼는 비용 대비 이득이 없어(테스트 포함 이미 존재하고 정확) 유지한다. Windows 소비자가 실제로 생기면 그때 CI로 검증한다
 - **`linkDeps`가 중첩 경로(`file`이 하위 디렉토리를 가리키는 경우) 배선을 잘못 계산할 수 있는 함정 — 미해소, 현재는 무해.** `linkSpec`은 항상 `ctx.targetDir` 기준으로 상대경로를 계산하는데, `file`이 `ctx.targetDir` 하위의 중첩 위치(예: `apps/web/package.json`)면 pnpm은 그 `package.json` 자신의 위치를 기준으로 `link:`를 해석해 어긋난다(Task 7 재리뷰). 현재 세 레시피는 `linkDeps`를 항상 각 `package.json`과 같은 깊이의 `ctx`(compose로 리매핑된 자식 ctx, 또는 루트 ctx)에서만 호출해 이 조합을 타지 않는다. 새 레시피를 추가할 때 반드시 확인할 것
 - **`apps/web`의 `next start`(빌드 후 프로덕션 런타임) — 미검증.** 자가검증과 e2e는 전부 `next build`까지만 확인한다. 빌드가 전부 로드·번들하므로 위험은 낮게 평가하나, 기술적으로 확인된 경로는 아니다
 - `@devbak/eslint-config-next` 패키지로 `eslint-config-nest`와 대칭을 맞출지 — 현재는 next 템플릿에 `typescript-eslint`를 인라인한다(Task 10). 이 계획의 패키지 4개 범위 밖이라 만들지 않았다. 수요가 쌓이면 별도 작업으로 뽑는다
+- **nest 오버레이가 `tsconfig.json`을 통째로 덮어쓰는데 `expectUpstream` 드리프트 감지가 없다 — 미해소.** `copyOverlay('nest', ...)`는 `expectUpstream`을 `src/main.ts` 하나에만 건다(6.2절). 같은 오버레이가 함께 덮어쓰는 `tsconfig.json`·`.gitignore`는 드리프트 감지 없이 그냥 대체된다. `tsconfig.json`은 `nest new`가 만든 컴파일러 옵션(`module`·`moduleResolution`·데코레이터 옵션 등)을 전부 `@devbak/tsconfig/nest`로 갈아치우는데, Nest가 다음 메이저에서 이 값들을 바꾸면(최근 `commonjs` → `nodenext` 이동 전례가 있다) 아무 신호 없이 옛 프리셋을 계속 찍어낸다. `main.ts`에만 `expectUpstream`이 있다는 사실이 "덮어쓰는 파일은 전부 보호된다"는 인상을 주기 쉬우므로 여기 남겨 그 인상을 바로잡는다. 닫으려면 실제 `nest new`를 돌려 해시를 측정해야 하는데, 이 작업(2026-08-01 최종 리뷰 대응)에서는 의도적으로 손대지 않았다 — 필요해지면 별도 작업으로 측정한다
