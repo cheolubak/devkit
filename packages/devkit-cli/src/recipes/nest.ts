@@ -19,11 +19,27 @@ export const nestRecipe: Recipe = (options = {}) => {
     ),
 
     // .prettierrc는 package.json의 "prettier" 키로 대체한다. 파일이 하나 준다.
-    removeFiles(['.prettierrc'], { required: true }),
+    // test/jest-e2e.json은 jest-e2e.config.js로 대체되어 더는 참조되지 않는다 —
+    // 지우지 않으면 IDE가 이 옛 설정을 자동 탐지해 진짜와 헷갈릴 수 있다.
+    removeFiles(['.prettierrc', 'test/jest-e2e.json'], { required: true }),
 
     // eslint.config.mjs를 덮어쓴다. nest new는 flat config를 만들지만
     // eslint-plugin-prettier가 얹힌 상태다(설계 2.1절).
-    copyOverlay('nest'),
+    //
+    // src/main.ts도 덮어쓴다(bootstrap()을 no-floating-promises에 맞게
+    // void bootstrap()으로 고친 버전). expectUpstream은 실제 `nest new`가
+    // 만드는 main.ts의 sha256이다 — 공식 CLI가 이 파일에 shutdown hooks·
+    // CORS·Swagger 부트스트랩 등을 추가하면 해시가 달라져 여기서 던진다.
+    // 조용히 그 변화를 버리는 대신 레시피 재검증을 요구한다(설계 6.2절과 같은 취지).
+    copyOverlay(
+      'nest',
+      {},
+      {
+        expectUpstream: {
+          'src/main.ts': '68099ac650f55e87770bbd9af48916c09fe7d7609717e4a6b73bb4557dc32d37',
+        },
+      },
+    ),
 
     mergeJson(
       {
@@ -36,6 +52,11 @@ export const nestRecipe: Recipe = (options = {}) => {
           eslint: '^10.8.0',
           'typescript-eslint': '^8.65.0',
           'eslint-plugin-zod': '^4.9.0',
+        },
+        // zod는 서비스·컨트롤러가 import하는 런타임 의존이다. devDependencies에
+        // 두면 `pnpm install --prod`(표준 배포 빌드)에서 빠져 배포 시
+        // `Cannot find module 'zod'`로 죽는다.
+        dependencies: {
           zod: '^4.4.3',
         },
         jest: null,

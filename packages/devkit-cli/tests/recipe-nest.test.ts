@@ -26,6 +26,28 @@ describe('nest 레시피', () => {
     expect(detail.patch.devDependencies.eslint).toMatch(/^\^10\./);
   });
 
+  it('zod는 dependencies에 둔다 — devDependencies면 pnpm install --prod에서 빠져 배포가 깨진다', () => {
+    const merge = nestRecipe().find((s) => s.kind === 'mergeJson');
+    const detail = merge?.describe() as {
+      patch: { dependencies?: Record<string, unknown>; devDependencies: Record<string, unknown> };
+    };
+    expect(detail.patch.dependencies?.zod).toBe('^4.4.3');
+    expect(detail.patch.devDependencies.zod).toBeUndefined();
+  });
+
+  it('test/jest-e2e.json을 지운다 — jest-e2e.config.js로 대체되어 잔여물이 된다', () => {
+    const remove = nestRecipe().find((s) => s.kind === 'removeFiles');
+    const detail = remove?.describe() as { paths: string[]; required: boolean };
+    expect(detail.paths).toContain('test/jest-e2e.json');
+    expect(detail.required).toBe(true);
+  });
+
+  it('src/main.ts에 드리프트 감지를 건다 — nest new의 산출물이 바뀌면 조용히 버리지 않는다', () => {
+    const overlay = nestRecipe().find((s) => s.kind === 'copyOverlay');
+    const detail = overlay?.describe() as { expectUpstream: string[] };
+    expect(detail.expectUpstream).toContain('src/main.ts');
+  });
+
   it('인라인 jest 블록을 제거하고 그 존재를 required로 요구한다', () => {
     const merge = nestRecipe().find((s) => s.kind === 'mergeJson');
     const detail = merge?.describe() as { patch: Record<string, unknown>; required: string[] };
