@@ -1,0 +1,123 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`nest 레시피 > 단계 목록이 스냅샷과 일치한다 1`] = `
+[
+  {
+    "detail": {
+      "argsAfter": [
+        "--skip-git",
+        "--skip-install",
+        "-p",
+        "pnpm",
+        "--strict",
+      ],
+      "argsBefore": [
+        "dlx",
+        "@nestjs/cli@latest",
+        "new",
+      ],
+      "command": "pnpm",
+      "cwd": "parent",
+    },
+    "kind": "delegate",
+  },
+  {
+    "detail": {
+      "paths": [
+        ".prettierrc",
+      ],
+      "required": true,
+    },
+    "kind": "removeFiles",
+  },
+  {
+    "detail": {
+      "template": "nest",
+      "vars": [],
+    },
+    "kind": "copyOverlay",
+  },
+  {
+    "detail": {
+      "file": "package.json",
+      "patch": {
+        "devDependencies": {
+          "@eslint/eslintrc": null,
+          "@eslint/js": null,
+          "eslint": "^10.8.0",
+          "eslint-config-prettier": null,
+          "eslint-plugin-prettier": null,
+          "eslint-plugin-zod": "^4.9.0",
+          "globals": null,
+          "typescript-eslint": "^8.65.0",
+          "zod": "^4.4.3",
+        },
+        "jest": null,
+        "prettier": "@devbak/prettier-config",
+        "scripts": {
+          "format": "prettier --write .",
+          "format:check": "prettier --check .",
+          "lint": "eslint .",
+          "test:e2e": "jest --config ./jest-e2e.config.js",
+        },
+      },
+      "required": [
+        "jest",
+        "devDependencies.eslint-plugin-prettier",
+      ],
+    },
+    "kind": "mergeJson",
+  },
+  {
+    "detail": {
+      "file": "package.json",
+      "packages": [
+        "eslint-config-nest",
+        "prettier-config",
+        "tsconfig",
+        "jest-config",
+      ],
+    },
+    "kind": "linkDeps",
+  },
+  {
+    "detail": {
+      "paths": [
+        "src/modules",
+        "src/common",
+      ],
+    },
+    "kind": "makeDirs",
+  },
+  {
+    "detail": {
+      "args": [
+        "install",
+      ],
+      "command": "pnpm",
+      "cwd": "targetDir",
+    },
+    "kind": "delegate",
+  },
+  {
+    "detail": {
+      "args": [
+        "lint",
+      ],
+      "command": "pnpm",
+      "cwd": "targetDir",
+    },
+    "kind": "delegate",
+  },
+  {
+    "detail": {
+      "args": [
+        "build",
+      ],
+      "command": "pnpm",
+      "cwd": "targetDir",
+    },
+    "kind": "delegate",
+  },
+]
+`;
