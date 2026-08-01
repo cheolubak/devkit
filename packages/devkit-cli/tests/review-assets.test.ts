@@ -66,3 +66,72 @@ describe('nest 리뷰어 에이전트', () => {
     expect(observed).toContain('e2e');
   });
 });
+
+const ALL_TYPES = ['nest', 'next', 'monorepo'] as const;
+
+describe.each(ALL_TYPES)('%s 리뷰어 공통 구조', (type) => {
+  it('frontmatter의 name이 devkit-reviewer 다', async () => {
+    const doc = await readReviewer(type);
+    expect(doc).toMatch(/^---\n(?:.*\n)*?name: devkit-reviewer\n/);
+  });
+
+  it('금지 목록이 보는 것보다 먼저 온다', async () => {
+    const doc = await readReviewer(type);
+    expect(doc.indexOf('## 지적하지 않는 것')).toBeLessThan(doc.indexOf('## 보는 것'));
+  });
+
+  it('린터가 담당하는 항목을 금지 목록에 명시한다', async () => {
+    const doc = await readReviewer(type);
+    const forbidden = doc.slice(
+      doc.indexOf('## 지적하지 않는 것'),
+      doc.indexOf('## 보는 것'),
+    );
+    expect(forbidden).toContain('prettier');
+    expect(forbidden).toContain('import 순서');
+    expect(forbidden).toContain('tsc');
+  });
+
+  it('설계 3.2절의 4개 관점을 모두 갖는다', async () => {
+    const doc = await readReviewer(type);
+    expect(doc).toContain('조용한 실패');
+    expect(doc).toContain('테스트 공백');
+    expect(doc).toContain('의도와 구현의 불일치');
+  });
+});
+
+describe.each(['next', 'monorepo'] as const)('%s 리뷰어 프론트엔드 관점', (type) => {
+  it('FSD 레이어 배치를 관점으로 갖는다', async () => {
+    const doc = await readReviewer(type);
+    expect(doc).toContain('FSD');
+  });
+
+  it('FSD import 방향 위반은 린터 담당임을 명시한다', async () => {
+    // eslint-plugin-fsd 가 방향을 검사한다. 리뷰는 "이 코드가 애초에
+    // 이 레이어에 있어야 하는가"를 본다.
+    const doc = await readReviewer(type);
+    const forbidden = doc.slice(
+      doc.indexOf('## 지적하지 않는 것'),
+      doc.indexOf('## 보는 것'),
+    );
+    expect(forbidden).toContain('eslint-plugin-fsd');
+  });
+
+  it('설계 3.4절의 프론트엔드 고유 관점을 갖는다', async () => {
+    const doc = await readReviewer(type);
+    const observed = doc.slice(doc.indexOf('## 보는 것'));
+    expect(observed).toContain("'use client'");
+    expect(observed).toContain('Server Action');
+    expect(observed).toContain('views');
+  });
+});
+
+describe('monorepo 리뷰어 워크스페이스 관점', () => {
+  it('워크스페이스 경계를 관점으로 갖는다', async () => {
+    // 의존 선언 누락·앱 간 직접 import·catalog 이탈은 모노레포에서만
+    // 생기는 문제이며 전부 린터 밖이다.
+    const doc = await readReviewer('monorepo');
+    const observed = doc.slice(doc.indexOf('## 보는 것'));
+    expect(observed).toContain('워크스페이스');
+    expect(observed).toContain('catalog:');
+  });
+});
