@@ -602,6 +602,16 @@ describe('nest 리뷰어 에이전트', () => {
     expect(doc).toContain('테스트 공백');
     expect(doc).toContain('의도와 구현의 불일치');
   });
+
+  it('설계 3.4절의 NestJS 고유 관점을 갖는다', async () => {
+    // 4관점 골격만으로는 next판과 구별되지 않는다. 설계 3.4절이
+    // nest 리뷰어에 배정한 고유 관점이 실제 문서에 있어야 한다.
+    const doc = await readReviewer('nest');
+    const observed = doc.slice(doc.indexOf('## 보는 것'));
+    expect(observed).toContain('zod');
+    expect(observed).toContain('트랜잭션');
+    expect(observed).toContain('e2e');
+  });
 });
 ```
 
@@ -653,6 +663,8 @@ description: devkit 표준(NestJS) 기준으로 변경분을 리뷰한다. 린�
 - 의존 방향이 Controller → Service → 데이터 접근으로 흐르는가. Controller가 `PrismaService`/Repository를 직접 주입받지 않는가
 - 모듈 간 순환 의존이 생기지 않았는가. `forwardRef`가 새로 등장했다면 왜 필요한지 묻는다
 - 한 모듈의 내부 구현이 다른 모듈로 새어나가지 않는가
+- **zod 스키마와 실제 사용처가 정합하는가.** 스키마를 고쳤는데 그것을 소비하는 컨트롤러·서비스의 타입이나 분기가 따라오지 않았는가. 스키마가 선언된 파일과 쓰이는 파일이 다르므로 린터는 이 어긋남을 보지 못한다
+- **트랜잭션 경계가 맞는가.** 한 단위로 성공하거나 실패해야 할 쓰기들이 트랜잭션 밖으로 흩어지지 않았는가. 트랜잭션 안에서 외부 호출(HTTP·큐 발행)을 하지 않는가
 
 ### 2. 조용한 실패
 
@@ -668,6 +680,7 @@ description: devkit 표준(NestJS) 기준으로 변경분을 리뷰한다. 린�
 - 새로 생긴 분기·에러 경로에 대응하는 테스트가 있는가
 - 버그 수정이라면 그 버그를 재현하는 테스트가 함께 왔는가
 - 테스트가 검증 대상을 통째로 모킹해 항상 통과하지 않는가
+- **HTTP 경로가 새로 생기거나 바뀌었는데 e2e 스펙(`*.e2e-spec.ts`)이 따라오지 않았는가**
 
 ### 4. 의도와 구현의 불일치
 
@@ -686,7 +699,7 @@ description: devkit 표준(NestJS) 기준으로 변경분을 리뷰한다. 린�
 - [ ] **Step 4: 테스트 통과 확인**
 
 Run: `pnpm vitest run packages/devkit-cli/tests/review-assets.test.ts`
-Expected: PASS (6 tests)
+Expected: PASS (7 tests)
 
 - [ ] **Step 5: 커밋**
 
@@ -778,6 +791,25 @@ describe.each(['next', 'monorepo'] as const)('%s 리뷰어 프론트엔드 관�
       doc.indexOf('## 보는 것'),
     );
     expect(forbidden).toContain('eslint-plugin-fsd');
+  });
+
+  it('설계 3.4절의 프론트엔드 고유 관점을 갖는다', async () => {
+    const doc = await readReviewer(type);
+    const observed = doc.slice(doc.indexOf('## 보는 것'));
+    expect(observed).toContain("'use client'");
+    expect(observed).toContain('Server Action');
+    expect(observed).toContain('views');
+  });
+});
+
+describe('monorepo 리뷰어 워크스페이스 관점', () => {
+  it('워크스페이스 경계를 관점으로 갖는다', async () => {
+    // 의존 선언 누락·앱 간 직접 import·catalog 이탈은 모노레포에서만
+    // 생기는 문제이며 전부 린터 밖이다.
+    const doc = await readReviewer('monorepo');
+    const observed = doc.slice(doc.indexOf('## 보는 것'));
+    expect(observed).toContain('워크스페이스');
+    expect(observed).toContain('catalog:');
   });
 });
 ```
@@ -955,7 +987,7 @@ description: devkit 표준(Turborepo 모노레포 + Next.js + FSD) 기준으로 
 - [ ] **Step 5: 테스트 통과 확인**
 
 Run: `pnpm vitest run packages/devkit-cli/tests/review-assets.test.ts`
-Expected: PASS (6 + 12 + 4 = 22 tests)
+Expected: PASS (26 tests — nest 전용 7, 공통 구조 3유형×4=12, 프론트엔드 2유형×3=6, 모노레포 워크스페이스 1)
 
 - [ ] **Step 6: 커밋**
 
@@ -1835,7 +1867,7 @@ pnpm build
 pnpm exec tsc --noEmit -p packages/devkit-cli/tsconfig.json
 pnpm exec tsc --noEmit -p packages/devkit-cli/tests/tsconfig.json
 ```
-Expected: 다섯 명령 모두 종료 코드 0. `pnpm test`는 기존 77개 + 이번 추가분 70개(categories 22 · review-assets 22 · marker 10 · classify 9 · git 5 · overlay-coverage 2) = **147개**가 전부 통과
+Expected: 다섯 명령 모두 종료 코드 0. `pnpm test`는 기존 테스트 전부 + 이번 추가분 74개(categories 22 · review-assets 26 · marker 10 · classify 9 · git 5 · overlay-coverage 2)가 통과. 기존 개수는 실행해서 확인한다 — 다른 작업이 병행됐을 수 있으므로 계획에 박아 둔 숫자를 믿지 않는다
 
 기존 77개가 하나라도 깨지면 멈추고 원인을 찾는다. 이 계획은 기존 패키지의 소스를 건드리지 않으므로, 깨진다면 린트 설정 변경(Task 1)이 원인일 가능성이 높다.
 
