@@ -149,10 +149,11 @@ packages/
     "sourceMap": true,
     "noUncheckedIndexedAccess": true,
     "forceConsistentCasingInFileNames": true
-  },
-  "exclude": ["node_modules", "dist"]
+  }
 }
 ```
+
+**`exclude`를 두지 않는다.** TypeScript는 `extends`로 상속된 상대 경로를 그 값이 **선언된 파일 위치** 기준으로 해석하므로, 여기 적은 `"exclude": ["dist"]`는 소비자의 `dist`가 아니라 `packages/tsconfig/dist`를 가리킨다. 보호하는 척하면서 실제로는 아무것도 하지 않는다(2026-08-01 실측: `dist/stale.ts`가 소비자 프로그램에 포함되어 타입 에러 발생). 대상 파일 범위는 소비자가 자신의 `include`로 정한다.
 
 `packages/tsconfig/nest.json` — `base.json`을 extends하지 **않는다**. NestJS는 `module: nodenext`와 데코레이터가 필요해 base와 근본적으로 다르고, 억지로 extends하면 상속받은 값을 절반 이상 덮어쓰게 된다:
 
@@ -178,10 +179,11 @@ packages/
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true
-  },
-  "exclude": ["node_modules", "dist"]
+  }
 }
 ```
+
+`base.json`과 같은 이유로 `exclude`를 두지 않는다.
 
 `nest new --strict`가 내는 값은 `strictNullChecks`·`noImplicitAny`·`strictBindCallApply` 3개를 개별로 켠다. 여기서는 `strict: true` 하나로 대체한다 — 상위집합이며, 개별 나열은 새 strict 플래그가 추가될 때 빠진다.
 
