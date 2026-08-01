@@ -2523,6 +2523,15 @@ export const nextRecipe: Recipe = (options = {}) => {
     copyOverlay('next'),
 
     mergeJson({
+      // create-next-app은 "type"을 넣지 않아 프로젝트가 CJS로 취급된다.
+      // 그러면 Vite의 config 로더가 vitest.config.ts를 CJS로 번들링하고,
+      // externalize-deps 플러그인이 @devbak/vitest-config를 외부화해
+      // require()로 로드하려다 실패한다(그 패키지는 ESM 전용):
+      //   "@devbak/vitest-config/next" resolved to an ESM file.
+      //   ESM file cannot be loaded by `require`.
+      // 2026-08-01 실측: "type": "module"을 넣으면 통과한다.
+      // create-next-app 산출물에 .js 파일이 없으므로(전부 .ts/.tsx/.mjs) 안전하다.
+      type: 'module',
       prettier: '@devbak/prettier-config',
       scripts: {
         lint: 'eslint .',
@@ -2912,6 +2921,10 @@ export const monorepoRecipe: Recipe = (options = {}) => {
           // 루트가 담당한다. 앱에서 중복 선언하지 않는다.
           eslint: null,
           prettier: null,
+          // apps/web/eslint.config.mjs를 제거하므로(중첩 config가
+          // typescript-eslint의 tsconfigRootDir 후보 충돌을 일으킨다)
+          // 앱에는 typescript-eslint를 쓸 곳이 없다. 루트가 담당한다.
+          'typescript-eslint': null,
         },
         scripts: {
           lint: null,
