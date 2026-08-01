@@ -4,8 +4,11 @@ import { describe, expect, it } from 'vitest';
 
 const TEMPLATES_DIR = fileURLToPath(new URL('../templates/', import.meta.url));
 
+/** 워크플로와 /review 커맨드가 문자열로 가리키는 경로. 결합을 테스트로 고정한다. */
+const REVIEWER_PATH = '.claude/agents/devkit-reviewer.md';
+
 async function readReviewer(type: string): Promise<string> {
-  return readFile(`${TEMPLATES_DIR}${type}/.claude/agents/devkit-reviewer.md`, 'utf8');
+  return readFile(`${TEMPLATES_DIR}${type}/${REVIEWER_PATH}`, 'utf8');
 }
 
 describe('nest 리뷰어 에이전트', () => {
@@ -79,6 +82,14 @@ describe.each(ALL_TYPES)('%s 리뷰어 공통 구조', (type) => {
     expect(doc).toMatch(/^---\n(?:.*\n)*?name: devkit-reviewer\n/);
   });
 
+  it('"지적하지 않는 것"과 "보는 것" 헤더를 모두 갖는다', async () => {
+    // 순서 단언 indexOf(A) < indexOf(B)는 A가 없을 때 -1 < N으로 통과한다.
+    // 헤더 자체의 존재를 따로 단언해야 "헤더 삭제" 변형을 잡는다.
+    const doc = await readReviewer(type);
+    expect(doc).toContain('## 지적하지 않는 것');
+    expect(doc).toContain('## 보는 것');
+  });
+
   it('금지 목록이 보는 것보다 먼저 온다', async () => {
     const doc = await readReviewer(type);
     expect(doc.indexOf('## 지적하지 않는 것')).toBeLessThan(doc.indexOf('## 보는 것'));
@@ -142,5 +153,46 @@ describe('monorepo 리뷰어 워크스페이스 관점', () => {
     const observed = doc.slice(doc.indexOf('## 보는 것'));
     expect(observed).toContain('워크스페이스');
     expect(observed).toContain('catalog:');
+  });
+});
+
+describe('_shared 오버레이', () => {
+  // 워크플로 프롬프트와 /review 커맨드는 둘 다 REVIEWER_PATH를 문자열
+  // 리터럴로 가리킨다. 이 경로가 끊기면 워크플로는 실패하지 않는다 —
+  // Claude가 기준 문서를 못 찾고 기본 판단으로 리뷰한 뒤 승인까지
+  // 찍는다. 두 파일 모두 여기서 존재와 결합을 함께 단언한다.
+
+  it('/review 커맨드가 존재하고 REVIEWER_PATH를 가리킨다', async () => {
+    const doc = await readFile(
+      `${TEMPLATES_DIR}_shared/.claude/commands/review.md`,
+      'utf8',
+    );
+    expect(doc).toContain(REVIEWER_PATH);
+  });
+
+  it('CI 워크플로가 존재하고 REVIEWER_PATH를 가리킨다', async () => {
+    const doc = await readFile(
+      `${TEMPLATES_DIR}_shared/.github/workflows/claude-review.yml`,
+      'utf8',
+    );
+    expect(doc).toContain(REVIEWER_PATH);
+  });
+
+  it('CI 워크플로가 claude_code_oauth_token을 쓴다', async () => {
+    // API key가 아니다 — 설계 1.1절이 devlog-api 실물에서 계승한 것.
+    const doc = await readFile(
+      `${TEMPLATES_DIR}_shared/.github/workflows/claude-review.yml`,
+      'utf8',
+    );
+    expect(doc).toContain('claude_code_oauth_token');
+  });
+
+  it('CI 워크플로가 pull-requests: write 권한을 갖는다', async () => {
+    // 인라인 코멘트·승인에 필요하다.
+    const doc = await readFile(
+      `${TEMPLATES_DIR}_shared/.github/workflows/claude-review.yml`,
+      'utf8',
+    );
+    expect(doc).toContain('pull-requests: write');
   });
 });

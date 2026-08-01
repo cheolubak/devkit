@@ -25,11 +25,23 @@ async function collectOverlayFiles(): Promise<{ type: string; relPath: string }[
   return collected;
 }
 
+const ALL_TYPE_DIRS = ['_shared', 'nest', 'next', 'monorepo'] as const;
+
 describe('오버레이 카테고리 커버리지', () => {
   it('templates 아래에 파일이 실제로 존재한다', async () => {
     // 수집이 0건이면 아래 단언이 공허하게 통과한다.
     const files = await collectOverlayFiles();
     expect(files.length).toBeGreaterThan(0);
+  });
+
+  it('유형 디렉토리 4개가 각각 파일을 1건 이상 갖는다', async () => {
+    // files.length > 0 만으로는 유형 하나가 통째로 비어도 통과한다.
+    // `_shared/`의 두 파일이 사라지는 시나리오를 이 단언이 직접 잡는다.
+    const files = await collectOverlayFiles();
+    for (const type of ALL_TYPE_DIRS) {
+      const count = files.filter((f) => f.type === type).length;
+      expect(count, `${type} 디렉토리에 파일이 없다`).toBeGreaterThan(0);
+    }
   });
 
   it('모든 오버레이 파일이 카테고리에 매칭된다', async () => {

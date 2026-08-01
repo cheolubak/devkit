@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CATEGORIES,
   categoryOf,
+  JSON_KEY_CATEGORIES,
   parseOnly,
   UnknownCategoryError,
 } from '../src/lib/categories.js';
@@ -91,5 +92,18 @@ describe('parseOnly', () => {
 describe('CATEGORIES', () => {
   it('설계 5.4절의 7종을 갖는다', () => {
     expect([...CATEGORIES]).toEqual(['claude', 'ci', 'lint', 'ts', 'test', 'deps', 'repo']);
+  });
+});
+
+describe('JSON_KEY_CATEGORIES', () => {
+  it('설계 5.4절과 일치한다 — prettier는 lint, devDependencies는 deps', () => {
+    expect(JSON_KEY_CATEGORIES).toEqual({ prettier: 'lint', devDependencies: 'deps' });
+  });
+
+  it('모든 값이 CATEGORIES 안에 있다', () => {
+    const known: readonly string[] = CATEGORIES;
+    for (const category of Object.values(JSON_KEY_CATEGORIES)) {
+      expect(known).toContain(category);
+    }
   });
 });

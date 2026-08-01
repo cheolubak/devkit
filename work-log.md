@@ -280,5 +280,17 @@
   - **Task 8에서 과소 집계와 과잉 catch 2건 발견**: (a) `git status --porcelain`이 새 미추적 디렉토리를 한 줄로 접어 `changedFiles`를 과소 집계했다 — devkit이 `.claude/agents/`를 통째로 만드는 바로 그 시나리오에서 터진다. `-uall`로 고쳤다. (b) `catch(() => null)`이 권한 오류·손상된 저장소까지 `not-a-repo`로 뭉갰다. `isMissingRepo`로 좁혔더니 이번엔 stderr 매칭이 로케일에 취약해져, `LC_ALL=C`·`LANG=C`로 메시지를 고정했다.
   - **Task 9 검증 중 tsc 게이트가 실결함을 잡았다**: `overlay-coverage.test.ts`의 `entry.parentPath ?? entry.path` 폴백이 `@types/node@24`의 `Dirent`에 `path`가 없어 `TS2339`로 실패했다. vitest는 타입 체크 없이 트랜스파일만 하므로 테스트 76개가 전부 초록인 채로 이 결함을 통과시켰고, `tsc --noEmit` 게이트가 처음 잡았다. 게이트를 다섯 개 둔 이유가 이것이다. 폴백은 `engines` 하한(`^20.19.0`)이 `parentPath` 도입 이후라 애초에 커버할 구간도 없었다.
 - **검증**: `pnpm lint` exit 0(경고 1건, `overlay-coverage.test.ts:16` `no-await-in-loop`, 알려진 항목), `pnpm test` 155개 통과(신규 76 + 기존 79), `pnpm build` 성공, `tsc --noEmit` 2개 프로젝트(`packages/devkit-cli/tsconfig.json`, `packages/devkit-cli/tests/tsconfig.json`) 통과
-- **커밋**: `83dcc95`(설계) 외 구현 커밋 다수, `8453b86`(tsc 폴백 결함 수정). 브랜치 `worktree-streamed-humming-papert`
+- **커밋**: `83dcc95`(설계) 외 구현 커밋 25개(`git log --oneline 41c2593..HEAD`), `8453b86`(tsc 폴백 결함 수정). 브랜치 `worktree-streamed-humming-papert`
 - **남은 것**: CLI 실행 로직(`bin`·레시피·원자 연산 6종)과 `create`·`update` 서브커맨드는 템플릿 설계 구현의 몫이다(설계 0.1절)
+
+### 전체 리뷰 후 조용한 성공 갈래 4건 수정
+- **변경 파일**: `packages/devkit-cli/tests/review-assets.test.ts`, `packages/devkit-cli/tests/overlay-coverage.test.ts`, `packages/devkit-cli/src/lib/categories.ts`, `packages/devkit-cli/src/lib/classify.ts`, `packages/devkit-cli/src/index.ts`, `packages/devkit-cli/tests/categories.test.ts`, `packages/devkit-cli/tests/classify.test.ts`, `docs/superpowers/plans/2026-08-01-devkit-claude-review.md`, `work-log.md`
+- **내용**: 전체 리뷰(`final-review.md`)가 잡은 "조용한 성공" 갈래 문제 3건과 기록 정확도 1건을 수정.
+  - `_shared/`의 두 파일(CI 워크플로·`/review` 커맨드)이 기존엔 어떤 테스트도 훑지 않아, 사라져도 전 테스트가 초록이었다. `REVIEWER_PATH` 상수로 결합을 고정하고 존재·참조·`claude_code_oauth_token`·`pull-requests: write`를 단언하는 `_shared 오버레이` 블록을 추가. `overlay-coverage.test.ts`에는 유형 디렉토리 4개 각각의 최소 파일 수 단언을, `review-assets.test.ts` 공통 구조 블록에는 헤더 존재 단언(순서 단언의 `-1 < N` 사각 보완)을 추가.
+  - `categories.ts`에 `JSON_KEY_CATEGORIES`(`prettier→lint`, `devDependencies→deps`) 테이블을 추가해 `package.json`이 키 단위로 카테고리에 속한다는 설계 5.4절의 결정을 인터페이스로 남김. 오버레이 커버리지 테스트가 이쪽을 훑지 못한다는 주의도 주석에 남김.
+  - `classify.ts`의 `formatChangeList`가 세 섹션 전부 비었을 때(`deps`처럼 파일 패턴이 없는 카테고리로 `--only`를 걸 때 실제로 발생) 머리말만 내던 것을 "변경 없음" 명시로 고침. 부분적으로 빈 섹션을 숨기는 기존 동작은 유지.
+  - `work-log.md`의 "구현 커밋 다수"를 `git log --oneline 41c2593..HEAD`로 센 실제 개수(25개)로 정정.
+  - 계획 문서의 Task 2·3·4·5·7 코드 블록과 기대 테스트 개수를 구현과 일치하도록 갱신.
+  - `_shared/.claude/commands/review.md`를 임시로 옮겨 신규 단언이 실제로 실패하는지 확인한 뒤 원복해 재통과를 확인.
+- **검증**: `pnpm lint` exit 0(경고 1건, 알려진 항목), `pnpm test` 166개 통과(기존 155 + 신규 11), `pnpm build` 성공, `tsc --noEmit` 2개 프로젝트 통과.
+- **남은 것**: 없음 — 이 작업으로 계획된 9개 태스크와 최종 리뷰 수정이 모두 완료됨.

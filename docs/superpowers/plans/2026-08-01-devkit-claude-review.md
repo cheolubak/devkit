@@ -421,7 +421,9 @@ export type Category = (typeof CATEGORIES)[number];
  * 프로젝트 상대 경로 → 카테고리.
  *
  * `deps`는 여기에 없다 — package.json 패치와 linkDeps를 가리키는
- * 논리 카테고리라 대응하는 파일이 없다.
+ * 논리 카테고리라 대응하는 파일이 없다. `lint`의 일부도 마찬가지다 —
+ * `eslint.config.mjs`는 파일이지만 `package.json`의 prettier 키는
+ * 그렇지 않다(설계 5.4절). 그 몫은 아래 `JSON_KEY_CATEGORIES`가 정의한다.
  */
 const FILE_PATTERNS: ReadonlyArray<readonly [RegExp, Category]> = [
   [/^\.claude\/(?:agents|commands)\/.+/, 'claude'],
@@ -432,6 +434,18 @@ const FILE_PATTERNS: ReadonlyArray<readonly [RegExp, Category]> = [
   [/^(?:jest\.config\.ts|test\/jest-e2e\.config\.ts|vitest\.config\.ts)$/, 'test'],
   [/^\.gitignore$/, 'repo'],
 ];
+
+/**
+ * `package.json` 은 파일 패턴이 아니라 **키 단위**로 카테고리에 속한다(설계 5.4절).
+ *
+ * 훗날 `update` 조립자가 mergeJson 패치를 `--only` 로 거를 때 이 테이블을 쓴다.
+ * 파일 오버레이와 달리 오버레이 커버리지 테스트가 이쪽을 훑지 못하므로,
+ * JSON 패치를 추가할 때는 여기도 함께 갱신해야 한다.
+ */
+export const JSON_KEY_CATEGORIES: Readonly<Record<string, Category>> = {
+  prettier: 'lint',
+  devDependencies: 'deps',
+};
 
 export function categoryOf(relPath: string): Category | null {
   const normalized = relPath.replaceAll('\\', '/');
@@ -495,6 +509,7 @@ export function parseOnly(value: string): Category[] {
 export {
   CATEGORIES,
   categoryOf,
+  JSON_KEY_CATEGORIES,
   parseOnly,
   UnknownCategoryError,
   type Category,
@@ -504,7 +519,7 @@ export {
 - [ ] **Step 5: 테스트 통과 확인**
 
 Run: `pnpm vitest run packages/devkit-cli/tests/categories.test.ts`
-Expected: PASS (22 tests — `categoryOf` 14, `parseOnly` 7, `CATEGORIES` 1)
+Expected: PASS (24 tests — `categoryOf` 14, `parseOnly` 7, `CATEGORIES` 1, `JSON_KEY_CATEGORIES` 2)
 
 - [ ] **Step 6: 커밋**
 
@@ -551,8 +566,11 @@ import { describe, expect, it } from 'vitest';
 
 const TEMPLATES_DIR = fileURLToPath(new URL('../templates/', import.meta.url));
 
+/** 워크플로와 /review 커맨드가 문자열로 가리키는 경로. 결합을 테스트로 고정한다. */
+const REVIEWER_PATH = '.claude/agents/devkit-reviewer.md';
+
 async function readReviewer(type: string): Promise<string> {
-  return readFile(`${TEMPLATES_DIR}${type}/.claude/agents/devkit-reviewer.md`, 'utf8');
+  return readFile(`${TEMPLATES_DIR}${type}/${REVIEWER_PATH}`, 'utf8');
 }
 
 describe('nest 리뷰어 에이전트', () => {
@@ -754,6 +772,14 @@ describe.each(ALL_TYPES)('%s 리뷰어 공통 구조', (type) => {
   it('frontmatter의 name이 devkit-reviewer 다', async () => {
     const doc = await readReviewer(type);
     expect(doc).toMatch(/^---\n(?:.*\n)*?name: devkit-reviewer\n/);
+  });
+
+  it('"지적하지 않는 것"과 "보는 것" 헤더를 모두 갖는다', async () => {
+    // 순서 단언 indexOf(A) < indexOf(B)는 A가 없을 때 -1 < N으로 통과한다.
+    // 헤더 자체의 존재를 따로 단언해야 "헤더 삭제" 변형을 잡는다.
+    const doc = await readReviewer(type);
+    expect(doc).toContain('## 지적하지 않는 것');
+    expect(doc).toContain('## 보는 것');
   });
 
   it('금지 목록이 보는 것보다 먼저 온다', async () => {
@@ -996,7 +1022,7 @@ description: devkit 표준(Turborepo 모노레포 + Next.js + FSD) 기준으로 
 - [ ] **Step 5: 테스트 통과 확인**
 
 Run: `pnpm vitest run packages/devkit-cli/tests/review-assets.test.ts`
-Expected: PASS (26 tests — nest 전용 7, 공통 구조 3유형×4=12, 프론트엔드 2유형×3=6, 모노레포 워크스페이스 1)
+Expected: PASS (29 tests — nest 전용 7, 공통 구조 3유형×5=15, 프론트엔드 2유형×3=6, 모노레포 워크스페이스 1)
 
 - [ ] **Step 6: 커밋**
 
@@ -1027,10 +1053,11 @@ EOF
 - Create: `packages/devkit-cli/templates/_shared/.claude/commands/review.md`
 - Create: `packages/devkit-cli/templates/_shared/.github/workflows/claude-review.yml`
 - Create: `packages/devkit-cli/tests/overlay-coverage.test.ts`
+- Modify: `packages/devkit-cli/tests/review-assets.test.ts`
 
 **Interfaces:**
-- Consumes: Task 2의 `categoryOf`, Task 3~4의 템플릿 디렉토리 구조
-- Produces: `templates/` 전체가 카테고리 커버리지 단언 아래 놓인다. 이후 오버레이가 추가될 때마다 이 테스트가 자동으로 검사한다
+- Consumes: Task 2의 `categoryOf`, Task 3~4의 템플릿 디렉토리 구조와 `REVIEWER_PATH`
+- Produces: `templates/` 전체가 카테고리 커버리지 단언 아래 놓인다. 이후 오버레이가 추가될 때마다 이 테스트가 자동으로 검사한다. `_shared`의 두 파일도 존재·결합 단언 아래 놓인다
 
 **커버리지 테스트가 이 태스크에 있는 이유:** 설계 5.4절의 드리프트 방어다. 새 오버레이 파일을 추가하고 카테고리 패턴에 넣지 않으면 그 파일은 **어떤 `--only`로도 갱신되지 않으면서 조용히 성공을 보고한다.** 자산이 전부 모인 지금이 테스트를 넣을 자리다.
 
@@ -1131,11 +1158,23 @@ async function collectOverlayFiles(): Promise<{ type: string; relPath: string }[
   return collected;
 }
 
+const ALL_TYPE_DIRS = ['_shared', 'nest', 'next', 'monorepo'] as const;
+
 describe('오버레이 카테고리 커버리지', () => {
   it('templates 아래에 파일이 실제로 존재한다', async () => {
     // 수집이 0건이면 아래 단언이 공허하게 통과한다.
     const files = await collectOverlayFiles();
     expect(files.length).toBeGreaterThan(0);
+  });
+
+  it('유형 디렉토리 4개가 각각 파일을 1건 이상 갖는다', async () => {
+    // files.length > 0 만으로는 유형 하나가 통째로 비어도 통과한다.
+    // `_shared/`의 두 파일이 사라지는 시나리오를 이 단언이 직접 잡는다.
+    const files = await collectOverlayFiles();
+    for (const type of ALL_TYPE_DIRS) {
+      const count = files.filter((f) => f.type === type).length;
+      expect(count, `${type} 디렉토리에 파일이 없다`).toBeGreaterThan(0);
+    }
   });
 
   it('모든 오버레이 파일이 카테고리에 매칭된다', async () => {
@@ -1155,10 +1194,54 @@ describe('오버레이 카테고리 커버리지', () => {
 
 **`entry.path` 폴백을 두지 않는다.** 초판은 구버전 이름을 폴백으로 뒀으나 두 가지가 틀렸다 — `engines` 하한이 이미 `parentPath` 도입 이후라 폴백이 커버할 구간이 없고, `@types/node@24`의 `Dirent`에는 `path`가 아예 없어 `tsc`가 `TS2339`로 실패한다. vitest 는 타입 체크 없이 트랜스파일만 하므로 테스트 76개가 전부 초록인 상태로 이 결함을 통과시켰고, `tsc --noEmit` 게이트가 처음 잡았다.
 
+- [ ] **Step 3.5: `_shared` 파일에 존재·결합 단언 추가**
+
+`review-assets.test.ts`(Task 3)는 유형별 `devkit-reviewer.md` 셋만 읽고 `_shared`의 두 파일은 어느 테스트도 훑지 않는다. 워크플로 프롬프트와 `/review` 커맨드는 둘 다 `REVIEWER_PATH`를 문자열 리터럴로 가리키므로, 이 경로가 끊겨도 워크플로 자체는 실패하지 않는다 — Claude가 기준 문서를 못 찾고 기본 판단으로 리뷰한 뒤 승인까지 찍는다. `review-assets.test.ts` 맨 아래에 추가한다:
+
+```ts
+describe('_shared 오버레이', () => {
+  it('/review 커맨드가 존재하고 REVIEWER_PATH를 가리킨다', async () => {
+    const doc = await readFile(`${TEMPLATES_DIR}_shared/.claude/commands/review.md`, 'utf8');
+    expect(doc).toContain(REVIEWER_PATH);
+  });
+
+  it('CI 워크플로가 존재하고 REVIEWER_PATH를 가리킨다', async () => {
+    const doc = await readFile(
+      `${TEMPLATES_DIR}_shared/.github/workflows/claude-review.yml`,
+      'utf8',
+    );
+    expect(doc).toContain(REVIEWER_PATH);
+  });
+
+  it('CI 워크플로가 claude_code_oauth_token을 쓴다', async () => {
+    // API key가 아니다 — 설계 1.1절이 devlog-api 실물에서 계승한 것.
+    const doc = await readFile(
+      `${TEMPLATES_DIR}_shared/.github/workflows/claude-review.yml`,
+      'utf8',
+    );
+    expect(doc).toContain('claude_code_oauth_token');
+  });
+
+  it('CI 워크플로가 pull-requests: write 권한을 갖는다', async () => {
+    // 인라인 코멘트·승인에 필요하다.
+    const doc = await readFile(
+      `${TEMPLATES_DIR}_shared/.github/workflows/claude-review.yml`,
+      'utf8',
+    );
+    expect(doc).toContain('pull-requests: write');
+  });
+});
+```
+
+파일이 없으면 `readFile`이 던져 테스트가 실패한다 — 그것이 존재 단언이다.
+
 - [ ] **Step 4: 테스트 실행 — 통과해야 한다**
 
 Run: `pnpm vitest run packages/devkit-cli/tests/overlay-coverage.test.ts`
-Expected: PASS (2 tests)
+Expected: PASS (3 tests)
+
+Run: `pnpm vitest run packages/devkit-cli/tests/review-assets.test.ts`
+Expected: PASS (33 tests — 기존 29 + `_shared` 오버레이 4)
 
 현재 오버레이는 `.claude/agents/devkit-reviewer.md`(claude), `.claude/commands/review.md`(claude), `.github/workflows/claude-review.yml`(ci) 셋뿐이고 전부 패턴에 매칭된다.
 
@@ -1183,7 +1266,7 @@ Expected: PASS
 - [ ] **Step 6: 커밋**
 
 ```bash
-git add packages/devkit-cli/templates packages/devkit-cli/tests/overlay-coverage.test.ts
+git add packages/devkit-cli/templates packages/devkit-cli/tests/overlay-coverage.test.ts packages/devkit-cli/tests/review-assets.test.ts
 git commit -F - <<'EOF'
 feat: /review 커맨드와 CI 워크플로 템플릿 추가
 
@@ -1197,7 +1280,14 @@ CI 워크플로는 devlog-api 의 동작 중인 실물을 기준선으로 삼고
 
 오버레이 커버리지 테스트로 드리프트를 막는다. 카테고리에 매칭되지
 않는 파일은 어떤 --only 로도 갱신되지 않으면서 성공을 보고한다.
-방어가 실제로 실패시키는지 미분류 파일로 확인했다.
+방어가 실제로 실패시키는지 미분류 파일로 확인했다. 유형 디렉토리
+4개가 각각 파일을 갖는지도 단언해 _shared 전체가 사라지는 경로를
+잡는다.
+
+_shared 의 두 파일(워크플로·/review 커맨드)은 REVIEWER_PATH를
+문자열 리터럴로 참조한다. 이 경로가 끊겨도 워크플로는 실패하지
+않고 Claude가 기준 문서 없이 기본 판단으로 리뷰한 뒤 승인까지
+찍으므로, 존재·결합을 review-assets.test.ts에 별도로 고정한다.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
@@ -1499,7 +1589,7 @@ describe('classifyFiles', () => {
     // created 로 뭉개면 "새로 만듭니다"라고 고지한 뒤 쓰기 단계에서야
     // 실패가 드러난다 — 사전 고지가 목적인 모듈이 거짓을 보고하는 셈이다.
     await mkdir(join(dir, 'CLAUDE.md'));
-    await expect(classifyFiles(dir, [planned('CLAUDE.md', 'x')])).rejects.toThrow();
+    await expect(classifyFiles(dir, [planned('CLAUDE.md', 'x')])).rejects.toThrow(/EISDIR/);
   });
 });
 
@@ -1543,6 +1633,14 @@ describe('formatChangeList', () => {
     );
     expect(output).not.toContain('덮어쓰기');
     expect(output).not.toContain('동일');
+  });
+
+  it('전부 비면 변경 없음을 명시한다', () => {
+    // deps처럼 파일 패턴이 하나도 없는 카테고리로 --only 를 걸면
+    // items 가 곧바로 빈 배열로 여기 도달한다. 머리말만 나가면
+    // 사용자가 빈 화면에 y를 누르고 아무 일도 없는 것을 성공으로 받는다.
+    const output = formatChangeList([], 'my-api', 'nest');
+    expect(output).toContain('변경 없음');
   });
 });
 ```
@@ -1641,11 +1739,21 @@ export function formatChangeList(
     }
   }
 
+  // 세 섹션 모두 항목이 없으면 머리말 두 줄뿐인 화면이 나간다. `deps`처럼
+  // 파일 패턴이 하나도 없는 카테고리로 --only 를 걸면 곧바로 이 경로다.
+  // 명시하지 않으면 빈 화면에 "계속할까요? (y/N)"만 붙어 사용자가 아무
+  // 일도 없는 것을 성공으로 받아들인다.
+  if (lines.length === 2) {
+    lines.push('  변경 없음 — 이 카테고리에 해당하는 파일이 없습니다');
+  }
+
   return lines.join('\n');
 }
 ```
 
 **`ENOENT`만 "신규"로 좁히는 것이 중요하다.** 초판은 모든 읽기 오류를 `created`로 삼키며 *"실제 쓰기 단계에서 같은 오류가 다시 난다"* 고 정당화했으나, Task 7 리뷰가 그 전제를 반증했다 — `EACCES`(읽기만 막힌 파일)에서는 쓰기가 **성공**하므로, "새로 만듭니다"라고 고지한 뒤 기존 파일을 조용히 덮어쓴다. `EISDIR`(경로가 이미 디렉토리)도 프리뷰를 거짓으로 만든다. 사전 고지가 존재 이유인 모듈이 거짓을 보고하면 모듈 자체가 무의미해진다(설계 6절).
+
+**세 섹션이 전부 비었을 때 머리말만 내지 않는다.** 초판은 빈 섹션을 건너뛰기만 했는데, 세 섹션 모두 비면 그 결과가 머리말 한 줄뿐인 화면이 된다. `deps`는 파일 패턴이 하나도 없는 카테고리이므로 `devkit update --only deps`가 곧바로 이 경로로 떨어진다 — 사용자가 빈 화면에 `y`를 누르고 아무 일도 없는 것을 성공으로 받는다. 빈 섹션을 숨기는 기존 동작 자체는 유지하고, **전부** 비었을 때만 명시적 문구를 붙인다.
 
 - [ ] **Step 4: 진입점에서 re-export**
 
@@ -1664,7 +1772,7 @@ export {
 - [ ] **Step 5: 테스트 통과 확인**
 
 Run: `pnpm vitest run packages/devkit-cli/tests/classify.test.ts`
-Expected: PASS (10 tests — `classifyFiles` 6, `formatChangeList` 4)
+Expected: PASS (11 tests — `classifyFiles` 6, `formatChangeList` 5)
 
 - [ ] **Step 6: 커밋**
 
@@ -1676,6 +1784,10 @@ feat: 변경 분류와 목록 포맷 모듈 추가
 update 가 쓰기 전에 사람에게 보여줄 신규/덮어쓰기/동일 분류를
 만든다. "동일 — 건너뜀"을 항상 출력하는 것이 핵심이다. 있어야 할
 파일이 목록 어디에도 없으면 눈에 띄지만 침묵하면 숨는다.
+
+세 섹션이 전부 비면 "변경 없음"을 명시한다. deps 처럼 파일 패턴이
+없는 카테고리로 --only 를 걸면 곧바로 이 경로다. 명시하지 않으면
+빈 화면에 y 를 누르고 아무 일도 없는 것을 성공으로 받는다.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF

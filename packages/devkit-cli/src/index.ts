@@ -12,6 +12,7 @@ export * from './ops/index.js';
 export {
   CATEGORIES,
   categoryOf,
+  JSON_KEY_CATEGORIES,
   parseOnly,
   UnknownCategoryError,
   type Category,

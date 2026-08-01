@@ -106,4 +106,12 @@ describe('formatChangeList', () => {
     expect(output).not.toContain('덮어쓰기');
     expect(output).not.toContain('동일');
   });
+
+  it('전부 비면 변경 없음을 명시한다', () => {
+    // deps처럼 파일 패턴이 하나도 없는 카테고리로 --only 를 걸면
+    // items 가 곧바로 빈 배열로 여기 도달한다. 머리말만 나가면
+    // 사용자가 빈 화면에 y를 누르고 아무 일도 없는 것을 성공으로 받는다.
+    const output = formatChangeList([], 'my-api', 'nest');
+    expect(output).toContain('변경 없음');
+  });
 });

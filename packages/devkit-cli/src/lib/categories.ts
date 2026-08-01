@@ -14,7 +14,9 @@ export type Category = (typeof CATEGORIES)[number];
  * 프로젝트 상대 경로 → 카테고리.
  *
  * `deps`는 여기에 없다 — package.json 패치와 linkDeps를 가리키는
- * 논리 카테고리라 대응하는 파일이 없다.
+ * 논리 카테고리라 대응하는 파일이 없다. `lint`의 일부도 마찬가지다 —
+ * `eslint.config.mjs`는 파일이지만 `package.json`의 prettier 키는
+ * 그렇지 않다(설계 5.4절). 그 몫은 아래 `JSON_KEY_CATEGORIES`가 정의한다.
  */
 const FILE_PATTERNS: ReadonlyArray<readonly [RegExp, Category]> = [
   [/^\.claude\/(?:agents|commands)\/.+/, 'claude'],
@@ -25,6 +27,18 @@ const FILE_PATTERNS: ReadonlyArray<readonly [RegExp, Category]> = [
   [/^(?:jest\.config\.ts|test\/jest-e2e\.config\.ts|vitest\.config\.ts)$/, 'test'],
   [/^\.gitignore$/, 'repo'],
 ];
+
+/**
+ * `package.json` 은 파일 패턴이 아니라 **키 단위**로 카테고리에 속한다(설계 5.4절).
+ *
+ * 훗날 `update` 조립자가 mergeJson 패치를 `--only` 로 거를 때 이 테이블을 쓴다.
+ * 파일 오버레이와 달리 오버레이 커버리지 테스트가 이쪽을 훑지 못하므로,
+ * JSON 패치를 추가할 때는 여기도 함께 갱신해야 한다.
+ */
+export const JSON_KEY_CATEGORIES: Readonly<Record<string, Category>> = {
+  prettier: 'lint',
+  devDependencies: 'deps',
+};
 
 export function categoryOf(relPath: string): Category | null {
   const normalized = relPath.replaceAll('\\', '/');
