@@ -109,3 +109,20 @@
   - **추측성 서술 2건을 실측으로 대체**: `**/tests/fixtures/**`가 `eslint.config.mjs`·`.oxlintrc.json` 양쪽에 이미 있고 패키지 경로를 앵커하지 않아 새 패키지도 자동 커버됨을 확인. `eslint-plugin-fsd`의 `license`/`description`/`repository`/`keywords`/`engines`가 **전부 비어 있음**을 확인(`eslint-config-nest`는 5개 모두 보유) → Phase 1에서 정렬.
 - **커밋**: `ec4665a` (브랜치 `feature/devkit-roadmap`, main 미머지)
 - **블로커**: 두 패키지 모두 미배포 상태라, Phase 1에서 소비자 프로젝트가 설치하려면 npm 배포 또는 `pnpm link`/`file:` 로컬 검증 경로를 먼저 정해야 한다.
+
+## 2026-08-01
+
+### 프로젝트 템플릿(`devkit create`) 설계 확정
+- **변경 파일**: `docs/superpowers/specs/2026-08-01-devkit-template-design.md`(신규), `work-log.md`
+- **내용**: 새 프로젝트를 한 명령으로 생성하는 CLI 설계를 확정. 산출물은 새 패키지 4개(`devkit-cli`, `tsconfig`, `jest-config`, `vitest-config`)이며 지원 유형은 NestJS · Next.js · Turborepo 모노레포.
+  - **로드맵 순서를 다시 앞당겼다**: 로드맵 3.3절은 스캐폴딩을 Phase 4로 미루며 "Phase 1 없이 하면 설정을 하드코딩하게 된다"고 했다. 그 논증은 설정 패키지가 없을 때만 성립하므로, 패키지를 **먼저 뽑고** 템플릿으로 가는 순서로 무력화했다. 또 배포하지 않기로 한 이상 `create-` 접두어(= `npm create` 레지스트리 규약)가 무의미해져 **Phase 3·4를 한 패키지로 통합**했다.
+  - **`eslint-plugin-fsd`도 소비자가 0이라는 사실이 드러났다**: 로드맵이 백엔드 마이그레이션만 다뤄 가려져 있었고, 어느 Phase도 이를 해소하지 않았다. Next.js 템플릿이 그 첫 소비자가 된다.
+  - **공식 CLI를 실제로 돌려 후처리를 확정했다** — 추측했다면 세 군데를 틀렸다. (1) `@nestjs/cli` 11은 `.eslintrc.js`가 아니라 **`eslint.config.mjs`(flat config)를 생성**한다(`devlog-api`의 legacy 설정은 CLI 10 유물). 후처리는 삭제가 아니라 덮어쓰기다. (2) `nest new`가 **`eslint-plugin-prettier`+`eslint-config-prettier`를 기본 포함**하고 **`eslint: ^9.18.0`**을 박는다 — 로드맵 4.5절이 제거하기로 한 조합이자 `eslint-config-nest`의 `^10` 전용 peer와 충돌. (3) `nest new`는 **`.gitignore`를 만들지 않는다**.
+  - **문서에 없고 실행해야만 나오는 함정 1건**: `create-next-app` 16은 `pnpm-workspace.yaml`(`ignoredBuiltDependencies`)을 생성한다. 모노레포의 `apps/web/` 안에 남으면 **중첩 워크스페이스**가 된다. 단일 앱에서는 `sharp` 빌드 승인에 필요하므로 남기고, 모노레포에서만 제거해 루트로 이관한다.
+  - **`pnpm catalog:`가 `link:`를 지원하지 않음을 실측으로 확인**(`ERR_PNPM_CATALOG_ENTRY_INVALID_SPEC`). 모노레포의 각 `package.json`이 `link:`를 직접 선언하고, 루트와 `apps/web`은 깊이가 다르므로 `linkDeps` 연산이 상대경로를 **계산**한다. `catalog:`는 `next`·`react` 등 일반 패키지에만 쓴다.
+  - **설정 패키지 3개는 전부 빌드가 없다**(JSON · CJS 객체 · ESM 함수). 편의가 아니라 위험 제거다 — 로드맵 4.2절이 경고한 "`dist`가 낡으면 조용히 옛 규칙으로 린트한다"가 **구조적으로 불가능**해진다. 빌드가 필요한 건 `devkit-cli` 하나뿐이고, 그것은 시작 시 `src`/`dist` mtime 비교로 자체 방어한다.
+  - **핵심 설계 — 연산이 기대를 선언한다**: 가장 위험한 실패는 크래시가 아니라 조용한 성공이다. `create-next-app`이 언젠가 `pnpm-workspace.yaml` 생성을 멈추면 제거 연산이 말없이 통과하고 방어가 죽은 줄 모르게 된다. `required: true`가 붙은 연산은 대상이 없으면 **실패**시켜 공식 CLI의 변화를 침묵 대신 에러로 드러낸다.
+  - **셀프 리뷰에서 내부 모순 1건 수정**: `nest` 레시피만 8단계에 `verify`를 뒀는데 이는 원자 연산 6종에 없는 이름이었고 `next`에는 아예 없었다. 세 레시피 공통 `delegate` 단계로 통일하고 5.4절을 신설. 그 과정에서 **`pnpm test`를 자가검증에서 빼야 함**이 드러났다 — `create-next-app`은 테스트를 하나도 만들지 않아 갓 생성된 Next 앱에서 vitest가 "테스트 0개"로 실패한다. 생성물에 `--passWithNoTests`를 넣어 실패를 감추는 대신 자가검증 범위를 `lint`+`build`로 좁혔다.
+- **커밋**: `feature/devkit-roadmap` 브랜치 (main 미머지)
+- **다음**: 구현 계획 작성 → 설정 패키지 3개 → CLI 원자 연산 → 레시피 3종 순서
+- **미결**: `eslint-config-nest`가 Nest 런타임 전역(`sourceType: 'commonjs'`, `globals.node`+`globals.jest`)을 담는지 구현 첫 단계에서 확인 필요. 로드맵 Phase 1 Task 2~10(기존 3개 프로젝트 마이그레이션)은 취소가 아니라 이 작업 뒤로 미뤄졌다.
