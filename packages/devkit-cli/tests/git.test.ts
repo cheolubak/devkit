@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -46,5 +46,18 @@ describe('inspectGit', () => {
 
   it('존재하지 않는 디렉토리도 not-a-repo 로 다룬다', async () => {
     expect(await inspectGit(join(dir, 'nope'))).toEqual({ kind: 'not-a-repo' });
+  });
+
+  it('새로 생긴 미추적 디렉토리 안의 파일을 개별로 센다', async () => {
+    // git status --porcelain 은 기본값(-unormal)에서 미추적 디렉토리를
+    // "?? nested/" 한 줄로 접는다. devkit 이 .claude/agents/ 를 통째로
+    // 만드는 상황이 정확히 이 경우라, 접힌 채로 세면 이 모듈이 보호하려는
+    // 바로 그 시나리오에서 위험을 과소 보고한다.
+    await run('git', ['init', '-q'], { cwd: dir });
+    await mkdir(join(dir, 'nested'));
+    await writeFile(join(dir, 'nested', 'a.txt'), 'a', 'utf8');
+    await writeFile(join(dir, 'nested', 'b.txt'), 'b', 'utf8');
+    await writeFile(join(dir, 'nested', 'c.txt'), 'c', 'utf8');
+    expect(await inspectGit(dir)).toEqual({ kind: 'dirty', changedFiles: 3 });
   });
 });

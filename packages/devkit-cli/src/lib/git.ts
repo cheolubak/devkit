@@ -9,6 +9,25 @@ export type GitState =
   | { kind: 'not-a-repo' };
 
 /**
+ * "여긴 git 저장소가 아니다"로 접어도 되는 실패인가.
+ *
+ * 저장소가 있는데 다른 이유로 못 읽은 것까지 not-a-repo 로 보고하면,
+ * 실제로는 지켜야 할 미커밋 변경이 있는데 안전망이 없다고 잘못 알리게 된다.
+ */
+function isMissingRepo(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+  const { code, stderr } = error as { code?: unknown; stderr?: unknown };
+  // git 미설치이거나 dir 자체가 없으면 spawn 이 ENOENT 로 실패한다
+  if (code === 'ENOENT') {
+    return true;
+  }
+  // 저장소가 아니면 git 이 비정상 종료하며 stderr 에 명시한다
+  return typeof stderr === 'string' && stderr.includes('not a git repository');
+}
+
+/**
  * 워킹트리 상태를 본다.
  *
  * update 는 깨끗한 트리를 요구한다. 그러면 덮어쓴 결과가 전부
@@ -19,9 +38,17 @@ export type GitState =
  * 미커밋 작업이 같은 diff 에 섞이면 되돌리기가 어려워진다.
  */
 export async function inspectGit(dir: string): Promise<GitState> {
-  const stdout = await run('git', ['status', '--porcelain'], { cwd: dir })
+  const stdout = await run('git', ['status', '--porcelain', '-uall'], {
+    cwd: dir,
+    maxBuffer: 64 * 1024 * 1024,
+  })
     .then((result) => result.stdout)
-    .catch(() => null);
+    .catch((error: unknown) => {
+      if (isMissingRepo(error)) {
+        return null;
+      }
+      throw error;
+    });
 
   if (stdout === null) {
     return { kind: 'not-a-repo' };
