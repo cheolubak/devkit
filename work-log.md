@@ -267,3 +267,18 @@
   - **M-5**: `bin.ts`의 `!(type in RECIPES)`를 `Object.hasOwn`으로 교체 — `--type constructor`가 `Object` 생성자를 레시피로 착각해 `run()` 내부에서야 죽던 문제. 테스트 추가.
 - **검증**: `pnpm test`(루트) 169/169 · `pnpm lint`(oxlint+eslint) 경고 0/에러 0 · `pnpm build`(전체) 통과. `pnpm test:e2e`는 실행하지 않음(지시).
 - **커밋**: `c0527c7` — 브랜치 `feature/devkit-roadmap`, main 미머지
+### Claude 리뷰 자산 및 devkit update 기반 모듈 구현
+- **변경 파일**: `packages/devkit-cli/**`(신규 패키지), `eslint.config.mjs`, `.oxlintrc.json`, `docs/superpowers/specs/2026-08-01-devkit-claude-review-design.md`, `docs/superpowers/plans/2026-08-01-devkit-claude-review.md`
+- **내용**: 생성된 프로젝트가 Claude 기반 코드 리뷰를 갖추게 하는 자산과, 그것을 갱신하는 `devkit update`의 기반 모듈을 구현.
+  - **설계의 중심은 리뷰의 관심사 경계**: `devlog-api`의 기존 `코드-리뷰` 스킬 체크리스트를 항목별로 분류한 결과 대부분이 린터 영역(import 정렬·알파벳순·데코레이터 순서)이었고, `class-validator` 전제는 zod를 쓰는 실제 스택과 이미 어긋나 있었다. 그대로 계승했다면 모든 PR에서 잘못된 지적이 나왔을 것이다. 리뷰어는 린터가 원리적으로 못 잡는 4관점만 본다.
+  - **CI 워크플로는 `devlog-api`의 동작 중인 실물이 기준선**. 두 군데만 변경 — `claude-skills` 체크아웃 제거, 참조 대상을 프로젝트 내부 자산으로. 기존 `nestjs-reviewer`/`nextjs-reviewer`가 FSD를 전혀 언급하지 않고(grep 0건) 자체 폴더구조를 제안해 devkit 표준과 충돌하기 때문이다.
+  - **드리프트 방어**: 카테고리에 매칭되지 않는 오버레이 파일이 있으면 테스트가 실패한다. 계획 작성 중 이 방어가 `.gitignore` 미분류를 즉시 드러내 `repo` 카테고리를 추가했다. 방어가 실제로 실패시키는지 미분류 파일로 확인했다.
+  - **`templates/`를 ESLint·oxlint 양쪽 ignore에 추가**. 소비자용 `.ts` 오버레이는 이 저장소의 어떤 tsconfig에도 속하지 않아 타입 인식 규칙이 예외를 던진다 — `eslint-config-nest`에서 겪은 Critical과 같은 부류이며, 증상이 나기 전에 막았다.
+  - **Task 3에서 태스크 분해 도중 유실됐던 관점 3건을 리뷰가 복원**: 설계 3.4절이 nest 리뷰어에 배정한 고유 관점(zod 스키마와 사용처의 정합, 트랜잭션 경계, e2e 누락)이 계획에서 누락된 채로 진행되고 있었다.
+  - **Task 4의 구조 단언이 항상-통과였다**: `expect(doc).toContain('FSD')`가 문서 전체를 검사해, "지적하지 않는 것" 목록에 있는 "FSD 레이어 간 import 방향 위반" 문구에 우연히 매치됐다 — 관점 절을 통째로 지워도 통과하는 단언이었다. 세 단언을 `## 보는 것` 슬라이스로 스코프하고, 구현자가 섹션을 임시 삭제해 실제로 실패하는지 확인한 뒤 되돌렸다.
+  - **Task 7에서 과잉 catch 발견**: `readFile(...).catch(() => null)`이 `EISDIR`·`EACCES`까지 신규 파일로 삼켰다. 계획은 "쓰기 단계에서 같은 오류를 다시 만난다"고 정당화했으나, 리뷰가 `EACCES`에서는 **쓰기가 성공해 기존 파일을 조용히 덮어쓴다**는 것을 실증했다. `ENOENT`만 신규로 좁혔다.
+  - **Task 8에서 과소 집계와 과잉 catch 2건 발견**: (a) `git status --porcelain`이 새 미추적 디렉토리를 한 줄로 접어 `changedFiles`를 과소 집계했다 — devkit이 `.claude/agents/`를 통째로 만드는 바로 그 시나리오에서 터진다. `-uall`로 고쳤다. (b) `catch(() => null)`이 권한 오류·손상된 저장소까지 `not-a-repo`로 뭉갰다. `isMissingRepo`로 좁혔더니 이번엔 stderr 매칭이 로케일에 취약해져, `LC_ALL=C`·`LANG=C`로 메시지를 고정했다.
+  - **Task 9 검증 중 tsc 게이트가 실결함을 잡았다**: `overlay-coverage.test.ts`의 `entry.parentPath ?? entry.path` 폴백이 `@types/node@24`의 `Dirent`에 `path`가 없어 `TS2339`로 실패했다. vitest는 타입 체크 없이 트랜스파일만 하므로 테스트 76개가 전부 초록인 채로 이 결함을 통과시켰고, `tsc --noEmit` 게이트가 처음 잡았다. 게이트를 다섯 개 둔 이유가 이것이다. 폴백은 `engines` 하한(`^20.19.0`)이 `parentPath` 도입 이후라 애초에 커버할 구간도 없었다.
+- **검증**: `pnpm lint` exit 0(경고 1건, `overlay-coverage.test.ts:16` `no-await-in-loop`, 알려진 항목), `pnpm test` 155개 통과(신규 76 + 기존 79), `pnpm build` 성공, `tsc --noEmit` 2개 프로젝트(`packages/devkit-cli/tsconfig.json`, `packages/devkit-cli/tests/tsconfig.json`) 통과
+- **커밋**: `83dcc95`(설계) 외 구현 커밋 다수, `8453b86`(tsc 폴백 결함 수정). 브랜치 `worktree-streamed-humming-papert`
+- **남은 것**: CLI 실행 로직(`bin`·레시피·원자 연산 6종)과 `create`·`update` 서브커맨드는 템플릿 설계 구현의 몫이다(설계 0.1절)

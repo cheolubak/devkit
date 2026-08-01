@@ -97,3 +97,40 @@ CLI는 실행 전에 `dist/bin.js`가 `src/`보다 새로운지 확인하고, �
 끝난 보존 디렉토리는 손으로 지운다:
 `rm -rf ~/Documents/develop/devkit-e2e-*`. `DEVKIT_E2E_KEEP=1 pnpm test:e2e`로
 통과한 생성물까지 전부 남길 수도 있다.
+
+---
+
+## Claude 코드 리뷰 자산
+
+생성된 프로젝트가 Claude 기반 코드 리뷰를 갖추게 하는 오버레이다.
+
+| 경로 | 내용 |
+| --- | --- |
+| `templates/_shared/.claude/commands/review.md` | 로컬 `/review` 슬래시 커맨드 |
+| `templates/_shared/.github/workflows/claude-review.yml` | PR 자동 리뷰 워크플로 |
+| `templates/nest/.claude/agents/devkit-reviewer.md` | NestJS 리뷰어 |
+| `templates/next/.claude/agents/devkit-reviewer.md` | Next.js + FSD 리뷰어 |
+| `templates/monorepo/.claude/agents/devkit-reviewer.md` | Turborepo 모노레포 리뷰어 |
+
+**리뷰어는 린터가 원리적으로 못 잡는 것만 본다** — 크로스 파일 아키텍처, 조용한 실패, 테스트 공백, 의도와 구현의 불일치. 포맷·import 정렬·타입 오류는 `prettier`·`oxlint`·ESLint·`tsc`가 담당하며, 각 리뷰어 문서의 "지적하지 않는 것" 절이 이를 명시한다. 그 절이 "보는 것"보다 **앞에** 오는 것이 동작 요구다 — 리뷰어는 문서를 위에서부터 읽으므로 금지 목록이 뒤에 있으면 이미 지적을 만든 뒤에 읽는다. `tests/review-assets.test.ts`가 이 순서와 유형별 고유 관점을 구조 단언으로 고정한다.
+
+### 아직 레시피에 연결되지 않았다
+
+**세 레시피(`src/recipes/`)는 이 자산들을 복사하지 않는다.** 파일은 있지만 생성물에는 들어가지 않는다 — `_shared/` 오버레이라는 개념 자체가 레시피 쪽에 없다. 연결하려면 각 레시피에 `copyOverlay('_shared')` 단계를 추가해야 한다.
+
+### CI 워크플로를 쓰려면
+
+생성된 저장소에 시크릿 `CLAUDE_CODE_OAUTH_TOKEN`을 등록해야 한다(API key가 아니다). 없으면 워크플로가 동작하지 않는다. **파일이 놓였다는 사실이 리뷰가 동작한다는 뜻은 아니다.**
+
+## `devkit update` 기반 모듈
+
+`src/lib/` 아래 네 모듈은 훗날 `devkit update`(이미 생성된 프로젝트에 표준을 재적용하는 명령)가 조립할 부품이다. **서로를 import하지 않으며**, 조립은 호출자의 몫이다.
+
+| 모듈 | 책임 |
+| --- | --- |
+| `categories.ts` | `--only` 카테고리 7종과 경로 패턴 테이블 |
+| `marker.ts` | `package.json`의 `devkit` 마커 읽기/쓰기 |
+| `classify.ts` | 신규/덮어쓰기/동일 분류 + 변경 목록 포맷 |
+| `git.ts` | 워킹트리 상태 검사(update의 안전망) |
+
+`update` 서브커맨드 자체는 아직 없다. 설계는 `docs/superpowers/specs/2026-08-01-devkit-claude-review-design.md` 5절에 있다.
