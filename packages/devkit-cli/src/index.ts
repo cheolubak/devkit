@@ -26,3 +26,11 @@ export {
   type DevkitMarker,
   type ProjectType,
 } from './lib/marker.js';
+
+export {
+  classifyFiles,
+  formatChangeList,
+  type ChangeKind,
+  type ClassifiedFile,
+  type PlannedFile,
+} from './lib/classify.js';
