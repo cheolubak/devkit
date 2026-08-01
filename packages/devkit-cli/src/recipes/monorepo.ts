@@ -74,7 +74,10 @@ export const monorepoRecipe: Recipe = (options = {}) => {
     ),
 
     // 루트도 @devbak/* 를 직접 선언해야 한다 — catalog:가 link:를 거부한다.
-    linkDeps(['eslint-plugin-fsd', 'prettier-config', 'tsconfig']),
+    // 'tsconfig'는 넣지 않는다 — 루트에는 tsconfig.json이 없고(각 앱이
+    // 자기 tsconfig를 관리), apps/web도 next 레시피와 동일하게 링크하지
+    // 않는다(Task 13 Step 4 확인). 소비처 없는 선언은 완료 기준 6번 위반이다.
+    linkDeps(['eslint-plugin-fsd', 'prettier-config']),
   ];
 
   if (install) steps.push(delegate('pnpm', ['install']));

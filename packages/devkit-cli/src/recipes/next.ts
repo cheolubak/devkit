@@ -66,7 +66,10 @@ export const nextRecipe: Recipe = (options = {}) => {
       },
     }),
 
-    linkDeps(['eslint-plugin-fsd', 'prettier-config', 'tsconfig', 'vitest-config']),
+    // 'tsconfig'는 링크하지 않는다 — create-next-app의 tsconfig.json을
+    // 덮어쓰지 않기로 했으므로(Next가 관리하는 .next/types/** 항목이 있어서)
+    // @devbak/tsconfig를 extends로 소비할 곳이 없다(Task 13 Step 4 확인).
+    linkDeps(['eslint-plugin-fsd', 'prettier-config', 'vitest-config']),
 
     // FSD 레이어. app은 create-next-app이 이미 만들었다.
     // pages 레이어는 Next의 Pages Router와 이름이 충돌하므로 views를 쓴다.
