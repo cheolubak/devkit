@@ -1,16 +1,25 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const TOOLKIT = resolve(import.meta.dirname, '../../../..');
 const PARENT = resolve(TOOLKIT, '..');
 const created: string[] = [];
 
+// pid를 접미어로 쓴다 — 실행마다 다르면서(재실행 시 새 디렉토리 이름을 얻어
+// "이미 존재합니다" 연쇄 실패를 피한다) 로그와 대조 가능하다(Math.random()은
+// 재현·추적이 안 돼 디버깅에 도움이 안 된다). 같은 실행(같은 프로세스) 안의
+// 여러 create() 호출은 같은 접미어를 공유하지만 base name이 서로 달라
+// 충돌하지 않는다 — 단, '안전장치' 테스트처럼 의도적으로 같은 이름을 두 번
+// 쓰는 경우는 여전히 같은 디렉토리를 가리켜 원래 의도(중복 감지)를 그대로
+// 검증한다.
+const RUN_ID = process.pid;
+
 function create(name: string, type: string): string {
-  const dir = join(PARENT, name);
+  const dir = join(PARENT, `${name}-${RUN_ID}`);
   created.push(dir);
-  execFileSync('node', ['packages/devkit-cli/dist/bin.js', 'create', name, '--type', type], {
+  execFileSync('node', ['packages/devkit-cli/dist/bin.js', 'create', basename(dir), '--type', type], {
     cwd: TOOLKIT,
     stdio: 'pipe',
     encoding: 'utf8',
@@ -69,13 +78,22 @@ function collectStrayJs(dir: string): string[] {
 }
 
 /**
- * 정리 정책: 실패해도 기본은 지운다. `create()`가 만드는 디렉토리 이름은
- * 고정이고(devkit-e2e-*), bin.ts는 이미 존재하는 디렉토리를 거부한다 —
- * 실패 시 남기면 다음 실행이 전부 "이미 존재합니다"로 연쇄 실패한다.
- * 디버깅이 필요하면 `DEVKIT_E2E_KEEP=1 pnpm test:e2e`로 이 회차만 남긴다.
+ * 정리 정책: 통과했을 때만 지운다(설계 6.3절 — 공식 CLI가 non-zero로 죽으면
+ * "생성물은 지우지 않는다. 지우면 디버깅이 불가능해진다"). 테스트가 실패하면
+ * 유일한 조사 대상인 생성물을 남긴다.
+ *
+ * `context.task.result?.state`로 방금 끝난 테스트가 'fail'인지 확인한다 —
+ * afterEach 시점에는 테스트 본문이 이미 실행을 마쳤으므로 result가 확정돼
+ * 있다(vitest의 TaskContext 문서). 실행마다 다른 접미어(RUN_ID = pid) 덕에
+ * 보존된 디렉토리가 있어도 다음 실행은 새 이름으로 시작해 막히지 않는다.
  */
-afterEach(() => {
+afterEach((context) => {
+  const failed = context.task.result?.state === 'fail';
   for (const dir of created.splice(0)) {
+    if (failed) {
+      process.stderr.write(`[e2e] 실패로 보존됨: ${dir} (조사 후 수동 삭제 필요)\n`);
+      continue;
+    }
     if (process.env.DEVKIT_E2E_KEEP === '1') {
       process.stderr.write(`[e2e] DEVKIT_E2E_KEEP=1 — 정리하지 않고 남깁니다: ${dir}\n`);
       continue;
@@ -99,7 +117,7 @@ describe('devkit create --type nest', () => {
     expect(existsSync(join(dir, '_gitignore'))).toBe(false);
     expect(existsSync(join(dir, '.gitignore'))).toBe(true);
     const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
-    expect(claude).toContain('# devkit-e2e-nest');
+    expect(claude).toContain(`# ${basename(dir)}`);
     expect(claude).not.toContain('__NAME__');
     const eslintConfig = readFileSync(join(dir, 'eslint.config.mjs'), 'utf8');
     expect(eslintConfig).toContain('@devbak/eslint-config-nest');
@@ -138,7 +156,7 @@ describe('devkit create --type next', () => {
 
     // 이월 (1): 오버레이 배선 검증.
     const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
-    expect(claude).toContain('# devkit-e2e-next');
+    expect(claude).toContain(`# ${basename(dir)}`);
     expect(claude).not.toContain('__NAME__');
     const eslintConfig = readFileSync(join(dir, 'eslint.config.mjs'), 'utf8');
     expect(eslintConfig).toContain('@devbak/eslint-plugin-fsd/next');
@@ -168,10 +186,10 @@ describe('devkit create --type monorepo', () => {
     expect(existsSync(join(dir, '_gitignore'))).toBe(false);
     expect(existsSync(join(dir, '.gitignore'))).toBe(true);
     const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
-    expect(claude).toContain('# devkit-e2e-mono');
+    expect(claude).toContain(`# ${basename(dir)}`);
     expect(claude).not.toContain('__NAME__');
     const rootPkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { name: string };
-    expect(rootPkg.name).toBe('devkit-e2e-mono');
+    expect(rootPkg.name).toBe(basename(dir));
 
     // 이월 (4): next 레시피 산출물과 모노레포 정책이 실제로 충돌하는 지점이
     // pnpm-workspace.yaml·eslint.config.mjs 둘 외에 더 있는지 기계적으로 훑는다.

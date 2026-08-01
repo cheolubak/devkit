@@ -87,3 +87,10 @@ CLI는 실행 전에 `dist/bin.js`가 `src/`보다 새로운지 확인하고, �
 3층은 각 유형마다 `pnpm dlx` 다운로드 + `pnpm install` + 빌드가 들어가 느리고
 네트워크가 필요하다. 기본 `pnpm test`에는 포함되지 않는다 — 반드시
 `pnpm test:e2e`로 따로 실행한다.
+
+3층은 실패한 테스트의 생성물을 `~/Documents/develop/devkit-e2e-*-<pid>`에
+**지우지 않고 남긴다**(설계 6.3절 — 디버깅 증거를 보존한다). 통과한
+테스트의 생성물은 자동으로 정리된다. 실패가 쌓이면 남은 `devkit-e2e-*`
+디렉토리가 디스크를 차지하므로, 조사가 끝나면 손으로 지운다:
+`rm -rf ~/Documents/develop/devkit-e2e-*`. `DEVKIT_E2E_KEEP=1 pnpm test:e2e`로
+통과한 생성물까지 전부 남길 수도 있다.
