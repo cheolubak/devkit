@@ -126,3 +126,11 @@
 - **커밋**: `feature/devkit-roadmap` 브랜치 (main 미머지)
 - **다음**: 구현 계획 작성 → 설정 패키지 3개 → CLI 원자 연산 → 레시피 3종 순서
 - **미결**: `eslint-config-nest`가 Nest 런타임 전역(`sourceType: 'commonjs'`, `globals.node`+`globals.jest`)을 담는지 구현 첫 단계에서 확인 필요. 로드맵 Phase 1 Task 2~10(기존 3개 프로젝트 마이그레이션)은 취소가 아니라 이 작업 뒤로 미뤄졌다.
+
+### @devbak/jest-config 패키지 추가 (Task 2)
+- **변경 파일**: `packages/jest-config/{package.json,nest.js,nest-e2e.js,README.md,tsconfig.json,tests/config.test.ts,tests/tsconfig.json}`(신규), `eslint.config.mjs`, `.gitignore`, `package.json`, `pnpm-lock.yaml`
+- **내용**: `nest new`의 인라인 `jest` 블록·`test/jest-e2e.json`을 CJS `module.exports`로 재노출하는 빌드 없는 패키지. `devkit-cli`가 생성할 NestJS 프로젝트가 `jest.config.js`에서 `require('@devbak/jest-config/nest')`로 소비한다.
+  - **이 패키지가 저장소 최초의 "빌드 없는 순수 CJS `.js` 소스"였다**: `prettier-config`/`tsconfig`는 JSON만 배포해 겪지 않던 문제. 루트 `eslint.config.mjs`의 `projectService`가 이 `.js` 파일들을 못 찾아 `pnpm lint`가 전체 실패했고(파싱 에러), 찾은 뒤에도 `module`이 `no-undef`로 잡혔다. `eslint-config-nest`/`eslint-plugin-fsd`가 쓰는 패턴(패키지 루트 dev 전용 `tsconfig.json`, `allowJs`)으로 첫 문제를, `eslint.config.mjs`에 `packages/jest-config/*.js` 전용 `sourceType: 'commonjs'` 블록(글롭 확장이 아니라 새 블록 추가)으로 두 번째 문제를 해결.
+  - **브리프가 예상한 실패와 실제 실패가 달랐다**: "ts-jest의 tsconfig 부재"를 예상했으나 실제로는 `Module ts-jest ... was not found`였다. 원인은 브리프가 준 테스트 코드가 픽스처를 `os.tmpdir()`에 만들어서였다 — 이 경로는 워크스페이스 트리 밖이라 Jest의 Node 모듈 해석이 `node_modules/ts-jest`를 못 찾는다. 실제 소비자는 자기 프로젝트 안에 `ts-jest`를 설치하므로 겪지 않는 문제(패키지 결함 아님). 테스트를 지우지 않고 픽스처 위치만 워크스페이스 트리 안(`packages/jest-config/tests/.fixtures/`)으로 옮겨 해결.
+  - **경로 옵션 기준 실측**: `rootDir`/`coverageDirectory` 같은 상대 경로가 `@devbak/tsconfig`의 `extends`(프리셋 파일 위치 기준 — Task 1 결함)와 달리, **소비자의 `jest.config.js` 위치**를 기준으로 안전하게 해석됨을 실제 jest 실행(CLI 오버라이드 없이, `--coverage` 포함)으로 확인. README에 이 차이를 문서화.
+- **커밋**: `7944b55` (브랜치 `feature/devkit-roadmap`, main 미머지)
