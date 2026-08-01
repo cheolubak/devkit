@@ -1702,7 +1702,7 @@ EOF
 
 ```ts
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -1750,6 +1750,19 @@ describe('inspectGit', () => {
   it('존재하지 않는 디렉토리도 not-a-repo 로 다룬다', async () => {
     expect(await inspectGit(join(dir, 'nope'))).toEqual({ kind: 'not-a-repo' });
   });
+
+  it('새로 생긴 미추적 디렉토리 안의 파일을 개별로 센다', async () => {
+    // git status --porcelain 은 기본값(-unormal)에서 미추적 디렉토리를
+    // "?? nested/" 한 줄로 접는다. devkit 이 .claude/agents/ 를 통째로
+    // 만드는 상황이 정확히 이 경우라, 접힌 채로 세면 이 모듈이 보호하려는
+    // 바로 그 시나리오에서 위험을 과소 보고한다.
+    await run('git', ['init', '-q'], { cwd: dir });
+    await mkdir(join(dir, 'nested'));
+    await writeFile(join(dir, 'nested', 'a.txt'), 'a', 'utf8');
+    await writeFile(join(dir, 'nested', 'b.txt'), 'b', 'utf8');
+    await writeFile(join(dir, 'nested', 'c.txt'), 'c', 'utf8');
+    expect(await inspectGit(dir)).toEqual({ kind: 'dirty', changedFiles: 3 });
+  });
 });
 ```
 
@@ -1783,10 +1796,37 @@ export type GitState =
  * untracked 파일도 dirty 로 본다 — update 의 결과와 사용자의
  * 미커밋 작업이 같은 diff 에 섞이면 되돌리기가 어려워진다.
  */
+/**
+ * "여긴 git 저장소가 아니다"로 접어도 되는 실패인가.
+ *
+ * 저장소가 있는데 다른 이유로 못 읽은 것까지 not-a-repo 로 보고하면,
+ * 실제로는 지켜야 할 미커밋 변경이 있는데 안전망이 없다고 잘못 알리게 된다.
+ */
+function isMissingRepo(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+  const { code, stderr } = error as { code?: unknown; stderr?: unknown };
+  // git 미설치이거나 dir 자체가 없으면 spawn 이 ENOENT 로 실패한다
+  if (code === 'ENOENT') {
+    return true;
+  }
+  // 저장소가 아니면 git 이 비정상 종료하며 stderr 에 명시한다
+  return typeof stderr === 'string' && stderr.includes('not a git repository');
+}
+
 export async function inspectGit(dir: string): Promise<GitState> {
-  const stdout = await run('git', ['status', '--porcelain'], { cwd: dir })
+  const stdout = await run('git', ['status', '--porcelain', '-uall'], {
+    cwd: dir,
+    maxBuffer: 64 * 1024 * 1024,
+  })
     .then((result) => result.stdout)
-    .catch(() => null);
+    .catch((error: unknown) => {
+      if (isMissingRepo(error)) {
+        return null;
+      }
+      throw error;
+    });
 
   if (stdout === null) {
     return { kind: 'not-a-repo' };
@@ -1797,7 +1837,11 @@ export async function inspectGit(dir: string): Promise<GitState> {
 }
 ```
 
-`catch(() => null)`이 "저장소 아님"과 "git 미설치"를 같게 다룬다. 둘 다 사용자에게는 *"되돌릴 수단이 없으니 확인을 받고 진행"*(설계 6절)이라는 같은 처리로 이어지므로 구분할 실익이 없다.
+**세 가지가 의도적이다.**
+
+- **`-uall`**: 기본값(`-unormal`)은 새 미추적 디렉토리를 `?? nested/` 한 줄로 접는다. devkit 이 `.claude/agents/` 를 통째로 만드는 상황이 정확히 이 경우라, 접힌 채로 세면 이 모듈이 보호하려는 시나리오에서 위험을 과소 보고한다.
+- **`isMissingRepo` 로 좁힌 catch**: 초판은 모든 실패를 `not-a-repo` 로 접으며 *"저장소 아님과 git 미설치는 같은 처리로 이어진다"* 고 정당화했으나, 그 catch 는 권한 오류·손상된 저장소·`maxBuffer` 초과까지 흡수한다. 그 경우들은 **저장소가 실제로 존재하고 미커밋 변경을 가질 수 있으므로** 같은 처리로 이어져서는 안 된다. Task 7 의 `ENOENT` 좁히기를 그대로 옮길 수는 없다 — 여기서 가장 흔한 실패인 "저장소 아님"은 `ENOENT` 가 아니라 비정상 종료라서, `ENOENT` 만 접으면 그 케이스가 예외로 터진다.
+- **`maxBuffer` 상향**: `execFile` 기본값은 1MB다. 변경이 매우 많은 저장소에서 출력이 이를 넘으면 에러가 나는데, 좁힌 catch 아래에서는 그것이 조용한 `not-a-repo` 가 아니라 예외로 드러난다. 그래도 애초에 터지지 않는 편이 낫다.
 
 - [ ] **Step 4: 진입점에서 re-export**
 
@@ -1810,7 +1854,7 @@ export { inspectGit, type GitState } from './lib/git.js';
 - [ ] **Step 5: 테스트 통과 확인**
 
 Run: `pnpm vitest run packages/devkit-cli/tests/git.test.ts`
-Expected: PASS (5 tests)
+Expected: PASS (6 tests)
 
 - [ ] **Step 6: 커밋**
 
@@ -1902,7 +1946,7 @@ pnpm build
 pnpm exec tsc --noEmit -p packages/devkit-cli/tsconfig.json
 pnpm exec tsc --noEmit -p packages/devkit-cli/tests/tsconfig.json
 ```
-Expected: 다섯 명령 모두 종료 코드 0. `pnpm test`는 기존 테스트 전부 + 이번 추가분 75개(categories 22 · review-assets 26 · marker 10 · classify 10 · git 5 · overlay-coverage 2)가 통과. 기존 개수는 실행해서 확인한다 — 다른 작업이 병행됐을 수 있으므로 계획에 박아 둔 숫자를 믿지 않는다
+Expected: 다섯 명령 모두 종료 코드 0. `pnpm test`는 기존 테스트 전부 + 이번 추가분 76개(categories 22 · review-assets 26 · marker 10 · classify 10 · git 6 · overlay-coverage 2)가 통과. 기존 개수는 실행해서 확인한다 — 다른 작업이 병행됐을 수 있으므로 계획에 박아 둔 숫자를 믿지 않는다
 
 기존 77개가 하나라도 깨지면 멈추고 원인을 찾는다. 이 계획은 기존 패키지의 소스를 건드리지 않으므로, 깨진다면 린트 설정 변경(Task 1)이 원인일 가능성이 높다.
 
