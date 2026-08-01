@@ -55,6 +55,14 @@ describe('classifyFiles', () => {
     ]);
     expect(result.map((r) => r.relPath)).toEqual(['b.md', 'a.md']);
   });
+
+  it('파일 부재가 아닌 오류는 삼키지 않고 던진다', async () => {
+    // 대상 경로가 디렉토리면 readFile 이 EISDIR 을 던진다. 이것을
+    // created 로 뭉개면 "새로 만듭니다"라고 고지한 뒤 쓰기 단계에서야
+    // 실패가 드러난다 — 사전 고지가 목적인 모듈이 거짓을 보고하는 셈이다.
+    await mkdir(join(dir, 'CLAUDE.md'));
+    await expect(classifyFiles(dir, [planned('CLAUDE.md', 'x')])).rejects.toThrow(/EISDIR/);
+  });
 });
 
 describe('formatChangeList', () => {

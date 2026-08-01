@@ -21,13 +21,31 @@ export interface ClassifiedFile {
  *
  * update 는 이 결과를 사람에게 보여주고 확인을 받은 뒤에야 쓴다(설계 5.2절).
  */
+/** 파일이 없어서 읽기가 실패한 것인가. 그 외의 오류와 구분해야 한다. */
+function isNotFound(error: unknown): boolean {
+  return (
+    typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'ENOENT'
+  );
+}
+
 export async function classifyFiles(
   targetDir: string,
   planned: PlannedFile[],
 ): Promise<ClassifiedFile[]> {
   return Promise.all(
     planned.map(async ({ relPath, content, category }): Promise<ClassifiedFile> => {
-      const existing = await readFile(join(targetDir, relPath), 'utf8').catch(() => null);
+      const existing = await readFile(join(targetDir, relPath), 'utf8').catch(
+        (error: unknown) => {
+          // ENOENT 만 "신규"로 본다. 나머지를 삼키면 사전 고지가 거짓이 된다 —
+          // EISDIR(경로가 디렉토리)은 쓰기 단계에서야 드러나고, EACCES(읽기만
+          // 막힌 파일)는 "새로 만듭니다"라고 고지한 뒤 쓰기가 성공해 기존 파일을
+          // 조용히 덮어쓴다.
+          if (isNotFound(error)) {
+            return null;
+          }
+          throw error;
+        },
+      );
       if (existing === null) {
         return { kind: 'created', relPath, category };
       }
