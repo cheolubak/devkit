@@ -13,12 +13,20 @@ export function makeDirs(paths: string[]): Step {
     label: `디렉토리 생성: ${paths.join(', ')}`,
     describe: () => ({ paths }),
     run: async (ctx: Ctx) => {
-      for (const path of paths) {
-        const full = assertInside(ctx.targetDir, path);
-        await mkdir(full, { recursive: true });
-        if ((await readdir(full)).length === 0) {
-          await writeFile(join(full, '.gitkeep'), '');
-        }
+      const logs: string[] = [];
+
+      await Promise.all(
+        paths.map(async (path) => {
+          const full = assertInside(ctx.targetDir, path);
+          await mkdir(full, { recursive: true });
+          if ((await readdir(full)).length === 0) {
+            await writeFile(join(full, '.gitkeep'), '');
+          }
+          logs.push(path);
+        }),
+      );
+
+      for (const path of logs) {
         ctx.log(`  생성: ${path}/`);
       }
     },

@@ -14,26 +14,31 @@ function templatesRoot(): string {
 }
 
 async function copyTree(from: string, to: string, vars: Record<string, string>): Promise<string[]> {
-  const written: string[] = [];
   await mkdir(to, { recursive: true });
+  const entries = await readdir(from, { withFileTypes: true });
 
-  for (const entry of await readdir(from, { withFileTypes: true })) {
-    const target = join(to, templateFileName(entry.name));
-    const source = join(from, entry.name);
+  const results = await Promise.all(
+    entries.map(async (entry) => {
+      const target = join(to, templateFileName(entry.name));
+      const source = join(from, entry.name);
 
-    if (entry.isDirectory()) {
-      written.push(...(await copyTree(source, target, vars)));
-      continue;
-    }
+      if (entry.isDirectory()) {
+        return await copyTree(source, target, vars);
+      }
 
-    let content = await readFile(source, 'utf8');
-    for (const [key, value] of Object.entries(vars)) {
-      content = content.replaceAll(`__${key}__`, value);
-    }
-    await writeFile(target, content);
-    written.push(target);
+      let content = await readFile(source, 'utf8');
+      for (const [key, value] of Object.entries(vars)) {
+        content = content.replaceAll(`__${key}__`, value);
+      }
+      await writeFile(target, content);
+      return [target];
+    }),
+  );
+
+  const written: string[] = [];
+  for (const result of results) {
+    written.push(...result);
   }
-
   return written;
 }
 
