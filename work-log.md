@@ -255,3 +255,15 @@
 - **테스트 개수**: 92(Task 3 시점) → **165**(단위/스냅샷) + **5**(e2e, 별도 실행) — 최종.
 - **검증**: `pnpm build`·`pnpm lint`(oxlint+eslint, 경고 0)·`pnpm test` 165/165·`pnpm test:e2e` 5/5·`tsc --noEmit` 2개 프로젝트 전부 통과.
 - **커밋**: `caca9aa`(fix: linkDeps 제거) · `d39cbda`(docs: 이 기록) — 브랜치 `feature/devkit-roadmap`, main 미머지
+
+### 최종 전체 브랜치 리뷰 대응 (I-1~I-4, M-1, M-3~M-5)
+- **변경 파일**: `templates/{nest,next,monorepo}/_prettierignore`(신규), `templates/nest/eslint.config.mjs`, `templates/monorepo/CLAUDE.md`, `src/ops/path-exists.ts`(신규), `src/ops/{copy-overlay,remove-files,index}.ts`, `src/bin.ts`, `src/recipes/next.ts`, `tests/{bin,fs-ops}.test.ts`, 스냅샷 2개, `docs/superpowers/specs/2026-08-01-devkit-template-design.md`
+- **내용**: 최종 리뷰가 지적한 8건을 한 패스로 처리.
+  - **I-1(blocking)**: 세 템플릿에 `_prettierignore` 추가. 실제 `nest` 프로젝트를 생성해 실행으로 검증한 결과, 리뷰가 지목한 `dist/`는 이 리포의 최소 스캐폴드에서는 원인이 아니었다(`prettier --write dist` 실행해도 바이트 변화 없음) — 진짜 원인은 (a) pnpm의 flow-style `pnpm-lock.yaml`을 Prettier가 block-style로 펼치려는 것, (b) `templates/nest/eslint.config.mjs`의 80자 초과 한 줄이었다. 둘 다 반영(`pnpm-lock.yaml`을 세 `_prettierignore`에 추가, `eslint.config.mjs` 줄바꿈 수정). 수정 전/후 `pnpm format:check`를 실행해 exit 1 → exit 0 전환을 직접 확인한 뒤 생성물은 삭제했다.
+  - **I-2**: `.then(() => true, () => false)` 관용구(`bin.ts`·`remove-files.ts`·`copy-overlay.ts` 3곳)를 `ENOENT`/`ENOTDIR`만 "없음"으로 읽는 공용 `pathExists()`로 교체 — `EACCES`가 덮어쓰기 방지 가드를 무력화하던 문제. `chmod 000`으로 실제 `EACCES`를 유발하는 단위 테스트 추가.
+  - **I-3**: `next.ts` mergeJson에 `required: ['dependencies.next', 'scripts.build']` 추가 — 그동안 next 단독 실행 시 `create-next-app` 변화를 감지하지 못하던 공백. 스냅샷 2개 갱신.
+  - **I-4·M-1·M-4**: 설계 문서만 갱신(코드 변경 없음) — nest 오버레이의 `tsconfig.json` 드리프트 미감지를 §9에 기록, §9의 `/lib` 서술을 현재 상태(`/nest`만 소비)로 정정, §6.3의 경로 탈출 가드 서술을 `copyOverlay` 제외로 정정.
+  - **M-3**: `monorepo/CLAUDE.md`에 루트/`apps/web` 깊이별 `link:` relocation 경고 절 추가.
+  - **M-5**: `bin.ts`의 `!(type in RECIPES)`를 `Object.hasOwn`으로 교체 — `--type constructor`가 `Object` 생성자를 레시피로 착각해 `run()` 내부에서야 죽던 문제. 테스트 추가.
+- **검증**: `pnpm test`(루트) 169/169 · `pnpm lint`(oxlint+eslint) 경고 0/에러 0 · `pnpm build`(전체) 통과. `pnpm test:e2e`는 실행하지 않음(지시).
+- **커밋**: `c0527c7` — 브랜치 `feature/devkit-roadmap`, main 미머지
