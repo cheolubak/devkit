@@ -134,3 +134,14 @@
   - **브리프가 예상한 실패와 실제 실패가 달랐다**: "ts-jest의 tsconfig 부재"를 예상했으나 실제로는 `Module ts-jest ... was not found`였다. 원인은 브리프가 준 테스트 코드가 픽스처를 `os.tmpdir()`에 만들어서였다 — 이 경로는 워크스페이스 트리 밖이라 Jest의 Node 모듈 해석이 `node_modules/ts-jest`를 못 찾는다. 실제 소비자는 자기 프로젝트 안에 `ts-jest`를 설치하므로 겪지 않는 문제(패키지 결함 아님). 테스트를 지우지 않고 픽스처 위치만 워크스페이스 트리 안(`packages/jest-config/tests/.fixtures/`)으로 옮겨 해결.
   - **경로 옵션 기준 실측**: `rootDir`/`coverageDirectory` 같은 상대 경로가 `@devbak/tsconfig`의 `extends`(프리셋 파일 위치 기준 — Task 1 결함)와 달리, **소비자의 `jest.config.js` 위치**를 기준으로 안전하게 해석됨을 실제 jest 실행(CLI 오버라이드 없이, `--coverage` 포함)으로 확인. README에 이 차이를 문서화.
 - **커밋**: `7944b55` (브랜치 `feature/devkit-roadmap`, main 미머지)
+
+### @devbak/vitest-config 패키지 추가 (Task 3)
+- **변경 파일**: `packages/vitest-config/{package.json,next.js,node.js,README.md,tsconfig.json,tests/config.test.ts,tests/tsconfig.json}`(신규), `package.json`, `pnpm-lock.yaml`
+- **내용**: 프론트엔드/Node 프로젝트 공용 Vitest 설정을 ESM 순객체 2종(`next`=jsdom, `node`=node)으로 재노출하는 빌드 없는 패키지. `devkit-cli`가 생성할 Next.js 프로젝트가 `vitest.config.ts`에서 `import config from '@devbak/vitest-config/next'`로 소비한다.
+  - **`include` 상대 경로 기준을 실측으로 확인**: `@devbak/jest-config`의 `rootDir`과 같은 방향 — 프리셋 파일 자신의 위치가 아니라 **소비자의 vitest root(설정 파일 위치/`--root`)** 기준으로 해석된다. `packages/vitest-config`에는 `src/` 디렉터리가 없는데도, 워크스페이스 트리 안 픽스처(`tests/.fixtures/`, Task 2에서 배운 대로 `os.tmpdir()` 회피)에 `--root`로 넘긴 디렉터리의 `src/sample.test.ts`를 실제로 찾아 통과시킴을 확인. `@devbak/tsconfig`의 `extends`(프리셋 위치 기준 — Task 1 결함)와는 반대다.
+  - **CJS `.js` 파일 lint 파싱 함정이 반복됨**: `@devbak/jest-config`와 동일하게 루트 `eslint.config.mjs`의 `projectService`가 `next.js`/`node.js`를 못 찾아 파싱 에러 → 패키지 루트에 dev 전용 `tsconfig.json`(`allowJs: true, checkJs: false, include: ["*.js"]`) 추가로 해결. 단 이번엔 ESM이라 `sourceType: 'commonjs'` 블록은 불필요.
+  - **테스트에서 import한 설정 객체의 `no-unsafe-member-access`**: `checkJs: false`로 타입 검사 대상에서 빠져 `any`로 좁혀지는 것을, `@devbak/jest-config`가 require 결과를 캐스팅한 것과 같은 방식으로 필요한 필드만 명시한 타입으로 캐스팅해 해결.
+  - **회귀 테스트 3개 전부 RED→GREEN 실측**: (1) next 프리셋 `environment: 'jsdom'`을 `'node'`로 바꿔 실패 확인 후 복원, (2) node 프리셋을 `'jsdom'`으로 바꿔 실패 확인 후 복원, (3) node.js의 `include`를 매칭되지 않는 패턴(`nomatch/**/*.test.ts`)으로 바꿔 "1 passed"가 사라짐(대신 "No test files found, exiting with code 0")을 확인 후 복원. 세 테스트 모두 실제 회귀를 잡는다.
+  - `jsdom`은 `next` 프리셋만 요구하므로 `peerDependenciesMeta`로 optional 처리하고 워크스페이스 루트에 `pnpm add -D -w jsdom@^25` 추가.
+- **검증**: `pnpm vitest run packages/vitest-config` 3/3, `pnpm lint`(oxlint+eslint) exit 0, `pnpm test`(루트, `--passWithNoTests`) 92/92 통과.
+- **커밋**: `06367cc` (브랜치 `feature/devkit-roadmap`, main 미머지)
