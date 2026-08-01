@@ -5,10 +5,12 @@
   "scripts": {
     "build": "pnpm -r build",
     "test": "vitest run --passWithNoTests",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "lint": "oxlint && eslint .",
     "lint:ox": "oxlint",
     "lint:es": "eslint .",
-    "lint:fix": "oxlint --fix && eslint . --fix"
+    "lint:fix": "oxlint --fix && eslint . --fix",
+    "devbak": "node packages/devkit-cli/dist/bin.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

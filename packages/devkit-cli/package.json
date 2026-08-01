@@ -1,0 +1,31 @@
+{
+  "name": "@devbak/devkit-cli",
+  "version": "0.1.0",
+  "description": "@devbak 표준이 적용된 프로젝트를 생성하는 CLI",
+  "license": "MIT",
+  "keywords": ["scaffold", "template", "cli", "nestjs", "nextjs"],
+  "type": "module",
+  "bin": {
+    "devbak": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "templates"],
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "prepublishOnly": "pnpm build"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3"
+  }
+}

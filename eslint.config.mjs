@@ -29,6 +29,10 @@ export default tseslint.config(
       // 실패해 저장소 전체 lint가 깨진다(실측 확인됨. tests/tsconfig.json의
       // include: ["."]는 점(dot)으로 시작하는 이 디렉터리를 포함하지 않는다).
       '**/tests/.fixtures/**',
+      // devkit-cli/templates/는 생성물에 복사될 파일들이다. 이 저장소의
+      // tsconfig 어디에도 속하지 않으므로 projectService가 실패해 ESLint가
+      // 크래시한다(eslint-config-nest 최종 리뷰가 잡은 Critical과 같은 부류).
+      '**/templates/**',
     ],
   },
 

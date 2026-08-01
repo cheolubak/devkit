@@ -17,7 +17,8 @@
     ".superpowers/**",
     ".claude/**",
     "**/tests/fixtures/**",
-    "**/tests/.fixtures/**"
+    "**/tests/.fixtures/**",
+    "**/templates/**"
   ],
   "rules": {
     // tsconfig target이 ES2022라 toSorted(ES2023)를 쓸 수 없다
