@@ -1,8 +1,9 @@
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { win32 } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { linkSpec, linkDeps } from '../src/ops/link-deps.js';
+import { linkSpec, linkDeps, normalizeToPosix } from '../src/ops/link-deps.js';
 import type { Ctx } from '../src/types.js';
 
 const created: string[] = [];
@@ -35,6 +36,16 @@ describe('linkSpec', () => {
   });
 });
 
+describe('normalizeToPosix', () => {
+  it('Windows 경로 백슬래시를 POSIX 슬래시로 변환한다', () => {
+    const windowsPath = win32.relative('C:\\dev\\my-api', 'C:\\dev\\eslint\\packages\\tsconfig');
+    expect(windowsPath).toContain('\\');
+    const posix = normalizeToPosix(windowsPath);
+    expect(posix).not.toContain('\\');
+    expect(posix).toBe('../eslint/packages/tsconfig');
+  });
+});
+
 describe('linkDeps', () => {
   it('devDependencies에 link: 스펙을 넣는다', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'devbak-link-'));
@@ -56,5 +67,26 @@ describe('linkDeps', () => {
     expect(pkg.devDependencies['@devbak/tsconfig']).toBe('link:../eslint/packages/tsconfig');
     expect(pkg.devDependencies['@devbak/jest-config']).toBe('link:../eslint/packages/jest-config');
     expect(pkg.devDependencies.typescript).toBe('^5.7.3');
+  });
+
+  it('options.file로 비기본 경로를 지정한다 (모노레포 시나리오)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'devbak-link-monorepo-'));
+    created.push(dir);
+    const toolkit = join(dir, 'eslint');
+    const mono = join(dir, 'mono');
+    const web = join(mono, 'apps', 'web');
+    mkdirSync(web, { recursive: true });
+    writeFileSync(
+      join(web, 'package.json'),
+      JSON.stringify({ name: 'web', devDependencies: {} }, null, 2),
+    );
+
+    const ctx: Ctx = { targetDir: mono, toolkitRoot: toolkit, name: 'mono', log: () => {} };
+    await linkDeps(['tsconfig'], { file: 'apps/web/package.json' }).run(ctx);
+
+    const pkg = JSON.parse(readFileSync(join(web, 'package.json'), 'utf8')) as {
+      devDependencies: Record<string, string>;
+    };
+    expect(pkg.devDependencies['@devbak/tsconfig']).toBe('link:../eslint/packages/tsconfig');
   });
 });

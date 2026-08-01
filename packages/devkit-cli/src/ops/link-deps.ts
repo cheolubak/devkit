@@ -1,7 +1,15 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { join, relative, resolve, sep } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import type { Ctx, Step } from '../types.js';
 import { applyPatch, type JsonObject } from './merge-json.js';
+
+/**
+ * 플랫폼별 경로 구분자를 POSIX `/`로 정규화한다.
+ * Windows에서 path.relative는 `\`를 쓰므로 이를 `/`로 변환해야 한다.
+ */
+export function normalizeToPosix(relPath: string): string {
+  return relPath.replace(/\\/g, '/');
+}
 
 /**
  * targetDir에서 toolkitRoot/packages/<pkg>까지의 상대경로를 link: 스펙으로 만든다.
@@ -12,7 +20,7 @@ import { applyPatch, type JsonObject } from './merge-json.js';
 export function linkSpec(targetDir: string, toolkitRoot: string, pkg: string): string {
   const from = resolve(targetDir);
   const to = resolve(toolkitRoot, 'packages', pkg);
-  const posix = relative(from, to).split(sep).join('/');
+  const posix = normalizeToPosix(relative(from, to));
   return `link:${posix}`;
 }
 
