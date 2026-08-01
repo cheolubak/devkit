@@ -25,10 +25,9 @@ export function applyPatch(target: JsonObject, patch: JsonObject): JsonObject {
       continue;
     }
     const current = result[key];
-    result[key] =
-      isPlainObject(value) && current !== undefined && isPlainObject(current)
-        ? applyPatch(current, value)
-        : value;
+    result[key] = isPlainObject(value)
+      ? applyPatch(isPlainObject(current) ? current : {}, value)
+      : value;
   }
 
   return result;
