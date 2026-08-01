@@ -34,3 +34,5 @@ export {
   type ClassifiedFile,
   type PlannedFile,
 } from './lib/classify.js';
+
+export { inspectGit, type GitState } from './lib/git.js';
