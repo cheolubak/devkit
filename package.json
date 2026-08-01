@@ -16,6 +16,7 @@
     "eslint": "^10.8.0",
     "eslint-plugin-oxlint": "^1.76.0",
     "jest": "^30.4.2",
+    "jsdom": "^25.0.1",
     "oxlint": "^1.76.0",
     "ts-jest": "^29.4.12",
     "tsup": "^8.3.0",
