@@ -93,16 +93,21 @@ describe.each(ALL_TYPES)('%s 리뷰어 공통 구조', (type) => {
 
   it('설계 3.2절의 4개 관점을 모두 갖는다', async () => {
     const doc = await readReviewer(type);
-    expect(doc).toContain('조용한 실패');
-    expect(doc).toContain('테스트 공백');
-    expect(doc).toContain('의도와 구현의 불일치');
+    const observed = doc.slice(doc.indexOf('## 보는 것'));
+    expect(observed).toContain('조용한 실패');
+    expect(observed).toContain('테스트 공백');
+    expect(observed).toContain('의도와 구현의 불일치');
   });
 });
 
 describe.each(['next', 'monorepo'] as const)('%s 리뷰어 프론트엔드 관점', (type) => {
   it('FSD 레이어 배치를 관점으로 갖는다', async () => {
+    // 스코프가 필수다. 금지 목록에도 'FSD'가 나오므로(eslint-plugin-fsd가
+    // 방향을 검사한다는 명시), 문서 전체를 검사하면 관점 절을 통째로
+    // 지워도 통과한다 — 이름과 달리 아무것도 지키지 못하는 단언이 된다.
     const doc = await readReviewer(type);
-    expect(doc).toContain('FSD');
+    const observed = doc.slice(doc.indexOf('## 보는 것'));
+    expect(observed).toContain('FSD');
   });
 
   it('FSD import 방향 위반은 린터 담당임을 명시한다', async () => {
