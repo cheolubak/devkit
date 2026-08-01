@@ -51,8 +51,13 @@ describe('@devbak/jest-config/nest', () => {
     );
     writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'fx', private: true }));
 
+    // --rootDir을 CLI로 넘기지 않는다: Jest의 CLI --rootDir은 설정 파일의
+    // rootDir을 덮어써서, nest.js의 rootDir이 틀리거나 없어져도 이 테스트가
+    // 그대로 통과하게 만든다(실측 확인됨). nest.js의 rootDir: 'src'가 실제로
+    // 이 jest.config.js 위치를 기준으로 동작하는지를 검증하는 것이 이 테스트의
+    // 목적이므로, config 파일만 넘기고 rootDir 해석을 nest.js에 맡긴다.
     const jestBin = resolve(import.meta.dirname, '../../../node_modules/.bin/jest');
-    const output = execFileSync(jestBin, ['--config', join(dir, 'jest.config.js'), '--rootDir', join(dir, 'src')], {
+    const output = execFileSync(jestBin, ['--config', join(dir, 'jest.config.js')], {
       encoding: 'utf8',
       stdio: 'pipe',
       cwd: dir,

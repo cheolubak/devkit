@@ -21,6 +21,14 @@ export default tseslint.config(
       '.superpowers/**',
       '.claude/**',
       '**/tests/fixtures/**',
+      // packages/jest-config/tests/config.test.ts가 execFileSync로 실제 jest를
+      // 돌리며 만드는 임시 프로젝트 픽스처. .gitignore는 git 추적만 막을 뿐
+      // ESLint와는 무관하므로 여기서 따로 제외해야 한다 — 테스트가 죽거나
+      // 타임아웃되면 afterEach 정리가 안 돼 잔여물이 남고, 그러면 그 잔여
+      // .js/.ts 파일이 어떤 tsconfig에도 속하지 않아 projectService가 파싱에
+      // 실패해 저장소 전체 lint가 깨진다(실측 확인됨. tests/tsconfig.json의
+      // include: ["."]는 점(dot)으로 시작하는 이 디렉터리를 포함하지 않는다).
+      '**/tests/.fixtures/**',
     ],
   },
 
