@@ -292,6 +292,7 @@ jobs:
 
 - **별도 파일(`devkit.json`)이 아닌 이유**: 파일이 늘지 않고, `mergeJson`이 이미 다루는 대상이라 새 연산이 필요 없다.
 - **`version`의 용도**: 지금은 기록용이다. 훗날 마이그레이션이 필요할 때 판단 근거가 되지만, **지금 마이그레이션 로직을 만들지 않는다**(YAGNI).
+- **`version`은 전체 update에서만 갱신한다.** `--only`가 주어지면 건드리지 않는다. `--only claude`만 돌린 프로젝트의 마커가 최신 버전을 가리키면 *"이 프로젝트는 최신 표준을 전부 반영했다"* 는 거짓 신호가 되고, 훗날 마이그레이션 판단의 근거가 오염된다.
 - **마커가 없으면 추측하지 않는다.** `package.json`의 의존성으로 유형을 짐작할 수 있지만(`@nestjs/core` 유무 등) 그것은 조용히 틀릴 수 있는 휴리스틱이다. 명확한 에러를 내고 `--type`을 요구한다.
 
 ### 5.2 실행 모델
@@ -338,6 +339,9 @@ devkit update [--only <categories>] [--type <t>] [--dry-run] [--yes] [--force]
 | `ts` | `tsconfig.json` |
 | `test` | `jest.config.ts`, `test/jest-e2e.config.ts`, `vitest.config.ts` |
 | `deps` | `linkDeps` + `package.json`의 `devDependencies` 패치 |
+| `repo` | `.gitignore` |
+
+`repo`는 계획 작성 중 추가됐다. 초판의 6종에는 `.gitignore`가 어디에도 속하지 않았는데, 그것은 nest 레시피가 실제로 복사하는 오버레이다(템플릿 설계 5.1절 3단계). 미분류 파일이 있으면 아래 드리프트 방어가 곧바로 실패하므로 **방어 장치가 설계 공백을 즉시 드러낸 사례**다.
 
 생략 시 전체다. 쉼표로 복수 지정한다(`--only claude,ci`).
 
