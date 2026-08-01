@@ -11,9 +11,17 @@ import oxlint from 'eslint-plugin-oxlint';
  */
 export default tseslint.config(
   {
-    // .superpowers/는 git-ignored 스크래치(SDD 워크스페이스)다. ESLint는
-    // .gitignore를 읽지 않으므로 여기서 따로 제외해야 한다.
-    ignores: ['**/dist/**', 'coverage/**', '.superpowers/**', '**/tests/fixtures/**'],
+    // .superpowers/는 git-ignored 스크래치(SDD 워크스페이스), .claude/는
+    // 에이전트 워크트리다. ESLint는 .gitignore를 읽지 않으므로 여기서 따로
+    // 제외해야 한다. 특히 .claude/worktrees/ 안에는 node_modules가 없어
+    // projectService가 실패하고, 그 결과 저장소 전체 lint가 깨진다.
+    ignores: [
+      '**/dist/**',
+      'coverage/**',
+      '.superpowers/**',
+      '.claude/**',
+      '**/tests/fixtures/**',
+    ],
   },
 
   js.configs.recommended,
