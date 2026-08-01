@@ -3,6 +3,9 @@ dist/
 *.log
 .DS_Store
 
+# 테스트가 생성하는 실행용 픽스처(예: packages/jest-config/tests/.fixtures)
+.fixtures/
+
 # 로컬 에이전트/IDE 스크래치 — 커밋하지 않는다
 .claude/
 .idea/

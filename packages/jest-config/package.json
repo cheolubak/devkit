@@ -1,0 +1,22 @@
+{
+  "name": "@devbak/jest-config",
+  "version": "0.1.0",
+  "description": "NestJS 프로젝트 공용 Jest 설정 (빌드 없음, CJS)",
+  "license": "MIT",
+  "keywords": ["jest", "jest-config", "nestjs"],
+  "exports": {
+    "./nest": "./nest.js",
+    "./nest-e2e": "./nest-e2e.js"
+  },
+  "files": ["nest.js", "nest-e2e.js"],
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "jest": "^30.0.0",
+    "ts-jest": "^29.2.0"
+  }
+}
