@@ -1,0 +1,198 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`monorepo 레시피 > 단계 목록이 스냅샷과 일치한다 1`] = `
+[
+  {
+    "detail": {
+      "expectUpstream": [],
+      "template": "monorepo",
+      "vars": [],
+    },
+    "kind": "copyOverlay",
+  },
+  {
+    "detail": {
+      "paths": [
+        "apps",
+        "packages",
+      ],
+    },
+    "kind": "makeDirs",
+  },
+  {
+    "detail": {
+      "label": "apps/web에 next 레시피 실행",
+      "steps": [
+        {
+          "argsAfter": [
+            "--ts",
+            "--app",
+            "--src-dir",
+            "--tailwind",
+            "--no-eslint",
+            "--use-pnpm",
+            "--skip-install",
+            "--disable-git",
+            "--import-alias",
+            "@/*",
+          ],
+          "argsBefore": [
+            "dlx",
+            "create-next-app@latest",
+          ],
+          "command": "pnpm",
+          "cwd": "parent",
+        },
+        {
+          "paths": [
+            "AGENTS.md",
+            "CLAUDE.md",
+          ],
+          "required": true,
+        },
+        {
+          "expectUpstream": [],
+          "template": "next",
+          "vars": [],
+        },
+        {
+          "file": "package.json",
+          "patch": {
+            "devDependencies": {
+              "@next/eslint-plugin-next": "^16.0.0",
+              "eslint": "^10.8.0",
+              "eslint-plugin-jsx-a11y": "^6.10.0",
+              "eslint-plugin-react-hooks": "^7.1.0",
+              "jsdom": "^25.0.0",
+              "prettier": "^3.4.2",
+              "typescript-eslint": "^8.65.0",
+              "vitest": "^2.1.0",
+            },
+            "prettier": "@devbak/prettier-config",
+            "scripts": {
+              "format": "prettier --write .",
+              "format:check": "prettier --check .",
+              "lint": "eslint .",
+              "test": "vitest run",
+              "test:watch": "vitest",
+              "typecheck": "tsc --noEmit",
+            },
+          },
+          "required": [],
+        },
+        {
+          "file": "package.json",
+          "packages": [
+            "eslint-plugin-fsd",
+            "prettier-config",
+            "tsconfig",
+            "vitest-config",
+          ],
+        },
+        {
+          "paths": [
+            "src/views",
+            "src/widgets",
+            "src/features",
+            "src/entities",
+            "src/shared",
+          ],
+        },
+      ],
+    },
+    "kind": "compose",
+  },
+  {
+    "detail": {
+      "paths": [
+        "apps/web/pnpm-workspace.yaml",
+      ],
+      "required": true,
+    },
+    "kind": "removeFiles",
+  },
+  {
+    "detail": {
+      "paths": [
+        "apps/web/eslint.config.mjs",
+      ],
+      "required": true,
+    },
+    "kind": "removeFiles",
+  },
+  {
+    "detail": {
+      "file": "apps/web/package.json",
+      "patch": {
+        "dependencies": {
+          "next": "catalog:",
+          "react": "catalog:",
+          "react-dom": "catalog:",
+        },
+        "devDependencies": {
+          "@next/eslint-plugin-next": "catalog:",
+          "@tailwindcss/postcss": "catalog:",
+          "eslint": null,
+          "eslint-plugin-jsx-a11y": "catalog:",
+          "eslint-plugin-react-hooks": "catalog:",
+          "jsdom": "catalog:",
+          "prettier": null,
+          "tailwindcss": "catalog:",
+          "typescript": "catalog:",
+          "vitest": "catalog:",
+        },
+        "scripts": {
+          "format": null,
+          "format:check": null,
+          "lint": null,
+        },
+      },
+      "required": [
+        "dependencies.next",
+      ],
+    },
+    "kind": "mergeJson",
+  },
+  {
+    "detail": {
+      "file": "package.json",
+      "packages": [
+        "eslint-plugin-fsd",
+        "prettier-config",
+        "tsconfig",
+      ],
+    },
+    "kind": "linkDeps",
+  },
+  {
+    "detail": {
+      "args": [
+        "install",
+      ],
+      "command": "pnpm",
+      "cwd": "targetDir",
+    },
+    "kind": "delegate",
+  },
+  {
+    "detail": {
+      "args": [
+        "lint",
+      ],
+      "command": "pnpm",
+      "cwd": "targetDir",
+    },
+    "kind": "delegate",
+  },
+  {
+    "detail": {
+      "args": [
+        "build",
+      ],
+      "command": "pnpm",
+      "cwd": "targetDir",
+    },
+    "kind": "delegate",
+  },
+]
+`;

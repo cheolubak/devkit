@@ -1,0 +1,23 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# @devbak/* 는 여기에 넣을 수 없다. pnpm이 catalog 항목의 link: 프로토콜을
+# 거부한다(ERR_PNPM_CATALOG_ENTRY_INVALID_SPEC). 각 package.json이
+# link: 상대경로로 직접 선언한다.
+catalog:
+  next: ^16.2.12
+  react: ^19.2.4
+  react-dom: ^19.2.4
+  typescript: ^5.7.3
+  tailwindcss: ^4
+  '@tailwindcss/postcss': ^4
+  '@next/eslint-plugin-next': ^16.0.0
+  eslint-plugin-jsx-a11y: ^6.10.0
+  eslint-plugin-react-hooks: ^7.1.0
+  vitest: ^2.1.0
+  jsdom: ^25.0.0
+
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver

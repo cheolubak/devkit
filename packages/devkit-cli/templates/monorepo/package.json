@@ -1,0 +1,25 @@
+{
+  "name": "__NAME__",
+  "private": true,
+  "packageManager": "pnpm@10.29.2",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "eslint .",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "prettier": "@devbak/prettier-config",
+  "devDependencies": {
+    "eslint": "^10.8.0",
+    "prettier": "^3.4.2",
+    "turbo": "^2.8.0",
+    "typescript": "catalog:",
+    "typescript-eslint": "^8.65.0",
+    "@next/eslint-plugin-next": "catalog:",
+    "eslint-plugin-jsx-a11y": "catalog:",
+    "eslint-plugin-react-hooks": "catalog:"
+  }
+}

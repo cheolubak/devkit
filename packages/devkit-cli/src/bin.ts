@@ -4,6 +4,7 @@ import { mkdir, stat } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { monorepoRecipe } from './recipes/monorepo.js';
 import { nestRecipe } from './recipes/nest.js';
 import { nextRecipe } from './recipes/next.js';
 import { run } from './run.js';
@@ -56,7 +57,7 @@ export function assertDistFresh(pkgDir: string): void {
 const RECIPES: Partial<Record<ProjectType, Recipe>> = {
   nest: nestRecipe,
   next: nextRecipe,
-  // Task 11에서 채운다
+  monorepo: monorepoRecipe,
 };
 
 export async function main(argv: string[]): Promise<void> {
