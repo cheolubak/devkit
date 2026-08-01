@@ -23,7 +23,8 @@ function isMissingRepo(error: unknown): boolean {
   if (code === 'ENOENT') {
     return true;
   }
-  // 저장소가 아니면 git 이 비정상 종료하며 stderr 에 명시한다
+  // 저장소가 아니면 git 이 비정상 종료하며 stderr 에 명시한다.
+  // 이 매칭이 성립하려면 메시지가 영어여야 하므로 아래 run 이 로케일을 고정한다.
   return typeof stderr === 'string' && stderr.includes('not a git repository');
 }
 
@@ -40,6 +41,9 @@ function isMissingRepo(error: unknown): boolean {
 export async function inspectGit(dir: string): Promise<GitState> {
   const stdout = await run('git', ['status', '--porcelain', '-uall'], {
     cwd: dir,
+    // git 메시지를 영어로 고정한다. 번역된 메시지를 만나면 isMissingRepo 가
+    // 정상적인 "저장소 아님"을 못 알아보고, 그 케이스가 예외로 새어 나간다.
+    env: { ...process.env, LC_ALL: 'C', LANG: 'C' },
     maxBuffer: 64 * 1024 * 1024,
   })
     .then((result) => result.stdout)
