@@ -31,10 +31,8 @@ export function removeFiles(paths: string[], options: RemoveFilesOptions = {}): 
     label: `삭제: ${paths.join(', ')}`,
     describe: () => ({ paths, required }),
     run: async (ctx: Ctx) => {
-      const logs: string[] = [];
-
-      await Promise.all(
-        paths.map(async (path) => {
+      const logs = await Promise.all(
+        paths.map(async (path): Promise<string | undefined> => {
           const full = assertInside(ctx.targetDir, path);
           const exists = await stat(full).then(
             () => true,
@@ -47,15 +45,17 @@ export function removeFiles(paths: string[], options: RemoveFilesOptions = {}): 
                   `해당 레시피를 재검증하세요 (설계 6.2절).`,
               );
             }
-            return;
+            return undefined;
           }
           await rm(full, { recursive: true, force: true });
-          logs.push(path);
+          return path;
         }),
       );
 
       for (const path of logs) {
-        ctx.log(`  삭제: ${path}`);
+        if (path !== undefined) {
+          ctx.log(`  삭제: ${path}`);
+        }
       }
     },
   };

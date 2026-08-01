@@ -9,10 +9,10 @@ import type { Ctx } from '../src/types.js';
 
 const created: string[] = [];
 
-function makeCtx(): Ctx {
+function makeCtx(logger?: (msg: string) => void): Ctx {
   const dir = mkdtempSync(join(tmpdir(), 'devbak-fs-'));
   created.push(dir);
-  return { targetDir: dir, toolkitRoot: '/toolkit', name: 'fx', log: () => {} };
+  return { targetDir: dir, toolkitRoot: '/toolkit', name: 'fx', log: logger ?? (() => {}) };
 }
 
 afterEach(() => {
@@ -64,6 +64,16 @@ describe('removeFiles', () => {
     await removeFiles(['public']).run(ctx);
     expect(existsSync(join(ctx.targetDir, 'public'))).toBe(false);
   });
+
+  it('여러 파일을 입력 순서대로 로그한다', async () => {
+    const logs: string[] = [];
+    const ctx = makeCtx((msg) => logs.push(msg));
+    writeFileSync(join(ctx.targetDir, 'a.txt'), '');
+    writeFileSync(join(ctx.targetDir, 'b.txt'), '');
+    writeFileSync(join(ctx.targetDir, 'c.txt'), '');
+    await removeFiles(['a.txt', 'b.txt', 'c.txt']).run(ctx);
+    expect(logs).toEqual(['  삭제: a.txt', '  삭제: b.txt', '  삭제: c.txt']);
+  });
 });
 
 describe('templateFileName', () => {
@@ -100,5 +110,12 @@ describe('makeDirs', () => {
   it('탈출 경로를 거부한다', async () => {
     const ctx = makeCtx();
     await expect(makeDirs(['../evil']).run(ctx)).rejects.toThrow(/밖/);
+  });
+
+  it('여러 디렉토리를 입력 순서대로 로그한다', async () => {
+    const logs: string[] = [];
+    const ctx = makeCtx((msg) => logs.push(msg));
+    await makeDirs(['src/a', 'src/b', 'src/c']).run(ctx);
+    expect(logs).toEqual(['  생성: src/a/', '  생성: src/b/', '  생성: src/c/']);
   });
 });
