@@ -1,0 +1,129 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`next 레시피 > 단계 목록이 스냅샷과 일치한다 1`] = `
+[
+  {
+    "detail": {
+      "argsAfter": [
+        "--ts",
+        "--app",
+        "--src-dir",
+        "--tailwind",
+        "--no-eslint",
+        "--use-pnpm",
+        "--skip-install",
+        "--disable-git",
+        "--import-alias",
+        "@/*",
+      ],
+      "argsBefore": [
+        "dlx",
+        "create-next-app@latest",
+      ],
+      "command": "pnpm",
+      "cwd": "parent",
+    },
+    "kind": "delegate",
+  },
+  {
+    "detail": {
+      "paths": [
+        "AGENTS.md",
+        "CLAUDE.md",
+      ],
+      "required": true,
+    },
+    "kind": "removeFiles",
+  },
+  {
+    "detail": {
+      "expectUpstream": [],
+      "template": "next",
+      "vars": [],
+    },
+    "kind": "copyOverlay",
+  },
+  {
+    "detail": {
+      "file": "package.json",
+      "patch": {
+        "devDependencies": {
+          "@next/eslint-plugin-next": "^16.0.0",
+          "eslint": "^10.8.0",
+          "eslint-plugin-jsx-a11y": "^6.10.0",
+          "eslint-plugin-react-hooks": "^7.1.0",
+          "jsdom": "^25.0.0",
+          "prettier": "^3.4.2",
+          "typescript-eslint": "^8.65.0",
+          "vitest": "^2.1.0",
+        },
+        "prettier": "@devbak/prettier-config",
+        "scripts": {
+          "format": "prettier --write .",
+          "format:check": "prettier --check .",
+          "lint": "eslint .",
+          "test": "vitest run",
+          "test:watch": "vitest",
+          "typecheck": "tsc --noEmit",
+        },
+      },
+      "required": [],
+    },
+    "kind": "mergeJson",
+  },
+  {
+    "detail": {
+      "file": "package.json",
+      "packages": [
+        "eslint-plugin-fsd",
+        "prettier-config",
+        "tsconfig",
+        "vitest-config",
+      ],
+    },
+    "kind": "linkDeps",
+  },
+  {
+    "detail": {
+      "paths": [
+        "src/views",
+        "src/widgets",
+        "src/features",
+        "src/entities",
+        "src/shared",
+      ],
+    },
+    "kind": "makeDirs",
+  },
+  {
+    "detail": {
+      "args": [
+        "install",
+      ],
+      "command": "pnpm",
+      "cwd": "targetDir",
+    },
+    "kind": "delegate",
+  },
+  {
+    "detail": {
+      "args": [
+        "lint",
+      ],
+      "command": "pnpm",
+      "cwd": "targetDir",
+    },
+    "kind": "delegate",
+  },
+  {
+    "detail": {
+      "args": [
+        "build",
+      ],
+      "command": "pnpm",
+      "cwd": "targetDir",
+    },
+    "kind": "delegate",
+  },
+]
+`;

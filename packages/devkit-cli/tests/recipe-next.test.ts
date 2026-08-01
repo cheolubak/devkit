@@ -1,0 +1,64 @@
+import { describe, expect, it } from 'vitest';
+import { nextRecipe } from '../src/recipes/next.js';
+
+// 라벨 부분일치(includes)는 쓰지 않는다 — linkDeps가 링크하는
+// '@devbak/eslint-plugin-fsd'라는 문자열 자체가 'lint'를 부분 문자열로
+// 포함해(esLINT) skipInstall이어도 거짓양성이 난다. recipe-nest.test.ts와
+// 같은 이유로 정확 일치를 쓴다.
+const isInstallStep = (s: { label: string }): boolean => s.label === 'pnpm install';
+const isVerifyStep = (s: { label: string }): boolean => s.label === 'pnpm lint' || s.label === 'pnpm build';
+
+describe('next 레시피', () => {
+  it('단계 목록이 스냅샷과 일치한다', () => {
+    const steps = nextRecipe().map((s) => ({ kind: s.kind, detail: s.describe() }));
+    expect(steps).toMatchSnapshot();
+  });
+
+  it('--no-eslint로 스캐폴딩한다 — 우리 설정을 깨끗하게 얹기 위해서다', () => {
+    const scaffoldStep = nextRecipe()[0];
+    const detail = scaffoldStep?.describe() as { argsAfter: string[] };
+    expect(detail.argsAfter).toContain('--no-eslint');
+    expect(detail.argsAfter).toContain('--skip-install');
+    expect(detail.argsAfter).toContain('--disable-git');
+  });
+
+  it('AGENTS.md와 CLAUDE.md를 제거한다', () => {
+    const remove = nextRecipe().find((s) => s.kind === 'removeFiles');
+    const detail = remove?.describe() as { paths: string[]; required: boolean };
+    expect(detail.paths).toEqual(expect.arrayContaining(['AGENTS.md', 'CLAUDE.md']));
+    expect(detail.required).toBe(true);
+  });
+
+  it('pnpm-workspace.yaml은 지우지 않는다 — 단일 앱에서는 sharp 빌드 승인에 필요하다', () => {
+    const removes = nextRecipe().filter((s) => s.kind === 'removeFiles');
+    const allPaths = removes.flatMap((s) => (s.describe() as { paths: string[] }).paths);
+    expect(allPaths).not.toContain('pnpm-workspace.yaml');
+  });
+
+  it('FSD 레이어를 만들고 pages 대신 views를 쓴다', () => {
+    const dirs = nextRecipe().find((s) => s.kind === 'makeDirs');
+    const detail = dirs?.describe() as { paths: string[] };
+    expect(detail.paths).toEqual(
+      expect.arrayContaining([
+        'src/views',
+        'src/widgets',
+        'src/features',
+        'src/entities',
+        'src/shared',
+      ]),
+    );
+    expect(detail.paths).not.toContain('src/pages');
+  });
+
+  it('skipInstall이면 install도 자가검증도 빠진다 — 모노레포 합성용', () => {
+    const steps = nextRecipe({ skipInstall: true });
+    expect(steps.some(isInstallStep)).toBe(false);
+    expect(steps.some(isVerifyStep)).toBe(false);
+  });
+
+  it('skipVerify면 자가검증 단계만 빠지고 install은 남는다', () => {
+    const steps = nextRecipe({ skipVerify: true });
+    expect(steps.some(isInstallStep)).toBe(true);
+    expect(steps.some(isVerifyStep)).toBe(false);
+  });
+});

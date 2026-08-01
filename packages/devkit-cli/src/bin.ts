@@ -5,6 +5,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { nestRecipe } from './recipes/nest.js';
+import { nextRecipe } from './recipes/next.js';
 import { run } from './run.js';
 import type { Ctx, ProjectType, Recipe } from './types.js';
 
@@ -54,7 +55,8 @@ export function assertDistFresh(pkgDir: string): void {
 
 const RECIPES: Partial<Record<ProjectType, Recipe>> = {
   nest: nestRecipe,
-  // Task 10~11에서 채운다
+  next: nextRecipe,
+  // Task 11에서 채운다
 };
 
 export async function main(argv: string[]): Promise<void> {
