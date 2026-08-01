@@ -1158,11 +1158,14 @@ export function applyPatch(target: JsonObject, patch: JsonObject): JsonObject {
       delete result[key];
       continue;
     }
+    // 패치 값이 객체면 항상 재귀한다. target에 해당 키가 없더라도 빈 객체에
+    // 대해 재귀해야 중첩된 null이 "삭제 지시"로 처리된다. 통째로 대입하면
+    // null이 값으로 기록되어 package.json에 "eslint": null 같은 것이 쓰이고
+    // pnpm install이 깨진다(2026-08-01 실측).
     const current = result[key];
-    result[key] =
-      isPlainObject(value) && current !== undefined && isPlainObject(current)
-        ? applyPatch(current, value)
-        : value;
+    result[key] = isPlainObject(value)
+      ? applyPatch(isPlainObject(current) ? current : {}, value)
+      : value;
   }
 
   return result;
