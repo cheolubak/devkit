@@ -1491,6 +1491,14 @@ describe('classifyFiles', () => {
     ]);
     expect(result.map((r) => r.relPath)).toEqual(['b.md', 'a.md']);
   });
+
+  it('파일 부재가 아닌 오류는 삼키지 않고 던진다', async () => {
+    // 대상 경로가 디렉토리면 readFile 이 EISDIR 을 던진다. 이것을
+    // created 로 뭉개면 "새로 만듭니다"라고 고지한 뒤 쓰기 단계에서야
+    // 실패가 드러난다 — 사전 고지가 목적인 모듈이 거짓을 보고하는 셈이다.
+    await mkdir(join(dir, 'CLAUDE.md'));
+    await expect(classifyFiles(dir, [planned('CLAUDE.md', 'x')])).rejects.toThrow();
+  });
 });
 
 describe('formatChangeList', () => {
@@ -1570,13 +1578,31 @@ export interface ClassifiedFile {
  *
  * update 는 이 결과를 사람에게 보여주고 확인을 받은 뒤에야 쓴다(설계 5.2절).
  */
+/** 파일이 없어서 읽기가 실패한 것인가. 그 외의 오류와 구분해야 한다. */
+function isNotFound(error: unknown): boolean {
+  return (
+    typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'ENOENT'
+  );
+}
+
 export async function classifyFiles(
   targetDir: string,
   planned: PlannedFile[],
 ): Promise<ClassifiedFile[]> {
   return Promise.all(
     planned.map(async ({ relPath, content, category }): Promise<ClassifiedFile> => {
-      const existing = await readFile(join(targetDir, relPath), 'utf8').catch(() => null);
+      const existing = await readFile(join(targetDir, relPath), 'utf8').catch(
+        (error: unknown) => {
+          // ENOENT 만 "신규"로 본다. 나머지를 삼키면 사전 고지가 거짓이 된다 —
+          // EISDIR(경로가 디렉토리)은 쓰기 단계에서야 드러나고, EACCES(읽기만
+          // 막힌 파일)는 "새로 만듭니다"라고 고지한 뒤 쓰기가 성공해 기존 파일을
+          // 조용히 덮어쓴다.
+          if (isNotFound(error)) {
+            return null;
+          }
+          throw error;
+        },
+      );
       if (existing === null) {
         return { kind: 'created', relPath, category };
       }
@@ -1617,7 +1643,7 @@ export function formatChangeList(
 }
 ```
 
-`readFile(...).catch(() => null)`은 파일 부재뿐 아니라 권한 오류도 `created`로 삼킨다. 여기서는 의도된 단순화다 — 실제 쓰기 단계에서 같은 오류가 다시 나며, 그때는 삼키지 않고 중단한다(설계 6절).
+**`ENOENT`만 "신규"로 좁히는 것이 중요하다.** 초판은 모든 읽기 오류를 `created`로 삼키며 *"실제 쓰기 단계에서 같은 오류가 다시 난다"* 고 정당화했으나, Task 7 리뷰가 그 전제를 반증했다 — `EACCES`(읽기만 막힌 파일)에서는 쓰기가 **성공**하므로, "새로 만듭니다"라고 고지한 뒤 기존 파일을 조용히 덮어쓴다. `EISDIR`(경로가 이미 디렉토리)도 프리뷰를 거짓으로 만든다. 사전 고지가 존재 이유인 모듈이 거짓을 보고하면 모듈 자체가 무의미해진다(설계 6절).
 
 - [ ] **Step 4: 진입점에서 re-export**
 
@@ -1636,7 +1662,7 @@ export {
 - [ ] **Step 5: 테스트 통과 확인**
 
 Run: `pnpm vitest run packages/devkit-cli/tests/classify.test.ts`
-Expected: PASS (9 tests)
+Expected: PASS (10 tests — `classifyFiles` 6, `formatChangeList` 4)
 
 - [ ] **Step 6: 커밋**
 
@@ -1876,7 +1902,7 @@ pnpm build
 pnpm exec tsc --noEmit -p packages/devkit-cli/tsconfig.json
 pnpm exec tsc --noEmit -p packages/devkit-cli/tests/tsconfig.json
 ```
-Expected: 다섯 명령 모두 종료 코드 0. `pnpm test`는 기존 테스트 전부 + 이번 추가분 74개(categories 22 · review-assets 26 · marker 10 · classify 9 · git 5 · overlay-coverage 2)가 통과. 기존 개수는 실행해서 확인한다 — 다른 작업이 병행됐을 수 있으므로 계획에 박아 둔 숫자를 믿지 않는다
+Expected: 다섯 명령 모두 종료 코드 0. `pnpm test`는 기존 테스트 전부 + 이번 추가분 75개(categories 22 · review-assets 26 · marker 10 · classify 10 · git 5 · overlay-coverage 2)가 통과. 기존 개수는 실행해서 확인한다 — 다른 작업이 병행됐을 수 있으므로 계획에 박아 둔 숫자를 믿지 않는다
 
 기존 77개가 하나라도 깨지면 멈추고 원인을 찾는다. 이 계획은 기존 패키지의 소스를 건드리지 않으므로, 깨진다면 린트 설정 변경(Task 1)이 원인일 가능성이 높다.
 
