@@ -192,10 +192,10 @@ export default defineConfig({
  * CLI 실행 로직(bin·레시피·원자 연산)은 아직 없다. 현재는 `devkit update`가
  * 조립할 순수 모듈만 노출한다 — 설계 0.1절의 구현 순서 참조.
  */
-export {} from './lib/categories.js';
+export {};
 ```
 
-이 re-export는 Task 2에서 실제 내용으로 바뀐다. 지금은 파일이 존재하고 빌드가 통과하는 것이 목적이다.
+**아직 아무것도 export하지 않는다.** `src/lib/` 아래 모듈은 Task 2부터 생기므로, 지금 그것들을 re-export하면 존재하지 않는 파일을 가리켜 빌드가 실패한다. 빈 `export {}`는 이 파일을 ESM 모듈로 만들기 위한 것이며, Task 2가 실제 내용으로 교체한다.
 
 - [ ] **Step 4: 저장소 린트에서 templates 제외**
 
