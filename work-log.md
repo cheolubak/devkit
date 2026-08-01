@@ -254,4 +254,4 @@
   - **참고**: `dist` 신선도 가드도 실제로 동작함을 별도 확인(`touch src/bin.ts` → `pnpm devbak create` 즉시 거부, 디렉토리 미생성 — 8절 완료 기준 목록엔 없지만 6.3절 실패 목록 항목이라 함께 검증).
 - **테스트 개수**: 92(Task 3 시점) → **165**(단위/스냅샷) + **5**(e2e, 별도 실행) — 최종.
 - **검증**: `pnpm build`·`pnpm lint`(oxlint+eslint, 경고 0)·`pnpm test` 165/165·`pnpm test:e2e` 5/5·`tsc --noEmit` 2개 프로젝트 전부 통과.
-- **커밋**: (아래 참조)
+- **커밋**: `caca9aa`(fix: linkDeps 제거) · `d39cbda`(docs: 이 기록) — 브랜치 `feature/devkit-roadmap`, main 미머지
