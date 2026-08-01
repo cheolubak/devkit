@@ -1811,13 +1811,17 @@ function isMissingRepo(error: unknown): boolean {
   if (code === 'ENOENT') {
     return true;
   }
-  // 저장소가 아니면 git 이 비정상 종료하며 stderr 에 명시한다
+  // 저장소가 아니면 git 이 비정상 종료하며 stderr 에 명시한다.
+  // 이 매칭이 성립하려면 메시지가 영어여야 하므로 아래 run 이 로케일을 고정한다.
   return typeof stderr === 'string' && stderr.includes('not a git repository');
 }
 
 export async function inspectGit(dir: string): Promise<GitState> {
   const stdout = await run('git', ['status', '--porcelain', '-uall'], {
     cwd: dir,
+    // git 메시지를 영어로 고정한다. 번역된 메시지를 만나면 isMissingRepo 가
+    // 정상적인 "저장소 아님"을 못 알아보고, 그 케이스가 예외로 새어 나간다.
+    env: { ...process.env, LC_ALL: 'C', LANG: 'C' },
     maxBuffer: 64 * 1024 * 1024,
   })
     .then((result) => result.stdout)
@@ -1842,6 +1846,7 @@ export async function inspectGit(dir: string): Promise<GitState> {
 - **`-uall`**: 기본값(`-unormal`)은 새 미추적 디렉토리를 `?? nested/` 한 줄로 접는다. devkit 이 `.claude/agents/` 를 통째로 만드는 상황이 정확히 이 경우라, 접힌 채로 세면 이 모듈이 보호하려는 시나리오에서 위험을 과소 보고한다.
 - **`isMissingRepo` 로 좁힌 catch**: 초판은 모든 실패를 `not-a-repo` 로 접으며 *"저장소 아님과 git 미설치는 같은 처리로 이어진다"* 고 정당화했으나, 그 catch 는 권한 오류·손상된 저장소·`maxBuffer` 초과까지 흡수한다. 그 경우들은 **저장소가 실제로 존재하고 미커밋 변경을 가질 수 있으므로** 같은 처리로 이어져서는 안 된다. Task 7 의 `ENOENT` 좁히기를 그대로 옮길 수는 없다 — 여기서 가장 흔한 실패인 "저장소 아님"은 `ENOENT` 가 아니라 비정상 종료라서, `ENOENT` 만 접으면 그 케이스가 예외로 터진다.
 - **`maxBuffer` 상향**: `execFile` 기본값은 1MB다. 변경이 매우 많은 저장소에서 출력이 이를 넘으면 에러가 나는데, 좁힌 catch 아래에서는 그것이 조용한 `not-a-repo` 가 아니라 예외로 드러난다. 그래도 애초에 터지지 않는 편이 낫다.
+- **`LC_ALL=C` · `LANG=C`**: catch 를 stderr 문자열로 좁힌 순간 **메시지가 번역되면 매칭이 깨진다.** 그러면 정상적인 "저장소 아님"이 `not-a-repo` 가 아니라 예외로 새어 나가 호출자를 크래시시킨다 — 좁히기가 만든 새 실패 모드이며, 로케일을 고정해 원천 차단한다. 이것이 없으면 좁히기의 대가로 더 나쁜 회귀를 얻는다.
 
 - [ ] **Step 4: 진입점에서 re-export**
 
