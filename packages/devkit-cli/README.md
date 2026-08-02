@@ -147,9 +147,13 @@ pnpm devbak update --help                       # 사용법만 출력하고 종�
 | `--force` | git 관련 거부만 우회 |
 | `--help` | (`create`·`update` 공통) 사용법 두 줄을 출력하고 종료. 다른 옵션이 있어도 우선한다 |
 
-**`create`와 달리 공식 CLI를 다시 돌리지 않는다.** 파일 삭제·디렉토리 생성·자가검증도 하지 않는다 — 기존 프로젝트에서는 lint 실패가 update의 실패가 아니기 때문이다. 실행하는 것은 오버레이 복사와 `package.json` 병합, `link:` 재계산뿐이다.
+**`create`와 달리 공식 CLI를 다시 돌리지 않는다.** 파일 삭제·디렉토리 생성·자가검증도 하지 않는다 — 기존 프로젝트에서는 lint 실패가 update의 실패가 아니기 때문이다. 실행하는 것은 오버레이 복사와 `package.json` 병합, `link:` 재계산이다.
+
+**단, `deps` 카테고리가 대상이고 `package.json`이 실제로 쓸 파일 목록에 있으면 그 뒤에 대상 프로젝트에서 `pnpm install`도 돈다.** 네트워크를 타고 대상의 `node_modules`를 갈아엎는다는 뜻이다. `--only`로 `deps`를 뺐거나 이번 실행에서 `package.json`이 실제로 바뀌지 않았다면(마커 version만 바뀐 경우도 "바뀐 것"으로 친다) install은 돌지 않는다. 끄는 CLI 플래그는 없다 — `runUpdate`의 `skipInstall`은 프로그램으로 호출할 때만 쓸 수 있는 옵션이고 `devbak update`에는 전달되지 않는다.
 
 **JSON 파일은 통째로 덮지 않는다.** `package.json`·`tsconfig.json`은 키 단위로 병합되므로 직접 추가한 의존성과 `compilerOptions.paths`가 보존된다. 대가로 **키 삭제는 전파되지 않는다.**
+
+**JSON이 아닌 오버레이 파일은 반대로 통째로 덮는다.** 여기 해당하는 것: `CLAUDE.md`(`claude`), `eslint.config.mjs`·`.prettierignore`(`lint`), `.gitignore`(`repo`), `jest.config.js`·`jest-e2e.config.js`·`vitest.config.ts`(`test`), `pnpm-workspace.yaml`(`repo`, monorepo 전용), `.claude/agents/**`·`.claude/commands/**`(`claude`), `.github/workflows/**`(`ci`). 프로젝트 `CLAUDE.md`에 쌓아 온 규칙처럼 사용자가 직접 손댄 내용도 update 한 번에 템플릿판으로 되돌아간다. 데이터 손실은 아니다 — 변경 목록에 "덮어쓰기"로 뜨고, 워킹트리 dirty 게이트 덕에 `git checkout -- <path>`로 되돌릴 수 있다. 특정 파일군을 통째로 빼려면 `--only`에서 그 카테고리를 제외하면 된다 — 예: `CLAUDE.md`를 건드리지 않으려면 `--only ci,lint,ts,test,deps,repo`로 `claude`를 뺀다.
 
 **워킹트리가 dirty하면 거부한다.** 되돌리는 수단이 git이기 때문이다. `--force`로 우회할 수 있지만, 그러면 update의 결과와 미커밋 작업이 같은 diff에 섞인다. **`--dry-run`은 이 게이트를 통과한다** — 아무것도 쓰지 않으므로 되돌림 안전망이 애초에 필요 없고, 여기서 막으면 git 저장소가 아닌 대상에서 "그래도 계속할까요?" 확인 프롬프트에 걸려 비대화형 실행(CI 등)이 멈춰 선다. 즉 **git 저장소가 아닌 대상도 `--dry-run`으로는 미리 볼 수 있다** — 다만 실제 실행(`--dry-run` 없이)은 되돌릴 수단이 없다는 경고를 한 번 더 받는다.
 

@@ -10,7 +10,7 @@
   - **비대화형 가드**: `--yes`도 `--dry-run`도 없이 TTY가 아니면 확인 프롬프트에 매달리는 대신 즉시 거부하고 대안을 안내한다 — CI에서 원인 불명으로 멈춘 것처럼 보이는 상태를 막기 위해서다.
   - `devbak --help`/`devbak update --help`/`devbak create --help` 모두 사용법 두 줄을 출력하고 exit 0.
   - **발견**: `create`는 템플릿 JSON을 원문 그대로 쓰고 `update`는 `JSON.stringify(…, null, 2)`로 재직렬화하므로, 손으로 압축한 JSON 배열이 템플릿에 있으면 갓 생성한 프로젝트에도 "덮어쓰기"가 뜬다. `templates/nest/tsconfig.json`·`templates/monorepo/turbo.json`을 정규형으로 고치고 `tests/overlay-coverage.test.ts`에 방어 테스트를 추가해 재발을 막았다.
-- **검증**: `pnpm test`(단위·스냅샷·e2e), `pnpm lint:ox`, `pnpm lint:es`, `pnpm build` 통과.
+- **검증**: `pnpm test`(단위·스냅샷, e2e 미포함), `pnpm test:e2e`(별도 실행), `pnpm lint:ox`, `pnpm lint:es`, `pnpm build` 통과.
 - **커밋**: `e0e64a7`(설계) ~ `d047982`(update e2e 생성물 보존 수정), 총 18커밋. 문서화 커밋은 별도.
 
 ## 2026-07-26
