@@ -294,3 +294,12 @@
   - `_shared/.claude/commands/review.md`를 임시로 옮겨 신규 단언이 실제로 실패하는지 확인한 뒤 원복해 재통과를 확인.
 - **검증**: `pnpm lint` exit 0(경고 1건, 알려진 항목), `pnpm test` 166개 통과(기존 155 + 신규 11), `pnpm build` 성공, `tsc --noEmit` 2개 프로젝트 통과.
 - **남은 것**: 없음 — 이 작업으로 계획된 9개 태스크와 최종 리뷰 수정이 모두 완료됨.
+
+## 2026-08-02
+
+### 루트 README 작성
+- **변경 파일**: `README.md` (신규)
+- **내용**: 저장소 루트에 README가 없어 7개 패키지의 관계와 소비 방식이 각 패키지 README에만 흩어져 있던 것을 한 곳에 모음. 담은 것: 패키지 표(역할·빌드 유무), 의존 방향 다이어그램(설정 패키지 → devkit-cli 템플릿 → 생성물), `devbak create` 3유형과 형제 디렉토리 위치 제약, 기존 프로젝트에 `link:`로 붙이는 법, 저장소 자체 개발 명령(oxlint+ESLint 하이브리드에서 `buildFromOxlintConfigFile`이 맨 끝에 와야 하는 이유, `pnpm lint`의 `&&` 단락 평가 때문에 ESLint 단독 확인은 `lint:es`), `pnpm test:e2e`가 실패 생성물을 남겨 디스크를 채우는 점, 저장소 구조. 로컬 디렉토리명(`eslint`)·워크스페이스명(`eslint-workspace`)·GitHub 저장소명(`devkit`)이 다른 것도 명시.
+- **핵심 서술**: "빌드 없는 패키지가 기본, 있는 쪽이 예외"라는 비대칭을 전면에 세움 — `link:` 의존은 라이프사이클 스크립트를 돌리지 않으므로 `dist`가 낡으면 소비자가 조용히 옛 설정을 쓴다. 4개 패키지는 JSON·CJS·ESM 순수 객체로 이 문제를 구조적으로 회피하고, 피할 수 없는 `devkit-cli`는 반대로 `dist`가 `src`보다 오래되면 실행을 거부한다.
+- **검증**: README의 사실 주장을 코드로 확인 — 9개 패키지 tsconfig가 실제로 `tsconfig.base.json`을 extends, `vitest.config.ts`의 `include`가 한 단계 제한(`packages/*/tests/*.test.ts`), `engines.node` 범위, 각 패키지 `peerDependencies` 및 ESLint 버전 요구 차이(config-nest는 10 전용, plugin-fsd는 9||10).
+- **커밋**: `docs: 루트 README 작성` — README와 이 기록이 같은 커밋이라 해시를 자기참조할 수 없어 제목으로 적는다. 브랜치 `main`
