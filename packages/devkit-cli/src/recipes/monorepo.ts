@@ -17,6 +17,12 @@ export const monorepoRecipe: Recipe = (options = {}) => {
   const steps: Step[] = [
     copyOverlay('monorepo'),
 
+    // 유형과 무관한 Claude 리뷰 자산. 리뷰는 저장소 단위이므로 **루트에만**
+    // 놓는다 — CI 워크플로는 저장소 루트의 .github/workflows/ 만 인식하고,
+    // /review 커맨드도 저장소를 열었을 때 보여야 한다. 아래 next 합성이
+    // apps/web 에 같은 것을 또 놓으므로 그쪽은 제거한다.
+    copyOverlay('_shared'),
+
     makeDirs(['apps', 'packages']),
 
     compose(
@@ -40,6 +46,17 @@ export const monorepoRecipe: Recipe = (options = {}) => {
     // 에러로 전체 린트가 죽는다. required: true로 next 템플릿이 이 파일을
     // 더는 만들지 않게 되는 변화도 놓치지 않는다.
     removeFiles([join('apps', 'web', 'eslint.config.mjs')], { required: true }),
+
+    // 🚨 next 레시피가 apps/web 에 놓은 리뷰 자산을 지운다. 리뷰는 저장소
+    // 단위이고 루트에 이미 놓았다(위). 앱 하위의 .github/workflows/ 는
+    // GitHub 이 아예 인식하지 않으므로 그대로 두면 "워크플로가 있는데 왜
+    // 안 도는가"라는 침묵하는 오해를 남긴다. 모노레포판 리뷰어 에이전트도
+    // 루트에 있으므로 앱 쪽 next 판은 중복이다.
+    // required: true — next 레시피가 _shared 를 더는 놓지 않게 바뀌면
+    // 이 제거가 조용히 무의미해지는 대신 여기서 드러난다(설계 6.1절).
+    removeFiles([join('apps', 'web', '.claude'), join('apps', 'web', '.github')], {
+      required: true,
+    }),
 
     // apps/web이 catalog를 참조하게 한다. 버전 문자열이 중복되지 않는다.
     mergeJson(

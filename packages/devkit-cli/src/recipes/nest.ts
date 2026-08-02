@@ -41,6 +41,11 @@ export const nestRecipe: Recipe = (options = {}) => {
       },
     ),
 
+    // 유형과 무관한 Claude 리뷰 자산 — /review 슬래시 커맨드와 PR 자동 리뷰
+    // 워크플로. 유형별 리뷰어 에이전트(.claude/agents/)는 위 오버레이가 이미
+    // 넣었고, 이 둘만 세 유형이 공유한다.
+    copyOverlay('_shared'),
+
     mergeJson(
       {
         devDependencies: {

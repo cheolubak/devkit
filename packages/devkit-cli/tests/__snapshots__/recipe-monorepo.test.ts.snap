@@ -12,6 +12,14 @@ exports[`monorepo 레시피 > 단계 목록이 스냅샷과 일치한다 1`] = `
   },
   {
     "detail": {
+      "expectUpstream": [],
+      "template": "_shared",
+      "vars": [],
+    },
+    "kind": "copyOverlay",
+  },
+  {
+    "detail": {
       "paths": [
         "apps",
         "packages",
@@ -53,6 +61,11 @@ exports[`monorepo 레시피 > 단계 목록이 스냅샷과 일치한다 1`] = `
         {
           "expectUpstream": [],
           "template": "next",
+          "vars": [],
+        },
+        {
+          "expectUpstream": [],
+          "template": "_shared",
           "vars": [],
         },
         {
@@ -118,6 +131,16 @@ exports[`monorepo 레시피 > 단계 목록이 스냅샷과 일치한다 1`] = `
     "detail": {
       "paths": [
         "apps/web/eslint.config.mjs",
+      ],
+      "required": true,
+    },
+    "kind": "removeFiles",
+  },
+  {
+    "detail": {
+      "paths": [
+        "apps/web/.claude",
+        "apps/web/.github",
       ],
       "required": true,
     },

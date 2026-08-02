@@ -34,6 +34,15 @@ export const nextRecipe: Recipe = (options = {}) => {
 
     copyOverlay('next'),
 
+    // 유형과 무관한 Claude 리뷰 자산 — /review 슬래시 커맨드와 PR 자동 리뷰
+    // 워크플로. 유형별 리뷰어 에이전트(.claude/agents/)는 위 오버레이가 이미
+    // 넣었고, 이 둘만 세 유형이 공유한다.
+    //
+    // monorepo 레시피는 이 레시피를 apps/web 에 합성하므로 여기서 놓인 것이
+    // 앱 하위로 들어간다 — 리뷰 자산은 저장소 루트에 있어야 하므로 그쪽에서
+    // 지우고 루트에 다시 놓는다(monorepo.ts).
+    copyOverlay('_shared'),
+
     // typescript-eslint는 templates/next/eslint.config.mjs가 파서로 쓴다.
     // @devbak/eslint-plugin-fsd는 파서를 제공하지 않아(consumer 책임) 이게
     // 없으면 .ts/.tsx의 타입 문법을 espree가 파싱하지 못해 eslint가 죽는다
