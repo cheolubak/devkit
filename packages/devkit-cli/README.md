@@ -19,6 +19,7 @@
 ```bash
 pnpm build            # devkit-cli의 dist를 최신화한다 (필수 — 아래 참고)
 pnpm devbak create <name> --type <nest|next|monorepo> [--no-verify]
+pnpm devbak create --help                          # 사용법만 출력하고 종료
 ```
 
 - `<name>`: 생성할 디렉토리 이름이자 프로젝트 이름. 이미 존재하는 디렉토리는
@@ -27,6 +28,7 @@ pnpm devbak create <name> --type <nest|next|monorepo> [--no-verify]
 - `--no-verify`: 생성 후 `pnpm install`은 그대로 하되 자가검증(`pnpm lint` /
   `pnpm build`)은 건너뛴다. 설치조차 건너뛰는 옵션은 없다 — 설치 없이는
   린트·빌드가 애초에 의미가 없다.
+- `--help`: `create`·`update` 공통. 사용법 두 줄을 출력하고 exit 0.
 
 CLI는 실행 전에 `dist/bin.js`가 `src/`보다 새로운지 확인하고, 오래됐으면
 막는다. `link:` 소비는 어떤 라이프사이클 스크립트도 돌리지 않으므로 빌드를
@@ -160,3 +162,5 @@ pnpm devbak update --help                       # 사용법만 출력하고 종�
 ### 개발자용 — 템플릿 JSON은 정규형이어야 한다
 
 `create`는 템플릿 JSON을 원문 텍스트 그대로 쓰지만 `update`는 `JSON.stringify(…, null, 2)`로 재직렬화한다. 템플릿에 손으로 압축한 배열(예: `["src", "test"]`을 한 줄로)이 있으면 의미는 같아도 바이트가 달라져, 갓 생성한 프로젝트에 `update`를 돌려도 "덮어쓰기"가 뜬다. `tests/overlay-coverage.test.ts`의 방어 테스트가 `templates/**/*.json`이 정규형인지 고정한다 — 새 템플릿 JSON을 추가할 때는 `JSON.stringify(JSON.parse(t), null, 2) + '\n'`와 바이트가 같은지 먼저 확인한다.
+
+템플릿·테스트를 고친 뒤에는 `pnpm test`뿐 아니라 `pnpm lint:ox`·`pnpm lint:es`도 **둘 다** 돌려야 한다 — 이유는 루트 [`README.md`](../../README.md#이-저장소에서-개발하기)의 "린트는 oxlint + ESLint 하이브리드다" 절 참고.

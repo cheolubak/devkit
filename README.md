@@ -133,7 +133,12 @@ pnpm lint:fix
 보고된다.
 
 `pnpm lint`는 `&&` 단락 평가라 oxlint가 실패하면 ESLint는 아예 돌지 않는다.
-ESLint 쪽만 확인하려면 `pnpm lint:es`를 쓴다.
+**검증할 때는 `pnpm lint:ox`와 `pnpm lint:es`를 둘 다 돌려야 한다.** `pnpm
+lint:es`만으로는 부족하다 — `eslint-plugin-oxlint`가 oxlint와 겹치는 규칙을
+ESLint 쪽에서 꺼 두므로, `no-unused-vars` 같은 규칙은 **oxlint에만 남아 있고**
+`lint:es`는 그 위반에 대해 항상 초록불이다(위반이 없어서가 아니라 애초에 보지
+않아서다). 실측: 미사용 `import type`이 `pnpm lint:es`를 통과한 채 커밋됐다가
+`pnpm lint:ox`(따라서 `pnpm lint`)에서 걸렸다(`91590af`).
 
 ### e2e 테스트는 디스크를 쓴다
 
