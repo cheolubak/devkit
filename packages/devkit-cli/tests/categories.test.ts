@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   CATEGORIES,
   categoryOf,
+  categoryOfJsonPath,
   DEFAULT_EXCLUDED_CATEGORIES,
   JSON_KEY_CATEGORIES,
+  MARKER_KEY,
   parseOnly,
+  PROJECT_OWNED_KEYS,
   UnknownCategoryError,
 } from '../src/lib/categories.js';
 
@@ -130,8 +133,25 @@ describe('CATEGORIES', () => {
 });
 
 describe('JSON_KEY_CATEGORIES', () => {
-  it('설계 5.4절과 일치한다 — prettier는 lint, devDependencies는 deps', () => {
-    expect(JSON_KEY_CATEGORIES).toEqual({ prettier: 'lint', devDependencies: 'deps' });
+  it('설계 6.2절과 일치한다', () => {
+    expect(JSON_KEY_CATEGORIES).toEqual({
+      dependencies: 'deps',
+      devDependencies: 'deps',
+      prettier: 'lint',
+      jest: 'test',
+      'scripts.lint': 'lint',
+      'scripts.format': 'lint',
+      'scripts.format:check': 'lint',
+      'scripts.test': 'test',
+      'scripts.test:watch': 'test',
+      'scripts.test:e2e': 'test',
+      'scripts.build': 'repo',
+      'scripts.dev': 'repo',
+      'scripts.typecheck': 'repo',
+      packageManager: 'repo',
+      private: 'repo',
+      type: 'repo',
+    });
   });
 
   it('모든 값이 CATEGORIES 안에 있다', () => {
@@ -139,5 +159,55 @@ describe('JSON_KEY_CATEGORIES', () => {
     for (const category of Object.values(JSON_KEY_CATEGORIES)) {
       expect(known).toContain(category);
     }
+  });
+});
+
+describe('categoryOfJsonPath', () => {
+  it.each([
+    ['dependencies', 'deps'],
+    ['devDependencies', 'deps'],
+    ['devDependencies.eslint', 'deps'],
+    ['devDependencies.@devbak/tsconfig', 'deps'],
+    ['prettier', 'lint'],
+    ['jest', 'test'],
+    ['scripts.lint', 'lint'],
+    ['scripts.format', 'lint'],
+    ['scripts.format:check', 'lint'],
+    ['scripts.test', 'test'],
+    ['scripts.test:watch', 'test'],
+    ['scripts.test:e2e', 'test'],
+    ['scripts.build', 'repo'],
+    ['scripts.dev', 'repo'],
+    ['scripts.typecheck', 'repo'],
+    ['packageManager', 'repo'],
+    ['private', 'repo'],
+    ['type', 'repo'],
+  ])('%s → %s', (path, expected) => {
+    expect(categoryOfJsonPath(path)).toBe(expected);
+  });
+
+  it('중간 노드는 null을 반환해 더 내려가게 한다', () => {
+    // scripts 자체에는 카테고리가 없다 — 하위 키마다 다르기 때문이다.
+    expect(categoryOfJsonPath('scripts')).toBeNull();
+  });
+
+  it('표에 없는 경로도 null이다 — 던지는 것은 호출자의 몫이다', () => {
+    expect(categoryOfJsonPath('nonsense')).toBeNull();
+  });
+
+  it('더 긴 prefix가 이긴다', () => {
+    // 'scripts.test'와 'scripts.test:e2e'가 둘 다 있을 때 후자가 이겨야
+    // 한다. 'scripts.test'가 이기면 'scripts.test:e2e'는 영영 안 걸린다.
+    expect(categoryOfJsonPath('scripts.test:e2e')).toBe('test');
+  });
+});
+
+describe('마커·프로젝트 고유 키', () => {
+  it('마커 키는 devkit이다', () => {
+    expect(MARKER_KEY).toBe('devkit');
+  });
+
+  it('name·version은 프로젝트 고유값이라 재적용 대상이 아니다', () => {
+    expect([...PROJECT_OWNED_KEYS]).toEqual(['name', 'version']);
   });
 });

@@ -56,22 +56,74 @@ const FILE_PATTERNS: ReadonlyArray<readonly [RegExp, Category]> = [
 ];
 
 /**
- * `package.json` 의 **키 단위** 카테고리(설계 5.4절).
+ * `package.json` 의 **키 경로** 카테고리(설계 6.2절).
  *
- * 같은 이름이 두 역할을 겸하므로 구분해야 한다.
- * - `monorepo` 처럼 템플릿이 `package.json` 을 **통째로** 놓는 경우는 파일이며,
- *   위 `FILE_PATTERNS` 가 `repo` 로 분류한다.
- * - `nest`·`next` 처럼 공식 CLI 산출물에 **키를 얹는** 경우는 파일이 아니라
- *   `mergeJson` 패치이며, 그 몫이 이 테이블이다.
+ * `package.json` 만 키 단위인 이유는 그 파일의 키가 실제로 여러 카테고리에
+ * 걸쳐 있기 때문이다 — `prettier` 는 lint, `devDependencies` 는 deps,
+ * `jest` 는 test 다. 파일 하나로 뭉뚱그리면 `--only lint` 가 의존성까지
+ * 갱신한다. 다른 JSON 파일(`tsconfig.json`·`turbo.json`)은 파일 카테고리를
+ * 그대로 물려받는다.
  *
- * 훗날 `update` 조립자가 mergeJson 패치를 `--only` 로 거를 때 이 테이블을 쓴다.
- * 파일 오버레이와 달리 오버레이 커버리지 테스트가 이쪽을 훑지 못하므로,
- * JSON 패치를 추가할 때는 여기도 함께 갱신해야 한다.
+ * 점 경로 prefix 매칭이며 **더 긴 쪽이 이긴다**. `devDependencies.eslint` 는
+ * `devDependencies` 에 걸리고, `scripts.lint` 는 `scripts` 에 항목이 없으므로
+ * 자기 자신에 걸린다.
+ *
+ * 여기 없는 경로를 만나면 호출자가 던진다(설계 6.3절). 조용히 건너뛰면 그
+ * 키는 어떤 `--only` 로도 갱신되지 않으면서 성공을 보고한다.
  */
 export const JSON_KEY_CATEGORIES: Readonly<Record<string, Category>> = {
-  prettier: 'lint',
+  dependencies: 'deps',
   devDependencies: 'deps',
+  prettier: 'lint',
+  jest: 'test',
+  'scripts.lint': 'lint',
+  'scripts.format': 'lint',
+  'scripts.format:check': 'lint',
+  'scripts.test': 'test',
+  'scripts.test:watch': 'test',
+  'scripts.test:e2e': 'test',
+  'scripts.build': 'repo',
+  'scripts.dev': 'repo',
+  'scripts.typecheck': 'repo',
+  packageManager: 'repo',
+  private: 'repo',
+  type: 'repo',
 };
+
+/**
+ * 유형 마커의 키. 카테고리를 갖지 않는다 — `--only` 로 거르는 대상이
+ * 아니라 전체 update 만 심는 별도 취급이다(설계 4.2절).
+ */
+export const MARKER_KEY = 'devkit';
+
+/**
+ * 프로젝트 고유값이라 재적용 대상에서 제외하는 `package.json` 키.
+ *
+ * 템플릿의 `"name": "__NAME__"` 은 create 가 디렉토리 이름으로 치환하는
+ * 자리다. update 가 이를 다시 쓰면 사용자가 바꾼 패키지 이름을 디렉토리
+ * 이름으로 되돌린다(설계 5.5절).
+ */
+export const PROJECT_OWNED_KEYS: readonly string[] = ['name', 'version'];
+
+/**
+ * 점 경로에 해당하는 카테고리. 더 내려가야 하면 `null`.
+ *
+ * `null` 은 "모른다"가 아니라 "이 노드에서는 결정할 수 없으니 자식으로
+ * 내려가라"는 뜻이다. 잎(leaf)에 닿았는데도 `null` 이면 그때 호출자가
+ * `UnknownCategoryError` 를 던진다.
+ */
+export function categoryOfJsonPath(path: string): Category | null {
+  let best: { key: string; category: Category } | null = null;
+
+  for (const [key, category] of Object.entries(JSON_KEY_CATEGORIES)) {
+    if (path !== key && !path.startsWith(`${key}.`)) continue;
+    if (best === null || key.length > best.key.length) {
+      best = { key, category };
+    }
+  }
+
+  return best?.category ?? null;
+}
 
 export function categoryOf(relPath: string): Category | null {
   const normalized = relPath.replaceAll('\\', '/');
