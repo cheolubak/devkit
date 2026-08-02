@@ -316,3 +316,22 @@
 - **핵심 서술**: "빌드 없는 패키지가 기본, 있는 쪽이 예외"라는 비대칭을 전면에 세움 — `link:` 의존은 라이프사이클 스크립트를 돌리지 않으므로 `dist`가 낡으면 소비자가 조용히 옛 설정을 쓴다. 4개 패키지는 JSON·CJS·ESM 순수 객체로 이 문제를 구조적으로 회피하고, 피할 수 없는 `devkit-cli`는 반대로 `dist`가 `src`보다 오래되면 실행을 거부한다.
 - **검증**: README의 사실 주장을 코드로 확인 — 9개 패키지 tsconfig가 실제로 `tsconfig.base.json`을 extends, `vitest.config.ts`의 `include`가 한 단계 제한(`packages/*/tests/*.test.ts`), `engines.node` 범위, 각 패키지 `peerDependencies` 및 ESLint 버전 요구 차이(config-nest는 10 전용, plugin-fsd는 9||10).
 - **커밋**: `docs: 루트 README 작성` — README와 이 기록이 같은 커밋이라 해시를 자기참조할 수 없어 제목으로 적는다. 브랜치 `main`
+
+### 최종 전체 브랜치 리뷰 대응 — fix wave (I1~I3, M1~M9)
+- **변경 파일**: `packages/devkit-cli/src/update/{plan,index}.ts`, `packages/devkit-cli/src/ops/copy-overlay.ts`, `packages/devkit-cli/src/index.ts`, `packages/devkit-cli/README.md`, `packages/devkit-cli/tests/{update-plan,update-flow}.test.ts`, `work-log.md`
+- **내용**: `feature/devkit-update` 전체 브랜치 리뷰(`.superpowers/sdd/2026-08-02-devkit-update/final-review.md`)가 낸 Important 3건 + FIX SOON 9건을 한 번에 처리.
+  - **I1**: README가 `pnpm install`이 도는 사실을 아예 적지 않아 "install은 안 돈다"로 읽혔다. `deps` 카테고리가 대상이고 `package.json`이 실제 쓰기 목록에 있을 때 대상 프로젝트에서 `pnpm install`이 돈다는 조건을 명시하고, 끄는 CLI 플래그가 없다는 것(`skipInstall`은 프로그램 API 전용)도 적었다. `--no-install` 플래그 자체는 지시 범위 밖이라 만들지 않았다.
+  - **I2**: "JSON 파일은 통째로 덮지 않는다"만 있어 역(비-JSON은 통째로 덮는다)이 문서에 없었다. 실제 `templates/**` 트리를 `find`로 확인해 통짜 덮어쓰기 대상(`CLAUDE.md`·`eslint.config.mjs`·`.gitignore`·`.prettierignore`·`jest*.config.js`·`vitest.config.ts`·`pnpm-workspace.yaml`·`.claude/**`·`.github/workflows/**`)을 README에 명시하고 `--only`로 빼는 예시를 추가.
+  - **I3**: `readJsonOrEmpty`가 대상 JSON 파싱 실패를 경로 없는 `SyntaxError`로 흘렸다 — 주석 섞인 `tsconfig.json` 같은 현실적인 입력에서 사용자가 어느 파일인지 알 수 없었다. `${경로}: JSON 파싱 실패`로 경로를 얹고 원본을 `cause`로 보존(같은 모듈 `json-patch.ts`의 관용과 통일). 재현 테스트 추가.
+  - **M1**: `PLANNABLE` 화이트리스트가 `step.plan === undefined`와 항상 같은 값을 내면서 "미래에 `plan()`을 얻은 op를 조용히 떨어뜨리는" 능력만 갖고 있었다 — 삭제하고 `plan` 존재 자체를 신호로 씀(옵션 a). "조용한 실패 금지" 원칙에 더 직접 부합한다고 판단.
+  - **M2**: `isJsonOverlay`(루트 기준)와 `isPackageJson`(단계 기준)의 경로 기준을 단계 기준으로 통일. 결과는 이전과 동일(둘 다 basename만 비교)함을 기존 monorepo 테스트로 재확인. `reduceJsonOverlay`만 에러 메시지 품질을 위해 루트 기준을 유지하며 이유를 주석으로 남김.
+  - **M3**: 표시 정렬을 `localeCompare`(ICU 로케일 의존)에서 결정적 비교로 교체.
+  - **M4**: `copy-overlay.ts`의 순차 `await` 2건에 이유 없는 oxlint warning이 있었다 — 브랜치 내 다른 6곳과 같은 `oxlint-disable-next-line -- <이유>` 관용으로 맞춤. 적용 후 해당 warning 2건이 `pnpm lint:ox` 출력에서 사라진 것을 확인.
+  - **M5**: monorepo 대상에 `apps/web/package.json`이 없으면(예: `apps/site`로 개명) `apps/web` 트리 전체가 "신규"로 생성된다 — 경고 로그 추가.
+  - **M6**: `--only scaffold`가 `nest`에서 실제로 `src/main.ts`를 내는 합성 경로가 테스트로 비어 있었다 — 양성 방향 단언 추가.
+  - **M7**: `--force`가 `gitGate`를 통째로 조기 반환해 not-a-repo 경고까지 없앴다(README는 "git 관련 거부만 우회"라 적음) — `inspectGit` 호출을 force 체크보다 앞으로 옮기고, force는 dirty throw·not-a-repo confirm만 건너뛰도록 재구성. 부작용: `--dry-run --force` 조합의 로그가 미세하게 바뀜(이전엔 force가 먼저라 dry-run 알림도 안 나왔는데 이제 나옴) — 테스트가 없던 조합이고 기능 영향은 없어 그대로 진행.
+  - **M8**: `src/index.ts` 헤더 주석이 "update가 조립할 순수 모듈만 노출"이라 적었으나 실제로는 조립기(`runUpdate`·`buildPlan`)도 내보낸다 — 현재 사실로 정정.
+  - **M9**: 이 파일의 "devkit update 구현" 항목(위 참고)이 "`pnpm test`(단위·스냅샷·e2e)"라고 적었으나 `pnpm test`엔 e2e가 없다(`vitest.e2e.config.ts` 별도) — 정정.
+  - 기존 테스트 중 이 변경들로 깨진 것은 없었다(362/362 그대로 통과) — M1·M7처럼 동작이 바뀌는 항목에서 "먼저 물어라"가 필요한 상황 자체가 발생하지 않았다.
+- **검증**: `pnpm test` 362/362 통과, `pnpm lint:ox` 에러 0(warning 3, 전부 이 변경 이전부터 있던 이월 항목), `pnpm lint:es` clean, `pnpm build`(devkit-cli·eslint-config-nest·eslint-plugin-fsd) 성공.
+- **커밋**: `de66180`(fix: 소스 4파일) · `497a996`(test: 회귀 테스트 2파일) · `4534576`(docs: README·work-log). 브랜치 `feature/devkit-update`, main 미머지.
