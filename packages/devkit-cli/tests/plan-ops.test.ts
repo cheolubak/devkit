@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { copyOverlay } from '../src/ops/copy-overlay.js';
+import { linkDeps } from '../src/ops/link-deps.js';
+import { mergeJson } from '../src/ops/merge-json.js';
 import type { Ctx } from '../src/types.js';
 
 const created: string[] = [];
@@ -54,5 +56,45 @@ describe('copyOverlay.plan', () => {
     await copyOverlay('_shared').plan!(ctx);
     const { readdirSync } = await import('node:fs');
     expect(readdirSync(ctx.targetDir)).toEqual([]);
+  });
+});
+
+describe('mergeJson.plan', () => {
+  it('패치를 그대로 낸다 — 대상 파일을 읽지 않는다', async () => {
+    // 대상에 package.json이 아예 없어도 plan은 성공해야 한다. update의
+    // 기준 내용은 조립자가 정하기 때문이다(가상 파일맵, 설계 5.4절).
+    const step = mergeJson({ prettier: '@devbak/prettier-config' });
+    const changes = await step.plan!(makeCtx());
+
+    expect(changes).toEqual([
+      { kind: 'json', file: 'package.json', patch: { prettier: '@devbak/prettier-config' } },
+    ]);
+  });
+
+  it('file 옵션을 그대로 전달한다', async () => {
+    const step = mergeJson({ scripts: { lint: null } }, { file: 'apps/web/package.json' });
+    const changes = await step.plan!(makeCtx());
+
+    expect(changes[0]).toMatchObject({ kind: 'json', file: 'apps/web/package.json' });
+  });
+});
+
+describe('linkDeps.plan', () => {
+  it('toolkitRoot까지의 상대경로로 devDependencies 패치를 낸다', async () => {
+    const ctx = { ...makeCtx(), targetDir: '/a/b/demo', toolkitRoot: '/a/b/eslint' };
+    const changes = await linkDeps(['tsconfig', 'prettier-config']).plan!(ctx);
+
+    expect(changes).toEqual([
+      {
+        kind: 'json',
+        file: 'package.json',
+        patch: {
+          devDependencies: {
+            '@devbak/tsconfig': 'link:../eslint/packages/tsconfig',
+            '@devbak/prettier-config': 'link:../eslint/packages/prettier-config',
+          },
+        },
+      },
+    ]);
   });
 });

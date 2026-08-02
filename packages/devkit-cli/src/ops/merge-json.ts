@@ -55,6 +55,9 @@ export function mergeJson(patch: JsonObject, options: MergeJsonOptions = {}): St
     kind: 'mergeJson',
     label: `${file} 병합`,
     describe: () => ({ file, patch, required }),
+    // 패치는 정적이므로 대상 파일을 읽지 않는다. 기준 내용을 무엇으로 볼지는
+    // 조립자가 정한다 — create 는 디스크, update 는 가상 파일맵이다(설계 5.4절).
+    plan: () => Promise.resolve([{ kind: 'json', file, patch }]),
     run: async (ctx: Ctx) => {
       const path = join(ctx.targetDir, file);
       const parsed = JSON.parse(await readFile(path, 'utf8')) as unknown;
@@ -63,6 +66,9 @@ export function mergeJson(patch: JsonObject, options: MergeJsonOptions = {}): St
         throw new Error(`Invalid JSON in ${file}: expected object`);
       }
 
+      // required 는 생성 시점 전용 가드다 — 위임 대상(공식 CLI)의 산출물이
+      // 바뀌었는지 본다. plan 에 두지 않는 것이 요구다: 여기 적힌 키들은
+      // 이 패치가 지우는 대상이라 기존 프로젝트에는 없다(설계 1.2절).
       for (const key of required) {
         if (!hasPath(parsed, key)) {
           throw new Error(
