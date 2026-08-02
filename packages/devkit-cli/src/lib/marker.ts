@@ -6,6 +6,8 @@
  * create 가 심어 둔 마커만 신뢰한다(설계 5.1절).
  */
 
+import type { JsonObject } from '../ops/merge-json.js';
+
 export const PROJECT_TYPES = ['nest', 'next', 'monorepo'] as const;
 
 export type ProjectType = (typeof PROJECT_TYPES)[number];
@@ -60,7 +62,14 @@ export function readMarker(packageJson: unknown): DevkitMarker {
   return { type: type as ProjectType, version };
 }
 
-/** create 와 전체 update 가 mergeJson 에 넘길 패치. */
-export function markerPatch(type: ProjectType, version: string): { devkit: DevkitMarker } {
+/**
+ * create 와 전체 update 가 mergeJson 에 넘길 패치.
+ *
+ * 반환 타입이 `JsonObject` 인 것은 소비처가 전부 패치 합성기이기 때문이다 —
+ * `{ devkit: DevkitMarker }` 는 인터페이스라 인덱스 시그니처가 없어
+ * `JsonObject` 에 대입되지 않고, 그러면 호출부마다 캐스팅이 붙는다.
+ * 구조가 이미 JSON 이므로 넓히는 쪽이 맞다.
+ */
+export function markerPatch(type: ProjectType, version: string): JsonObject {
   return { devkit: { type, version } };
 }
