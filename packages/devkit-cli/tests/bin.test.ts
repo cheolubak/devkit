@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { findToolkitRoot, main } from '../src/bin.js';
 
 const created: string[] = [];
@@ -25,6 +25,32 @@ describe('findToolkitRoot', () => {
     const orphan = mkdtempSync(join(tmpdir(), 'devbak-orphan-'));
     created.push(orphan);
     expect(() => findToolkitRoot(orphan)).toThrow(/pnpm-workspace\.yaml/);
+  });
+});
+
+describe('--help', () => {
+  it('사용법을 내고 정상 종료한다 — 커맨드 앞뒤 어디에 와도', async () => {
+    // parseArgs 는 strict 가 기본이라 옵션 테이블에 help 가 없으면
+    // `Unknown option '--help'` 로 죽는다. 서브커맨드가 둘인 CLI 에서
+    // 사용법에 도달하는 표준 경로가 없으면 안 된다.
+    const written: string[] = [];
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      written.push(String(chunk));
+      return true;
+    });
+
+    try {
+      await expect(main(['--help'])).resolves.toBeUndefined();
+      await expect(main(['update', '--help'])).resolves.toBeUndefined();
+    } finally {
+      write.mockRestore();
+    }
+
+    expect(written).toHaveLength(2);
+    for (const output of written) {
+      expect(output).toContain('pnpm devbak create <name> --type');
+      expect(output).toContain('pnpm devbak update [path]');
+    }
   });
 });
 

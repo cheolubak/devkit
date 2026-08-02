@@ -78,8 +78,17 @@ export async function main(argv: string[]): Promise<void> {
       'dry-run': { type: 'boolean', default: false },
       yes: { type: 'boolean', default: false },
       force: { type: 'boolean', default: false },
+      help: { type: 'boolean', default: false },
     },
   });
+
+  // 도움말은 오류가 아니므로 stdout 으로 내고 종료 코드 0 으로 끝난다.
+  // assertDistFresh 보다 앞에 둔다 — 낡은 dist 때문에 사용법조차 못 보면
+  // 사용자는 무엇을 잘못 쳤는지 확인할 길이 없다.
+  if (values.help === true) {
+    process.stdout.write(`${USAGE}\n`);
+    return;
+  }
 
   const [command, ...rest] = positionals;
   if (command !== 'create' && command !== 'update') {
