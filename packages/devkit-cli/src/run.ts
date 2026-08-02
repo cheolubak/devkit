@@ -20,6 +20,7 @@ export function compose(label: string, steps: Step[], mapCtx: (ctx: Ctx) => Ctx)
     kind: 'compose',
     label,
     describe: () => ({ label, steps: steps.map((s) => s.describe()) }),
+    children: { steps, mapCtx },
     run: async (ctx: Ctx) => {
       await run(steps, mapCtx(ctx));
     },

@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, posix, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Ctx, Step } from '../types.js';
+import type { Ctx, PlannedChange, Step } from '../types.js';
 import { pathExists } from './path-exists.js';
 
 /** '_' 접두어를 '.'으로 바꾼다. _gitignore → .gitignore */
@@ -10,38 +11,60 @@ export function templateFileName(name: string): string {
   return name.startsWith('_') ? `.${name.slice(1)}` : name;
 }
 
-/** dist/ 기준으로 templates/ 디렉토리를 찾는다. */
+/**
+ * templates/ 디렉토리를 찾는다. 이 모듈이 두 레이아웃으로 로드될 수 있다는
+ * 실측 사실 때문에 한 단계가 아니다:
+ *
+ * - 배포판(tsup 번들): dist/ 아래가 flat 하다(dist/bin.js, dist/chunk-*.js —
+ *   서브폴더 없음). 이 파일의 위치가 dist/이므로 한 단계(..)만 올라가면
+ *   templates/에 닿는다.
+ * - vitest(소스 직접 실행): 이 파일이 src/ops/에 있으므로 devkit-cli
+ *   루트까지 두 단계(../..)를 올라가야 한다.
+ *
+ * 조용히 잘못된 경로를 고르면 호출부가 `scandir ENOENT`라는 엉뚱한 에러로
+ * 죽는다 — 둘 다 없으면 원인을 바로 알 수 있도록 명시적으로 던진다.
+ */
 function templatesRoot(): string {
-  return join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
+  const here = dirname(fileURLToPath(import.meta.url));
+  const bundledLayout = join(here, '..', 'templates');
+  const sourceLayout = join(here, '..', '..', 'templates');
+  if (existsSync(bundledLayout)) return bundledLayout;
+  if (existsSync(sourceLayout)) return sourceLayout;
+  throw new Error(`templates 디렉토리를 찾지 못했습니다 (확인한 경로: ${bundledLayout}, ${sourceLayout}).`);
 }
 
-async function copyTree(from: string, to: string, vars: Record<string, string>): Promise<string[]> {
-  await mkdir(to, { recursive: true });
+/**
+ * 템플릿 트리를 읽어 (상대경로, 최종 내용) 목록으로 만든다. **쓰지 않는다.**
+ *
+ * 상대경로는 POSIX `/` 로 고정한다 — 카테고리 패턴 테이블이 `/` 를 기준으로
+ * 쓰였고(categoryOf 가 스스로 정규화하긴 하지만), 변경 목록 출력도 플랫폼과
+ * 무관해야 스냅샷이 안정적이다.
+ */
+async function collectTree(
+  from: string,
+  relDir: string,
+  vars: Record<string, string>,
+): Promise<PlannedChange[]> {
   const entries = await readdir(from, { withFileTypes: true });
 
-  const results = await Promise.all(
-    entries.map(async (entry) => {
-      const target = join(to, templateFileName(entry.name));
-      const source = join(from, entry.name);
+  const nested = await Promise.all(
+    entries.map(async (entry): Promise<PlannedChange[]> => {
+      const name = templateFileName(entry.name);
+      const rel = relDir === '' ? name : posix.join(relDir, name);
 
       if (entry.isDirectory()) {
-        return await copyTree(source, target, vars);
+        return await collectTree(join(from, entry.name), rel, vars);
       }
 
-      let content = await readFile(source, 'utf8');
+      let content = await readFile(join(from, entry.name), 'utf8');
       for (const [key, value] of Object.entries(vars)) {
         content = content.replaceAll(`__${key}__`, value);
       }
-      await writeFile(target, content);
-      return [target];
+      return [{ kind: 'file', relPath: rel, content }];
     }),
   );
 
-  const written: string[] = [];
-  for (const result of results) {
-    written.push(...result);
-  }
-  return written;
+  return nested.flat();
 }
 
 /**
@@ -92,16 +115,28 @@ export function copyOverlay(
 ): Step {
   const expectUpstream = options.expectUpstream ?? {};
 
+  const plan = async (ctx: Ctx): Promise<PlannedChange[]> =>
+    await collectTree(join(templatesRoot(), template), '', { NAME: ctx.name, ...vars });
+
   return {
     kind: 'copyOverlay',
     label: `오버레이 복사: templates/${template}`,
     describe: () => ({ template, vars: Object.keys(vars), expectUpstream: Object.keys(expectUpstream) }),
+    plan,
     run: async (ctx: Ctx) => {
+      // 드리프트 감지는 생성 시점 전용 가드다 — 공식 CLI 산출물이 바뀌었는지
+      // 본다. plan 에 두지 않는 것이 요구다: update 는 plan 만 호출하므로
+      // 사람이 고친 기존 파일을 상류 변경으로 오인하지 않는다(설계 1.3절).
       await assertNoDrift(ctx.targetDir, expectUpstream);
-      const from = join(templatesRoot(), template);
-      const allVars = { NAME: ctx.name, ...vars };
-      const written = await copyTree(from, ctx.targetDir, allVars);
-      for (const file of written) ctx.log(`  복사: ${file.slice(ctx.targetDir.length + 1)}`);
+
+      const changes = await plan(ctx);
+      for (const change of changes) {
+        if (change.kind !== 'file') continue;
+        const target = join(ctx.targetDir, ...change.relPath.split('/'));
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(target, change.content);
+        ctx.log(`  복사: ${change.relPath.split('/').join(sep)}`);
+      }
     },
   };
 }

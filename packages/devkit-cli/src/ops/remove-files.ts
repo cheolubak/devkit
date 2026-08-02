@@ -31,6 +31,9 @@ export function removeFiles(paths: string[], options: RemoveFilesOptions = {}): 
     kind: 'removeFiles',
     label: `삭제: ${paths.join(', ')}`,
     describe: () => ({ paths, required }),
+    // update 는 이 단계를 실행하지 않지만, 계획에서는 반영해야 한다.
+    // 자세한 이유는 types.ts 의 Step.removes 주석과 설계 5.7절.
+    removes: paths,
     run: async (ctx: Ctx) => {
       const logs = await Promise.all(
         paths.map(async (path): Promise<string | undefined> => {

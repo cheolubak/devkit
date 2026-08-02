@@ -110,10 +110,9 @@ describe('devkit create --type nest', () => {
     // nest new는 샘플 spec을 만들므로 test도 통과해야 한다
     expect(runIn(dir, 'test')).toBe(0);
 
-    // 이월 (1): copyOverlay('nest', ...).run()의 배선 검증. 단위 테스트는
-    // assertNoDrift를 직접 호출할 뿐 copyOverlay가 실제로 파일을 쓰는 경로는
-    // 덮지 않는다(templatesRoot()가 dist 전제라 vitest에서 ENOENT) — 여기서
-    // 처음 실행으로 검증한다.
+    // 이월 (1): copyOverlay('nest', ...).run()의 배선 검증. plan()이 읽는
+    // 내용은 단위 테스트(plan-ops.test.ts)가 덮지만, run()이 그 내용을
+    // 실제로 targetDir에 쓰는 경로는 여기 e2e가 처음 검증한다.
     expect(existsSync(join(dir, '_gitignore'))).toBe(false);
     expect(existsSync(join(dir, '.gitignore'))).toBe(true);
     const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
