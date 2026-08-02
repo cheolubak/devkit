@@ -1,5 +1,18 @@
 # Work Log
 
+## 2026-08-02
+
+### devkit update 구현
+- **변경 파일**: `packages/devkit-cli/src/{types,run,bin,index}.ts`, `src/ops/{copy-overlay,merge-json,link-deps,remove-files}.ts`, `src/lib/{categories,version,confirm,marker}.ts`, `src/update/{flatten,json-patch,plan,resolve-type,index}.ts`, `src/recipes/{nest,next,monorepo}.ts`, `templates/{nest/tsconfig.json,monorepo/turbo.json}`, `tests/*`, README 2건(`packages/devkit-cli/README.md`, 루트 `README.md`)
+- **내용**: 기존 프로젝트에 devkit 표준을 재적용하는 `devbak update` 서브커맨드를 구현했다. `create`가 쓰는 레시피를 재사용하고 `kind`로 걸러 `copyOverlay`·`mergeJson`·`linkDeps`만 실행한다(생성 시점 전용인 스캐폴딩·자가검증·삭제는 건너뛴다). 각 op에 `plan()`을 추가해 쓰기 전에 최종 내용을 전부 계산하고, `run()`을 `plan()` 기반으로 재구성해 두 경로가 갈라질 수 없게 했다 — 그 결과 `Ctx`에 `mode` 분기를 넣지 않고도 생성 시점 전용 가드(`mergeJson`의 `required`, `copyOverlay`의 `expectUpstream`)가 update에서 자연히 비켜간다. JSON 파일 오버레이는 통째 복사 대신 패치로 환원해 사용자의 의존성·`paths`를 보존한다.
+  - `create`가 `package.json`에 `{"devkit": {"type", "version"}}` 마커를 심도록 함께 고쳤다. `monorepo`는 루트에 `monorepo` 마커, 합성된 `apps/web`에는 `next` 마커를 각각 심어 앱만 따로 update할 수 있게 했다. `--only`가 주어지면 마커를 심지 않는다 — 부분 적용을 "전체 반영"으로 표시하지 않기 위해서다.
+  - **git 안전망**: 워킹트리가 dirty하면 거부한다(`--force`로 우회). `--dry-run`은 이 게이트를 통과시킨다 — 처음에는 dry-run도 같은 게이트를 태웠는데, 그러면 git 저장소가 아닌 대상에 `--dry-run`을 돌릴 때 "그래도 계속할까요?" 프롬프트에 걸려 비대화형 실행이 멈춰 섰다. 아무것도 쓰지 않는 경로에 되돌림 안전망을 요구할 이유가 없다는 결론으로 게이트를 비켜가게 고쳤다.
+  - **비대화형 가드**: `--yes`도 `--dry-run`도 없이 TTY가 아니면 확인 프롬프트에 매달리는 대신 즉시 거부하고 대안을 안내한다 — CI에서 원인 불명으로 멈춘 것처럼 보이는 상태를 막기 위해서다.
+  - `devbak --help`/`devbak update --help`/`devbak create --help` 모두 사용법 두 줄을 출력하고 exit 0.
+  - **발견**: `create`는 템플릿 JSON을 원문 그대로 쓰고 `update`는 `JSON.stringify(…, null, 2)`로 재직렬화하므로, 손으로 압축한 JSON 배열이 템플릿에 있으면 갓 생성한 프로젝트에도 "덮어쓰기"가 뜬다. `templates/nest/tsconfig.json`·`templates/monorepo/turbo.json`을 정규형으로 고치고 `tests/overlay-coverage.test.ts`에 방어 테스트를 추가해 재발을 막았다.
+- **검증**: `pnpm test`(단위·스냅샷·e2e), `pnpm lint:ox`, `pnpm lint:es`, `pnpm build` 통과.
+- **커밋**: `e0e64a7`(설계) ~ `d047982`(update e2e 생성물 보존 수정), 총 18커밋. 문서화 커밋은 별도.
+
 ## 2026-07-26
 
 ### eslint-plugin-fsd 설계 확정 및 저장소 초기화

@@ -80,8 +80,19 @@ pnpm devbak create my-api --type nest             # 또는 --type next | monorep
 
 ## 기존 프로젝트에 붙이기
 
-각 패키지 README에 설치·설정 예시가 있다. 요약하면 소비자 `package.json`에 `link:`
-상대경로로 넣고, peer는 직접 설치한다.
+가장 간단한 방법은 `devbak update`다.
+
+```bash
+pnpm build
+pnpm devbak update ../my-api --type nest
+```
+
+마커가 없는 외부 프로젝트에는 `--type`이 필요하고, 전체 update가 마커를 심으면
+다음부터는 생략할 수 있다. 자세한 내용은
+[`packages/devkit-cli/README.md`](packages/devkit-cli/README.md).
+
+수동으로 붙이려면 아래처럼 한다. 각 패키지 README에도 설치·설정 예시가 있다.
+요약하면 소비자 `package.json`에 `link:` 상대경로로 넣고, peer는 직접 설치한다.
 
 ```jsonc
 {

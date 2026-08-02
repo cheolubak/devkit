@@ -124,15 +124,39 @@ CLI는 실행 전에 `dist/bin.js`가 `src/`보다 새로운지 확인하고, �
 
 생성된 저장소에 시크릿 `CLAUDE_CODE_OAUTH_TOKEN`을 등록해야 한다(API key가 아니다). 없으면 워크플로가 동작하지 않는다. **파일이 놓였다는 사실이 리뷰가 동작한다는 뜻은 아니다.**
 
-## `devkit update` 기반 모듈
+## `devbak update` — 기존 프로젝트에 표준 재적용
 
-`src/lib/` 아래 네 모듈은 훗날 `devkit update`(이미 생성된 프로젝트에 표준을 재적용하는 명령)가 조립할 부품이다. **서로를 import하지 않으며**, 조립은 호출자의 몫이다.
+```bash
+pnpm build
+pnpm devbak update ../my-api                    # 마커가 있으면 유형 자동
+pnpm devbak update ../legacy --type nest        # 마커가 없으면 유형 명시
+pnpm devbak update ../my-api --only claude,ci   # 일부만
+pnpm devbak update ../my-api --dry-run          # 목록만 보고 끝
+pnpm devbak update --help                       # 사용법만 출력하고 종료
+```
 
-| 모듈 | 책임 |
+| 옵션 | 의미 |
 | --- | --- |
-| `categories.ts` | `--only` 카테고리 7종과 경로 패턴 테이블 |
-| `marker.ts` | `package.json`의 `devkit` 마커 읽기/쓰기 |
-| `classify.ts` | 신규/덮어쓰기/동일 분류 + 변경 목록 포맷 |
-| `git.ts` | 워킹트리 상태 검사(update의 안전망) |
+| `path` | 대상. 생략하면 현재 디렉토리 |
+| `--only` | `claude`·`ci`·`lint`·`ts`·`test`·`deps`·`repo`·`scaffold`. 생략하면 `scaffold`를 뺀 전체 |
+| `--type` | 마커가 없을 때 유형 지정 |
+| `--dry-run` | 변경 목록만 출력하고 아무것도 쓰지 않는다 |
+| `--yes` | 확인 프롬프트 생략 |
+| `--force` | git 관련 거부만 우회 |
+| `--help` | (`create`·`update` 공통) 사용법 두 줄을 출력하고 종료. 다른 옵션이 있어도 우선한다 |
 
-`update` 서브커맨드 자체는 아직 없다. 설계는 `docs/superpowers/specs/2026-08-01-devkit-claude-review-design.md` 5절에 있다.
+**`create`와 달리 공식 CLI를 다시 돌리지 않는다.** 파일 삭제·디렉토리 생성·자가검증도 하지 않는다 — 기존 프로젝트에서는 lint 실패가 update의 실패가 아니기 때문이다. 실행하는 것은 오버레이 복사와 `package.json` 병합, `link:` 재계산뿐이다.
+
+**JSON 파일은 통째로 덮지 않는다.** `package.json`·`tsconfig.json`은 키 단위로 병합되므로 직접 추가한 의존성과 `compilerOptions.paths`가 보존된다. 대가로 **키 삭제는 전파되지 않는다.**
+
+**워킹트리가 dirty하면 거부한다.** 되돌리는 수단이 git이기 때문이다. `--force`로 우회할 수 있지만, 그러면 update의 결과와 미커밋 작업이 같은 diff에 섞인다. **`--dry-run`은 이 게이트를 통과한다** — 아무것도 쓰지 않으므로 되돌림 안전망이 애초에 필요 없고, 여기서 막으면 git 저장소가 아닌 대상에서 "그래도 계속할까요?" 확인 프롬프트에 걸려 비대화형 실행(CI 등)이 멈춰 선다. 즉 **git 저장소가 아닌 대상도 `--dry-run`으로는 미리 볼 수 있다** — 다만 실제 실행(`--dry-run` 없이)은 되돌릴 수단이 없다는 경고를 한 번 더 받는다.
+
+**비대화형 환경에서는 `--yes` 또는 `--dry-run` 없이 실행할 수 없다.** TTY가 아닌데 둘 다 없으면 확인 프롬프트에 매달리는 대신 즉시 거부하고 대안을 알린다 — CI 로그에서 "멈춘 것처럼 보이는" 원인 불명 상태를 피하기 위해서다.
+
+**유형 마커**: `create`가 `package.json`에 `{"devkit": {"type": ..., "version": ...}}`을 심는다. `monorepo`는 루트에 `monorepo` 마커, 합성된 `apps/web`에는 `next` 마커가 따로 들어간다 — 그래서 앱만 따로 `pnpm devbak update ../my-monorepo/apps/web`로 갱신할 수 있다.
+
+**`--only`가 주어지면 마커를 심지 않는다.** 부분 적용을 "최신 표준 전부 반영"으로 표시하지 않기 위해서다. 그래서 마커 없는 외부 프로젝트를 `--only`만으로 갱신하면 다음 실행에도 `--type`이 필요하고, 명령이 완료 메시지에서 그 사실을 안내한다.
+
+### 개발자용 — 템플릿 JSON은 정규형이어야 한다
+
+`create`는 템플릿 JSON을 원문 텍스트 그대로 쓰지만 `update`는 `JSON.stringify(…, null, 2)`로 재직렬화한다. 템플릿에 손으로 압축한 배열(예: `["src", "test"]`을 한 줄로)이 있으면 의미는 같아도 바이트가 달라져, 갓 생성한 프로젝트에 `update`를 돌려도 "덮어쓰기"가 뜬다. `tests/overlay-coverage.test.ts`의 방어 테스트가 `templates/**/*.json`이 정규형인지 고정한다 — 새 템플릿 JSON을 추가할 때는 `JSON.stringify(JSON.parse(t), null, 2) + '\n'`와 바이트가 같은지 먼저 확인한다.
