@@ -37,6 +37,20 @@ describe('buildPlan', () => {
     expect(plan.map((f) => f.relPath)).not.toContain('src/main.ts');
   });
 
+  it('--only scaffold면 nest에서 src/main.ts를 낸다', async () => {
+    // 위 테스트가 기본 제외(음성)를, categories.test.ts/update-plan.test.ts의
+    // 다른 단언들이 categoryOf('src/main.ts') === 'scaffold'(양성 반쪽)를
+    // 각각 덮지만, 둘을 합성한 buildPlan(categories={scaffold})가 실제로
+    // src/main.ts를 내는지는 비어 있었다.
+    const plan = await buildPlan({
+      type: 'nest',
+      ctx: makeTarget(),
+      categories: new Set<Category>(['scaffold']),
+      marker: null,
+    });
+    expect(plan.map((f) => f.relPath)).toContain('src/main.ts');
+  });
+
   it('--only claude면 리뷰 자산만 낸다', async () => {
     const plan = await buildPlan({
       type: 'nest',
@@ -112,6 +126,17 @@ describe('buildPlan', () => {
     expect(parsed.compilerOptions.paths).toEqual({ '@/*': ['./src/*'] });
     expect(parsed.extends).toBe('@devbak/tsconfig/nest');
     expect(parsed.compilerOptions.outDir).toBe('./dist');
+  });
+
+  it('대상 JSON이 깨져 있으면 어느 파일인지 경로를 담아 던진다', async () => {
+    // 실측: 주석 달린 tsconfig.json은 현실에서 흔하다. readJsonOrEmpty가
+    // 경로 없이 SyntaxError만 던지면 사용자는 어느 파일인지 알 수 없다.
+    const ctx = makeTarget();
+    writeFileSync(join(ctx.targetDir, 'tsconfig.json'), '{ // 주석\n "extends": "x" }\n');
+
+    await expect(
+      buildPlan({ type: 'nest', ctx, categories: new Set<Category>(['ts']), marker: null }),
+    ).rejects.toThrow(/tsconfig\.json: JSON 파싱 실패/);
   });
 
   it('monorepo는 합성한 next가 놓은 apps/web 설정을 되살리지 않는다', async () => {

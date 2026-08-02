@@ -81,6 +81,17 @@ describe('runUpdate', () => {
     expect(existsSync(join(dirty, '.claude'))).toBe(false);
   });
 
+  it('monorepo인데 apps/web/package.json이 없으면 경고를 남긴다', async () => {
+    // 대상이 apps/web을 apps/site로 개명했다면 apps/web 트리 전체가
+    // "신규"로 계획에 들어온다. 데이터 손실은 아니지만 변경 목록만으로는
+    // 놓치기 쉬워, 사람이 알아채도록 경고를 한 줄 남긴다.
+    const dir = makeProject();
+    const lines: string[] = [];
+    await runUpdate({ ...base(dir), type: 'monorepo', only: 'claude', log: (m) => lines.push(m) });
+
+    expect(lines.join('\n')).toContain('apps/web/package.json이 없습니다');
+  });
+
   it('멱등적이다 — 두 번째는 전부 동일로 잡힌다', async () => {
     const dir = makeProject();
     await runUpdate({ ...base(dir), type: 'nest', only: 'claude' });
@@ -111,6 +122,23 @@ describe('runUpdate', () => {
     writeFileSync(join(dir, 'dirty.txt'), 'x');
 
     await runUpdate({ ...base(dir), type: 'nest', only: 'claude', force: true });
+    expect(existsSync(join(dir, '.claude'))).toBe(true);
+  });
+
+  it('--force여도 저장소가 아니라는 경고는 남긴다 — 확인 프롬프트만 건너뛴다', async () => {
+    // README는 --force를 "git 관련 거부만 우회"라고 적는다. 이전에는
+    // gitGate가 force에서 통째로 조기 반환해 이 경고까지 사라졌었다.
+    const dir = makeProject({}, false);
+    const lines: string[] = [];
+    await runUpdate({
+      ...base(dir),
+      type: 'nest',
+      only: 'claude',
+      force: true,
+      log: (m) => lines.push(m),
+    });
+
+    expect(lines.join('\n')).toContain('git 저장소가 아닙니다');
     expect(existsSync(join(dir, '.claude'))).toBe(true);
   });
 
