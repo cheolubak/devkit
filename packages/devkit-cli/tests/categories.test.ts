@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CATEGORIES,
   categoryOf,
+  DEFAULT_EXCLUDED_CATEGORIES,
   JSON_KEY_CATEGORIES,
   parseOnly,
   UnknownCategoryError,
@@ -16,16 +17,40 @@ describe('categoryOf', () => {
     ['eslint.config.mjs', 'lint'],
     ['tsconfig.json', 'ts'],
     ['jest.config.ts', 'test'],
+    ['jest.config.js', 'test'],
+    ['jest-e2e.config.js', 'test'],
     ['test/jest-e2e.config.ts', 'test'],
     ['vitest.config.ts', 'test'],
     ['.gitignore', 'repo'],
+    ['pnpm-workspace.yaml', 'repo'],
+    ['turbo.json', 'repo'],
+    ['package.json', 'repo'],
+    ['src/main.ts', 'scaffold'],
+    ['src/app/page.tsx', 'scaffold'],
   ])('%s → %s', (relPath, expected) => {
     expect(categoryOf(relPath)).toBe(expected);
   });
 
+  it.each([
+    // 템플릿은 언더스코어 접두로 담고 copyOverlay 가 점 이름으로 되돌린다.
+    // 오버레이 커버리지와 실제 소비자 경로가 모두 걸려야 한다.
+    ['_gitignore', 'repo'],
+    ['_prettierignore', 'lint'],
+    ['.prettierignore', 'lint'],
+  ])('언더스코어 접두 템플릿 %s → %s', (relPath, expected) => {
+    expect(categoryOf(relPath)).toBe(expected);
+  });
+
   it('devkit이 소유하지 않는 경로는 null을 반환한다', () => {
-    expect(categoryOf('src/main.ts')).toBeNull();
     expect(categoryOf('README.md')).toBeNull();
+    expect(categoryOf('docs/guide.md')).toBeNull();
+  });
+
+  it('scaffold 는 update 기본 제외 대상이다', () => {
+    // src/ 아래는 생성 시점에 한 번 놓이고 그 뒤로는 사람이 고쳐 쓴다.
+    // 표준 재적용이 덮어쓰면 사용자의 작업이 사라진다.
+    expect(DEFAULT_EXCLUDED_CATEGORIES).toContain('scaffold');
+    expect(categoryOf('src/main.ts')).toBe('scaffold');
   });
 
   it('.claude 하위라도 사용자 로컬 설정은 분류하지 않는다', () => {
@@ -90,8 +115,17 @@ describe('parseOnly', () => {
 });
 
 describe('CATEGORIES', () => {
-  it('설계 5.4절의 7종을 갖는다', () => {
-    expect([...CATEGORIES]).toEqual(['claude', 'ci', 'lint', 'ts', 'test', 'deps', 'repo']);
+  it('설계 5.4절의 8종을 갖는다', () => {
+    expect([...CATEGORIES]).toEqual([
+      'claude',
+      'ci',
+      'lint',
+      'ts',
+      'test',
+      'deps',
+      'repo',
+      'scaffold',
+    ]);
   });
 });
 
