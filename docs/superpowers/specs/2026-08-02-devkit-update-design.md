@@ -49,6 +49,16 @@
 
 `create`는 빈 디렉토리에 놓으므로 문제가 없다. `update`가 그대로 덮으면 **사용자가 늘린 의존성·스크립트·`compilerOptions.paths`가 사라진다.** 변경 목록에 "덮어쓰기"로 뜨긴 하지만, 사람이 `y`를 누를 때 자기 `paths`가 날아가는 것을 예상하지는 않는다. 5.5절에서 규칙을 세운다.
 
+### 1.6 `removeFiles`를 무시하면 update가 지워야 할 파일을 되살린다
+
+`monorepo` 레시피는 `compose`로 `next`를 `apps/web`에 합성한 뒤, `removeFiles`로 `apps/web/eslint.config.mjs`와 `apps/web/.claude`·`.github`를 지운다. 남으면 ESLint의 `tsconfigRootDir` 자동추론이 루트와 `apps/web` 두 후보를 등록하며 `multiple candidate TSConfigRootDirs`로 전체 린트가 죽고, 앱 하위의 워크플로는 GitHub이 인식조차 하지 않는다.
+
+리뷰 설계 5.3절은 *"`removeFiles`는 실행하지 않는다"* 고 했다. 그대로 구현하면 **update가 그 파일들을 매번 되살린다.**
+
+반대로 "`removeFiles` 대상은 무조건 제외"로 고치면 `next` 레시피가 깨진다. 거기서는 `removeFiles(['AGENTS.md', 'CLAUDE.md'])`가 `copyOverlay('next')`보다 **앞**에 있다 — 공식 CLI가 만든 문서를 지우고 devkit 판을 새로 놓는 순서다. 무조건 제외하면 `CLAUDE.md`가 영영 안 놓인다.
+
+**순서가 의미를 만든다.** 5.7절에서 해소한다.
+
 ---
 
 ## 2. 범위 결정
@@ -69,7 +79,7 @@
 - **마이그레이션 로직** — 마커의 `version`은 기록용이다. 버전 간 변환은 필요해질 때 만든다(리뷰 설계 5.1절의 YAGNI를 유지).
 - **대화형 파일 선택** — 변경 목록은 전체에 대한 y/N 하나다. 파일별 선택은 `--only`가 이미 거친 입자로 제공한다.
 - **`create`의 동작 변경** — 7절의 마커 심기를 빼면 `create` 경로의 산출물은 바이트 단위로 동일해야 한다.
-- **`update`가 `delegate`·`removeFiles`·`makeDirs`를 실행하는 것** — 리뷰 설계 5.3절 표 그대로다.
+- **`update`가 `delegate`·`removeFiles`·`makeDirs`를 실행하는 것** — 리뷰 설계 5.3절 표 그대로다. `removeFiles`를 **계획에 반영**하는 것은 실행이 아니다(5.7절) — 대상 프로젝트의 파일을 지우지 않는다.
 
 ---
 
@@ -225,6 +235,25 @@ recipe(type, { skipInstall: true })
 
 `monorepo`는 루트와 `apps/web`의 `package.json` 둘이 각각 별개의 `PlannedFile`이 된다.
 
+### 5.7 `removeFiles`는 실행하지 않지만 계획에는 반영한다
+
+1.6절의 해소다. 가상 파일맵이 이미 순서를 모델링하고 있으므로 규칙은 한 줄이다.
+
+> `removeFiles`를 만나면 **그때까지 누적된 계획에서** 해당 항목을 지운다. 디스크는 건드리지 않는다.
+
+리뷰 설계 5.3절의 *"실행하지 않는다"* 는 그대로 참이다 — 대상 프로젝트의 파일을 지우지 않는다. 사용자가 의도적으로 되살린 파일은 안전하다. 다만 **레시피가 놓은 적 없는 것으로 치는** 것뿐이다.
+
+두 레시피가 정반대 방향으로 이 규칙을 검증한다.
+
+| 레시피 | 순서 | 결과 |
+| --- | --- | --- |
+| `next` | `removeFiles(['CLAUDE.md'])` → `copyOverlay('next')` | `CLAUDE.md`가 **계획에 남는다** — 지운 뒤 놓는 순서다 |
+| `monorepo` | `compose(next)` → `removeFiles(['apps/web/.claude', …])` | `apps/web/.claude/**`가 **계획에서 빠진다** — 놓은 뒤 지우는 순서다 |
+
+디렉토리 경로는 prefix로 매칭한다(`apps/web/.claude`가 `apps/web/.claude/agents/devkit-reviewer.md`를 걸러야 한다). 경로 구분자는 POSIX `/`로 정규화한다 — `monorepo` 레시피는 `join()`으로 경로를 만들어 플랫폼 구분자가 섞인다.
+
+`removeFiles`의 `required` 검사는 여기서도 돌리지 않는다. 1.2·1.3절과 같은 이유로 생성 시점 전용 가드다.
+
 ---
 
 ## 6. 카테고리 테이블 보강
@@ -345,9 +374,10 @@ recipe(type, { skipInstall: true })
 3. `create`로 만든 프로젝트에 곧바로 `update`를 돌리면 변경이 0건이다.
 4. 같은 `update`를 두 번 돌리면 두 번째는 전부 "동일 — 건너뜀"이다.
 5. dirty한 워킹트리에서 거부되고, `--force`로 진행된다.
-6. 세 레시피에 JSON 패치 경로를 추가하고 6.2절 테이블을 갱신하지 않으면 테스트가 실패한다.
-7. `create` 산출물이 마커 한 키를 빼면 이전과 바이트 단위로 동일하다.
-8. `pnpm lint`·`pnpm test`가 통과한다.
+6. `monorepo` update가 `apps/web/eslint.config.mjs`·`apps/web/.claude/**`를 되살리지 않고, `next` update는 `CLAUDE.md`를 정상적으로 놓는다.
+7. 세 레시피에 JSON 패치 경로를 추가하고 6.2절 테이블을 갱신하지 않으면 테스트가 실패한다.
+8. `create` 산출물이 마커 한 키를 빼면 이전과 바이트 단위로 동일하다.
+9. `pnpm lint`·`pnpm test`가 통과한다.
 
 ---
 
