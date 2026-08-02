@@ -38,3 +38,7 @@ export {
 } from './lib/classify.js';
 
 export { inspectGit, type GitState } from './lib/git.js';
+
+export { runUpdate, type UpdateOptions } from './update/index.js';
+export { buildPlan, effectiveCategories, type BuildPlanOptions } from './update/plan.js';
+export { resolveType, type ResolvedType } from './update/resolve-type.js';
