@@ -22,8 +22,19 @@ const RECIPES: Record<ProjectType, Recipe> = {
   monorepo: monorepoRecipe,
 };
 
-/** 재적용 대상 연산. 설계 5.3절 표 그대로다. */
-const PLANNABLE = new Set(['copyOverlay', 'mergeJson', 'linkDeps']);
+/**
+ * 재적용 대상 연산은 `step.plan` 유무만으로 가른다(설계 5.3절 표와 일치 —
+ * `copyOverlay`·`mergeJson`·`linkDeps`만 `plan()`을 정의한다).
+ *
+ * 예전엔 `PLANNABLE = new Set(['copyOverlay', 'mergeJson', 'linkDeps'])`
+ * 화이트리스트를 따로 두고 `!PLANNABLE.has(step.kind) || step.plan ===
+ * undefined`로 걸렀다. 그런데 이 집합에 속한 op 는 전부 예외 없이 `plan`을
+ * 정의하므로 두 조건은 항상 같은 값을 낸다 — 화이트리스트가 실제로 걸러낸
+ * 적이 없다는 뜻이다. 유일한 효과는 미래에 `plan()`을 얻은 op 가 이
+ * 집합에 등록되지 않으면 **조용히** 계획에서 빠지는 것이었다. "조용한
+ * 실패 금지" 원칙에 따라 화이트리스트를 없애고 `plan` 존재 자체를
+ * 신호로 쓴다 — 새 op 가 `plan`을 정의하면 등록 없이 자동으로 대상이 된다.
+ */
 
 /**
  * `--only` 를 유효 카테고리 집합으로 바꾼다.
@@ -81,7 +92,7 @@ export async function buildPlan({
       );
       continue;
     }
-    if (!PLANNABLE.has(step.kind) || step.plan === undefined) continue;
+    if (step.plan === undefined) continue;
     // 순서가 의미를 만든다: monorepo 는 package.json 을 놓은 뒤 그 파일을 패치한다.
     // oxlint-disable-next-line no-await-in-loop -- 위 이유로 병렬화할 수 없다
     const changes = await step.plan(stepCtx);
@@ -99,7 +110,7 @@ export async function buildPlan({
       const relPath = joinRel(rel, stepRelPath);
       const fileCategory = categoryOf(stepRelPath);
 
-      if (change.kind === 'file' && !isJsonOverlay(relPath)) {
+      if (change.kind === 'file' && !isJsonOverlay(stepRelPath)) {
         // 파일 오버레이는 카테고리 하나로 전부 판단한다.
         if (fileCategory !== null && categories.has(fileCategory)) {
           files.set(relPath, change.content);
@@ -109,6 +120,11 @@ export async function buildPlan({
       }
 
       // JSON 은 파일이든 패치든 전부 "기준 내용 + 패치"로 다룬다(설계 5.5절).
+      // isJsonOverlay 는 위에서 단계 기준(stepRelPath)으로 판단했지만
+      // reduceJsonOverlay 는 루트 기준(relPath)을 쓴다 — 둘 다 basename만
+      // 보므로 결과는 같지만(증명적으로 동치), 파싱 실패 시 에러 메시지에
+      // 'apps/web/tsconfig.json'처럼 하위 경로까지 나와야 어느 파일인지
+      // 바로 알 수 있기 때문이다('tsconfig.json'만으로는 모호하다).
       const patch =
         change.kind === 'file' ? reduceJsonOverlay(relPath, change.content) : change.patch;
       const scoped = filterPatchByCategory(
@@ -148,7 +164,9 @@ export async function buildPlan({
         category: fileCategories.get(relPath) ?? 'repo',
       }),
     )
-    .sort((a, b) => a.relPath.localeCompare(b.relPath));
+    // localeCompare 는 ICU 로케일에 따라 순서가 달라질 수 있다. 표시
+    // 순서일 뿐이라 동작에 영향은 없지만, 결정적 비교로 고정해 둔다.
+    .sort((a, b) => (a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0));
 }
 
 function isPackageJson(relPath: string): boolean {
@@ -195,18 +213,24 @@ function joinRel(prefix: string, relPath: string): string {
 
 /** 없으면 빈 객체. 신규 파일은 패치가 곧 전체 내용이 된다. */
 async function readJsonOrEmpty(targetDir: string, relPath: string): Promise<JsonObject> {
-  const raw = await readFile(join(targetDir, ...relPath.split('/')), 'utf8').catch(
-    (error: unknown) => {
-      if (
-        typeof error === 'object' &&
-        error !== null &&
-        (error as { code?: unknown }).code === 'ENOENT'
-      ) {
-        return null;
-      }
-      throw error;
-    },
-  );
+  const full = join(targetDir, ...relPath.split('/'));
+  const raw = await readFile(full, 'utf8').catch((error: unknown) => {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      (error as { code?: unknown }).code === 'ENOENT'
+    ) {
+      return null;
+    }
+    throw error;
+  });
   if (raw === null) return {};
-  return JSON.parse(raw) as JsonObject;
+  try {
+    return JSON.parse(raw) as JsonObject;
+  } catch (error) {
+    // 대상은 임의의 기존 프로젝트다 — 주석이 섞인 tsconfig.json처럼 흔한
+    // 변형을 만나면 경로 없는 SyntaxError만 던져서는 어느 파일인지 알 수
+    // 없다. json-patch.ts의 reduceJsonOverlay와 같은 관용으로 경로를 얹는다.
+    throw new Error(`${full}: JSON 파싱 실패`, { cause: error });
+  }
 }

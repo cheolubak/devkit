@@ -133,7 +133,11 @@ export function copyOverlay(
       for (const change of changes) {
         if (change.kind !== 'file') continue;
         const target = join(ctx.targetDir, ...change.relPath.split('/'));
+        // 부분 실패 시 어디까지 썼는지가 로그 순서로 드러나야 한다 — 파일마다
+        // 순차 실행이 요구사항이다.
+        // oxlint-disable-next-line no-await-in-loop -- 위 이유로 병렬화할 수 없다
         await mkdir(dirname(target), { recursive: true });
+        // oxlint-disable-next-line no-await-in-loop -- 위와 같은 이유
         await writeFile(target, change.content);
         ctx.log(`  복사: ${change.relPath.split('/').join(sep)}`);
       }

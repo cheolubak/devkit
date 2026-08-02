@@ -6,6 +6,7 @@ import { confirm } from '../lib/confirm.js';
 import { inspectGit } from '../lib/git.js';
 import { devkitVersion } from '../lib/version.js';
 import { delegate } from '../ops/delegate.js';
+import { pathExists } from '../ops/path-exists.js';
 import type { Ctx } from '../types.js';
 import { buildPlan, effectiveCategories } from './plan.js';
 import { resolveType } from './resolve-type.js';
@@ -51,6 +52,13 @@ export async function runUpdate(options: UpdateOptions): Promise<void> {
 
   // 3. git 게이트
   await gitGate(targetDir, options, ask, log);
+
+  // monorepo인데 대상에 apps/web이 없으면 apps/web/** 전체가 "신규"로
+  // 계획에 들어온다(사용자가 apps/site로 개명한 경우 등). 데이터 손실은
+  // 아니고 변경 목록에도 뜨지만, 사람이 놓치기 쉬워 경고를 한 줄 더 남긴다.
+  if (type === 'monorepo' && !(await pathExists(join(targetDir, 'apps', 'web', 'package.json')))) {
+    log('경고: apps/web/package.json이 없습니다. apps/web 트리 전체가 신규로 생성됩니다.');
+  }
 
   // 4~5. 플랜 · 분류 · 출력
   const categories: ReadonlySet<Category> = effectiveCategories(only);
@@ -118,14 +126,14 @@ export async function runUpdate(options: UpdateOptions): Promise<void> {
  * 지운다. 저장소가 아니면 애초에 되돌릴 수단이 없으므로 경고로 족하다 —
  * 없는 안전망을 강제할 수는 없다.
  */
+const NOT_A_REPO_WARNING = '경고: git 저장소가 아닙니다. 덮어쓴 내용을 되돌릴 수단이 없습니다.';
+
 async function gitGate(
   targetDir: string,
   options: UpdateOptions,
   ask: (question: string) => Promise<boolean>,
   log: (message: string) => void,
 ): Promise<void> {
-  if (options.force === true) return;
-
   const state = await inspectGit(targetDir);
 
   // --dry-run 은 게이트를 통과시킨다. 게이트는 **쓰기**를 지키는 장치이고
@@ -147,6 +155,15 @@ async function gitGate(
     return;
   }
 
+  // --force 는 거부(dirty → throw)와 확인 프롬프트(not-a-repo → ask)만
+  // 건너뛴다. "되돌릴 수단이 없다"는 사실 자체는 --force 로도 숨기지
+  // 않는다 — 그건 승인받아야 할 관문이 아니라 알아야 할 정보이기
+  // 때문이다(README의 "--force는 git 관련 거부만 우회" 서술과 일치).
+  if (options.force === true) {
+    if (state.kind === 'not-a-repo') log(NOT_A_REPO_WARNING);
+    return;
+  }
+
   if (state.kind === 'dirty') {
     throw new Error(
       `커밋되지 않은 변경이 ${state.changedFiles}건 있습니다. update 의 결과와 섞이면 되돌리기 어렵습니다.\n` +
@@ -155,7 +172,7 @@ async function gitGate(
   }
 
   if (state.kind === 'not-a-repo') {
-    log('경고: git 저장소가 아닙니다. 덮어쓴 내용을 되돌릴 수단이 없습니다.');
+    log(NOT_A_REPO_WARNING);
     if (options.yes === true) return;
     if (!(await ask('그래도 계속할까요?'))) {
       throw new Error('중단했습니다.');
