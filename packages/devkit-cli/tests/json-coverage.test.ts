@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { categoryOfJsonPath, MARKER_KEY } from '../src/lib/categories.js';
-import type { Json, JsonObject } from '../src/ops/merge-json.js';
+import type { JsonObject } from '../src/ops/merge-json.js';
 import { monorepoRecipe } from '../src/recipes/monorepo.js';
 import { nestRecipe } from '../src/recipes/nest.js';
 import { nextRecipe } from '../src/recipes/next.js';
