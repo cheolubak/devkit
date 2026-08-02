@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { devkitVersion } from '../src/lib/version.js';
 import { nestRecipe } from '../src/recipes/nest.js';
 
 // 라벨 부분일치(includes)는 쓰지 않는다 — linkDeps가 링크하는
@@ -70,5 +71,17 @@ describe('nest 레시피', () => {
     const steps = nestRecipe({ skipInstall: true });
     expect(steps.some((s) => s.label === 'pnpm install')).toBe(false);
     expect(steps.some((s) => s.label === 'pnpm lint')).toBe(false);
+  });
+});
+
+describe('마커', () => {
+  it('package.json 병합 패치에 devkit 마커가 들어간다', () => {
+    const steps = nestRecipe({ skipInstall: true });
+    const patches = steps
+      .filter((step) => step.kind === 'mergeJson')
+      .map((step) => step.describe() as { patch: Record<string, unknown> });
+
+    const marker = patches.find((p) => 'devkit' in p.patch)?.patch.devkit;
+    expect(marker).toEqual({ type: 'nest', version: devkitVersion() });
   });
 });

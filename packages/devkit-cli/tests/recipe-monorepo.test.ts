@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { devkitVersion } from '../src/lib/version.js';
 import { monorepoRecipe } from '../src/recipes/monorepo.js';
 
 describe('monorepo 레시피', () => {
@@ -70,5 +71,17 @@ describe('monorepo 레시피', () => {
     const nested = composedDetail.steps.filter((s) => s.packages !== undefined);
     expect(links.length).toBeGreaterThan(0);
     expect(nested.length).toBeGreaterThan(0);
+  });
+});
+
+describe('마커', () => {
+  it('package.json 병합 패치에 devkit 마커가 들어간다', () => {
+    const steps = monorepoRecipe({ skipInstall: true });
+    const patches = steps
+      .filter((step) => step.kind === 'mergeJson')
+      .map((step) => step.describe() as { patch: Record<string, unknown> });
+
+    const marker = patches.find((p) => 'devkit' in p.patch)?.patch.devkit;
+    expect(marker).toEqual({ type: 'monorepo', version: devkitVersion() });
   });
 });

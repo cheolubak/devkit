@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { devkitVersion } from '../src/lib/version.js';
 import { nextRecipe } from '../src/recipes/next.js';
 
 // 라벨 부분일치(includes)는 쓰지 않는다 — linkDeps가 링크하는
@@ -71,5 +72,17 @@ describe('next 레시피', () => {
     const merge = nextRecipe().find((s) => s.kind === 'mergeJson');
     const detail = merge?.describe() as { patch: { type?: string } };
     expect(detail.patch.type).toBe('module');
+  });
+});
+
+describe('마커', () => {
+  it('package.json 병합 패치에 devkit 마커가 들어간다', () => {
+    const steps = nextRecipe({ skipInstall: true });
+    const patches = steps
+      .filter((step) => step.kind === 'mergeJson')
+      .map((step) => step.describe() as { patch: Record<string, unknown> });
+
+    const marker = patches.find((p) => 'devkit' in p.patch)?.patch.devkit;
+    expect(marker).toEqual({ type: 'next', version: devkitVersion() });
   });
 });

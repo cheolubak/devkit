@@ -1,4 +1,6 @@
 import type { Recipe, Step } from '../types.js';
+import { markerPatch } from '../lib/marker.js';
+import { devkitVersion } from '../lib/version.js';
 import { copyOverlay, delegate, linkDeps, makeDirs, mergeJson, removeFiles, scaffold } from '../ops/index.js';
 
 /**
@@ -48,6 +50,9 @@ export const nestRecipe: Recipe = (options = {}) => {
 
     mergeJson(
       {
+        // 유형 마커. update 가 대상의 유형을 알기 위한 전제이며, 의존성으로
+        // 짐작하는 휴리스틱은 조용히 틀릴 수 있어 쓰지 않는다(설계 7절).
+        ...markerPatch('nest', devkitVersion()),
         devDependencies: {
           'eslint-plugin-prettier': null,
           'eslint-config-prettier': null,

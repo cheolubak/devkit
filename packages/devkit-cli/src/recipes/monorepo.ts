@@ -1,5 +1,7 @@
 import { join } from 'node:path';
 import type { Recipe, Step } from '../types.js';
+import { markerPatch } from '../lib/marker.js';
+import { devkitVersion } from '../lib/version.js';
 import { copyOverlay, delegate, linkDeps, makeDirs, mergeJson, removeFiles } from '../ops/index.js';
 import { compose } from '../run.js';
 import { nextRecipe } from './next.js';
@@ -89,6 +91,10 @@ export const monorepoRecipe: Recipe = (options = {}) => {
       },
       { file: join('apps', 'web', 'package.json'), required: ['dependencies.next'] },
     ),
+
+    // 루트에 유형 마커를 심는다. apps/web 에는 합성된 next 레시피가 자기
+    // 마커를 심으므로, 루트는 monorepo·앱은 next 로 각각 update 할 수 있다.
+    mergeJson({ ...markerPatch('monorepo', devkitVersion()) }),
 
     // 루트도 @devbak/* 를 직접 선언해야 한다 — catalog:가 link:를 거부한다.
     // 'tsconfig'는 넣지 않는다 — 루트에는 tsconfig.json이 없고(각 앱이

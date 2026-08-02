@@ -81,6 +81,10 @@ exports[`monorepo 레시피 > 단계 목록이 스냅샷과 일치한다 1`] = `
               "typescript-eslint": "^8.65.0",
               "vitest": "^2.1.0",
             },
+            "devkit": {
+              "type": "next",
+              "version": "0.1.0",
+            },
             "prettier": "@devbak/prettier-config",
             "scripts": {
               "format": "prettier --write .",
@@ -177,6 +181,19 @@ exports[`monorepo 레시피 > 단계 목록이 스냅샷과 일치한다 1`] = `
       "required": [
         "dependencies.next",
       ],
+    },
+    "kind": "mergeJson",
+  },
+  {
+    "detail": {
+      "file": "package.json",
+      "patch": {
+        "devkit": {
+          "type": "monorepo",
+          "version": "0.1.0",
+        },
+      },
+      "required": [],
     },
     "kind": "mergeJson",
   },

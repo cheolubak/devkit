@@ -1,4 +1,6 @@
 import type { Recipe, Step } from '../types.js';
+import { markerPatch } from '../lib/marker.js';
+import { devkitVersion } from '../lib/version.js';
 import { copyOverlay, delegate, linkDeps, makeDirs, mergeJson, removeFiles, scaffold } from '../ops/index.js';
 
 /**
@@ -49,6 +51,9 @@ export const nextRecipe: Recipe = (options = {}) => {
     // (Task 10 Step 7 실측).
     mergeJson(
       {
+        // 유형 마커. update 가 대상의 유형을 알기 위한 전제이며, 의존성으로
+        // 짐작하는 휴리스틱은 조용히 틀릴 수 있어 쓰지 않는다(설계 7절).
+        ...markerPatch('next', devkitVersion()),
         // create-next-app은 "type"을 넣지 않아 프로젝트가 CJS로 취급된다.
         // 그러면 Vite의 config 로더가 vitest.config.ts를 CJS로 번들링하고,
         // externalize-deps가 ESM 전용 @devbak/vitest-config를 require()로
