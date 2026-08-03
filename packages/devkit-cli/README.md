@@ -137,6 +137,120 @@ pnpm devbak update ../my-api --dry-run          # 목록만 보고 끝
 pnpm devbak update --help                       # 사용법만 출력하고 종료
 ```
 
+### 처음 쓴다면 — 권장 순서
+
+**1. 무엇이 바뀌는지 먼저 본다.** `--dry-run`은 아무것도 쓰지 않는다.
+
+```console
+$ pnpm devbak update ../demo-api --type nest --dry-run
+devkit update — demo-api (nest)
+
+  덮어쓰기 (2)
+    package.json
+    tsconfig.json
+  신규 (9)
+    .claude/agents/devkit-reviewer.md
+    .claude/commands/review.md
+    .github/workflows/claude-review.yml
+    .gitignore
+    .prettierignore
+    CLAUDE.md
+    eslint.config.mjs
+    jest-e2e.config.js
+    jest.config.js
+
+--dry-run — 아무것도 쓰지 않았습니다.
+```
+
+**2. 넓으면 `--only`로 좁힌다.** 한 번에 다 바꿀 이유는 없다.
+
+```console
+$ pnpm devbak update ../demo-api --type nest --only claude,ci --dry-run
+devkit update — demo-api (nest)
+
+  신규 (4)
+    .claude/agents/devkit-reviewer.md
+    .claude/commands/review.md
+    .github/workflows/claude-review.yml
+    CLAUDE.md
+```
+
+**3. 대상의 워킹트리를 깨끗하게 만든다.** 커밋하거나 stash한다. update는 dirty한 트리를 거부하는데, 되돌리는 수단이 git이기 때문이다 — 결과가 미커밋 작업과 섞이면 `git checkout`이 둘 다 지운다.
+
+**4. 실행한다.** 확인 프롬프트에서 목록을 한 번 더 보고 `y`를 누른다(`--yes`로 생략 가능).
+
+```console
+$ pnpm devbak update ../demo-api --type nest --only lint
+devkit update — demo-api (nest)
+
+  덮어쓰기 (1)
+    package.json
+  신규 (2)
+    .prettierignore
+    eslint.config.mjs
+
+계속할까요? (y/N) y
+  씀: .prettierignore
+  씀: eslint.config.mjs
+  씀: package.json
+
+완료. git diff 로 검토하세요.
+설정이 바뀌었으니 pnpm lint 를 한 번 돌려보길 권합니다.
+마커가 없어 다음에도 --type 이 필요합니다. 전체 update 가 마커를 심습니다.
+```
+
+**5. `git diff`로 검토하고 `pnpm lint`를 돌린다.** 기존 프로젝트에는 새 규칙에 걸리는 코드가 있을 수 있다 — 그것은 update의 실패가 아니라 이제 드러난 위반이다.
+
+같은 명령을 다시 돌리면 전부 "동일 — 건너뜀"이 된다. 이미 반영된 것을 또 쓰지 않는다.
+
+```console
+$ pnpm devbak update ../demo-api --type nest --only lint --dry-run
+알림: 커밋되지 않은 변경이 3건 있습니다. 실제 실행은 --force 없이는 거부됩니다.
+devkit update — demo-api (nest)
+
+  동일 — 건너뜀 (3)
+    .prettierignore
+    eslint.config.mjs
+    package.json
+```
+
+### `--only` 카테고리가 건드리는 것
+
+| 카테고리 | 대상 |
+| --- | --- |
+| `claude` | `CLAUDE.md`, `.claude/agents/**`, `.claude/commands/**` |
+| `ci` | `.github/workflows/**` |
+| `lint` | `eslint.config.mjs`, `.prettierignore`, `package.json`의 `prettier` 키와 `scripts.lint`·`format`·`format:check` |
+| `ts` | `tsconfig.json`, `tsconfig.build.json` |
+| `test` | `jest.config.js`, `jest-e2e.config.js`, `test/jest-e2e.config.ts`, `vitest.config.ts`, `package.json`의 `jest` 키와 `scripts.test`·`test:watch`·`test:e2e` |
+| `deps` | `package.json`의 `dependencies`·`devDependencies`(`link:` 재계산 포함). **이 카테고리가 대상이고 `package.json`이 실제로 바뀌면 `pnpm install`이 돈다** |
+| `repo` | `.gitignore`, `pnpm-workspace.yaml`, `turbo.json`, `package.json`의 `packageManager`·`private`·`type`과 `scripts.build`·`dev`·`typecheck` |
+| `scaffold` | `src/**` — 프레임워크 뼈대. **기본 제외**이며 명시해야만 대상이 된다 |
+
+`scaffold`가 기본 제외인 이유는 그 파일들이 생성 시점에 한 번 놓이고 그 뒤로는 사람이 고쳐 쓰는 것이기 때문이다. 재적용이 덮으면 사용자의 작업이 사라진다.
+
+### 사용자가 손댄 것은 어디까지 보존되는가
+
+앞의 예시에서 대상 `package.json`은 이렇게 남는다 — `name`·`version`과 직접 넣은 `my-lib`가 그대로 있고 표준 키만 얹혔다.
+
+```jsonc
+{
+  "name": "demo-api",          // 보존
+  "version": "1.4.0",          // 보존
+  "dependencies": {
+    "my-lib": "^2.0.0"         // 보존
+  },
+  "prettier": "@devbak/prettier-config",   // 얹힘
+  "scripts": {                             // 얹힘
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  }
+}
+```
+
+`tsconfig.json`의 `compilerOptions.paths`도 같은 방식으로 살아남는다. **JSON이 아닌 파일은 그렇지 않다** — 아래 "JSON이 아닌 오버레이" 항목을 반드시 읽어라.
+
 | 옵션 | 의미 |
 | --- | --- |
 | `path` | 대상. 생략하면 현재 디렉토리 |

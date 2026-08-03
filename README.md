@@ -80,16 +80,35 @@ pnpm devbak create my-api --type nest             # 또는 --type next | monorep
 
 ## 기존 프로젝트에 붙이기
 
-가장 간단한 방법은 `devbak update`다.
+가장 간단한 방법은 `devbak update`다. **먼저 `--dry-run`으로 무엇이 바뀌는지 보고**,
+대상의 워킹트리를 깨끗하게 만든 뒤 실행한다.
 
 ```bash
 pnpm build
-pnpm devbak update ../my-api --type nest
+pnpm devbak update ../my-api --type nest --dry-run   # 변경 목록만 본다
+pnpm devbak update ../my-api --type nest             # 확인 후 적용
 ```
 
+```console
+devkit update — my-api (nest)
+
+  덮어쓰기 (2)
+    package.json
+    tsconfig.json
+  신규 (9)
+    .claude/agents/devkit-reviewer.md
+    ...
+
+계속할까요? (y/N)
+```
+
+`package.json`·`tsconfig.json`은 **키 단위로 병합**되므로 직접 넣은 의존성과
+`compilerOptions.paths`가 보존된다. 반대로 `CLAUDE.md`·`eslint.config.mjs` 같은
+JSON이 아닌 파일은 **통째로 덮인다** — `--only`로 그 카테고리를 빼면 건드리지 않는다.
+
 마커가 없는 외부 프로젝트에는 `--type`이 필요하고, 전체 update가 마커를 심으면
-다음부터는 생략할 수 있다. 자세한 내용은
-[`packages/devkit-cli/README.md`](packages/devkit-cli/README.md).
+다음부터는 생략할 수 있다. 옵션·카테고리·보존 범위는
+[`packages/devkit-cli/README.md`](packages/devkit-cli/README.md#devbak-update--기존-프로젝트에-표준-재적용).
 
 수동으로 붙이려면 아래처럼 한다. 각 패키지 README에도 설치·설정 예시가 있다.
 요약하면 소비자 `package.json`에 `link:` 상대경로로 넣고, peer는 직접 설치한다.
