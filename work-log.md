@@ -1,5 +1,13 @@
 # Work Log
 
+## 2026-08-03
+
+### devbak update 사용 안내 보강 및 main 통합
+- **변경 파일**: `README.md`, `packages/devkit-cli/README.md`
+- **내용**: 옵션과 계약은 이미 적혀 있었으나 "실제로 어떻게 쓰는가"의 흐름과 화면이 없었다. 임시 프로젝트(`name`·`version`·`my-lib`·`compilerOptions.paths` 보유)를 만들어 `--dry-run`·`--only`·실제 적용·재실행을 각각 돌린 **실측 출력**을 그대로 실었다. 권장 순서 5단계(dry-run → `--only`로 좁히기 → 대상 트리 정리 → 실행 → `git diff` + `pnpm lint`), `--only` 카테고리 8종이 각각 건드리는 파일·키 표, 사용자 자산 보존 범위 예시를 추가했다. 카테고리 표 초안을 `categories.ts`의 `FILE_PATTERNS`·`JSON_KEY_CATEGORIES`와 대조해 두 곳(`tsconfig.build.json`, `test/jest-e2e.config.ts`)을 고쳤다.
+- **통합**: `feature/devkit-update`(24 커밋)를 `main`에 fast-forward로 머지하고 브랜치를 삭제했다(merge commit 없음). 병합 결과에서 테스트 362개·oxlint 에러 0·ESLint clean·빌드 성공 확인. **`origin/main` 푸시는 하지 않았다.**
+- **커밋**: `3c2bad5`
+
 ## 2026-08-02
 
 ### devkit update 구현
