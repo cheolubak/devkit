@@ -131,33 +131,80 @@ JSON이 아닌 파일은 **통째로 덮인다** — `--only`로 그 카테고�
 
 ## 이 저장소에서 개발하기
 
+`build`·`test`·`lint`·`typecheck` 전부 [Turborepo](https://turbo.build)를
+거친다. 패키지 7개 사이에 워크스페이스 의존이 없어(설정 패키지는 서로
+import하지 않고, `devkit-cli`는 이들을 템플릿 내용으로만 조립한다) 스케줄링
+이득은 없다 — turbo가 주는 것은 **캐싱**이다.
+
 ```bash
 pnpm install
-pnpm build        # 빌드가 있는 3개 패키지 (-r)
-pnpm test         # vitest, 단위·스냅샷
-pnpm test:e2e     # 실제 프로젝트 생성 통합 테스트 (느림, 네트워크 필요)
-pnpm lint         # oxlint && eslint .
-pnpm lint:es      # ESLint만
+pnpm build         # 빌드가 있는 3개 패키지, 나머지는 dist 없음
+pnpm typecheck     # tsc --noEmit, 패키지별 tsconfig
+pnpm test          # vitest, 단위·스냅샷
+pnpm test:e2e      # 실제 프로젝트 생성 통합 테스트 (느림, 네트워크 필요, 캐시 안 함)
+pnpm lint          # lint:ox + 패키지별 lint + lint:root, 독립 병렬 실행
+pnpm lint:es       # ESLint만 (전 패키지 + 루트)
 pnpm lint:fix
 ```
+
+바뀐 게 없으면 두 번째 실행은 즉시 `>>> FULL TURBO`로 끝난다. 한 패키지의
+소스만 고치면 **그 패키지의 태스크만 재실행**되고 나머지는 캐시에서 replay된다
+(turbo는 mtime이 아니라 파일 **내용 해시**로 캐시 키를 만든다 — `touch`로는
+무효화되지 않는다). 한 패키지만 골라 돌리려면:
+
+```bash
+pnpm exec turbo run test --filter=@devbak/tsconfig
+```
+
+`pnpm test:e2e`는 캐시하지 않는다. 네트워크로 `create-next-app`·`@nestjs/cli`를
+받고 디스크에 실제 프로젝트를 생성하는 외부 상태 의존 작업이라 캐시 키로
+가둘 수 없기 때문이다. 기본 `pnpm test`에도 섞이지 않는다 — vitest 설정을
+패키지별 `vitest.config.ts`(기본 test)와 `vitest.e2e.config.ts`(e2e 전용)로
+분리해뒀다.
 
 ### 린트는 oxlint + ESLint 하이브리드다
 
 - **oxlint** (`.oxlintrc.json`) — 비타입 correctness 대부분을 Rust 속도로 담당
-- **ESLint** (`eslint.config.mjs`) — oxlint가 못 하는 타입 인식 규칙 전담
+- **ESLint** — 패키지마다 자기 `eslint.config.mjs`를 갖고, oxlint가 못 하는
+  타입 인식 규칙만 전담한다. 공유 규칙 배열은 루트 `eslint.base.mjs`에 있고
+  (파일명이 `eslint.config.*`가 아니어야 ESLint가 설정으로 자동 탐색해
+  중첩되지 않는다), 루트 `eslint.config.mjs`는 `packages/**`를 무시해 저장소
+  전체 린트에서 스코프 안 설정이 항상 정확히 하나이게 만든다(그렇지 않으면
+  `multiple candidate TSConfigRootDirs`로 죽는다)
 - **eslint-plugin-oxlint** — 위 둘의 중복 규칙을 **마지막에** off 처리
 
 `buildFromOxlintConfigFile(...)` 스프레드는 반드시 flat config 배열의 맨 끝에
 와야 한다. 앞이나 중간에 두면 뒤따르는 config가 규칙을 다시 켜서 같은 문제가 두 번
 보고된다.
 
-`pnpm lint`는 `&&` 단락 평가라 oxlint가 실패하면 ESLint는 아예 돌지 않는다.
+`pnpm lint`는 `turbo run lint:ox lint lint:root`로, `lint:ox`(oxlint 전체)·
+`lint`(패키지별 ESLint)·`lint:root`(루트 ESLint)를 **독립 병렬 실행**한다.
+분할 전에는 `oxlint && eslint .`라 oxlint가 실패하면 ESLint가 아예 돌지 않는
+단락 평가였는데, 이제는 하나가 실패해도 다른 태스크의 결과가 그대로 나온다.
+다만 turbo는 **첫 실패에서 나머지 태스크를 마저 죽여** 원인이 화면에서 밀려날
+수 있다 — 전체 결과를 보려면 `--continue`를 붙인다.
+
+```bash
+pnpm exec turbo run lint:ox lint lint:root --continue
+```
+
 **검증할 때는 `pnpm lint:ox`와 `pnpm lint:es`를 둘 다 돌려야 한다.** `pnpm
 lint:es`만으로는 부족하다 — `eslint-plugin-oxlint`가 oxlint와 겹치는 규칙을
 ESLint 쪽에서 꺼 두므로, `no-unused-vars` 같은 규칙은 **oxlint에만 남아 있고**
 `lint:es`는 그 위반에 대해 항상 초록불이다(위반이 없어서가 아니라 애초에 보지
 않아서다). 실측: 미사용 `import type`이 `pnpm lint:es`를 통과한 채 커밋됐다가
 `pnpm lint:ox`(따라서 `pnpm lint`)에서 걸렸다(`91590af`).
+
+`pnpm lint:fix`는 여전히 `oxlint --fix && turbo run lint -- --fix && eslint .
+--fix`로 `&&` 단락 평가다 — fix는 순서가 중요해(oxlint가 먼저 고치고 나서
+ESLint가 나머지를 보는 편이 재작업이 적다) 병렬화하지 않았다.
+
+새 패키지를 추가할 때는 `eslint.config.mjs`와 `package.json`의
+`"lint": "eslint ."`가 **둘 다** 있어야 한다. 하나라도 빠지면 루트가
+`packages/**`를 무시하므로 그 패키지는 `pnpm lint`에서 조용히 빠진다 —
+분할 전에는 설정이 아예 없으면 저장소 전체 린트가 요란하게 죽었지만, 지금은
+빠진 패키지 하나만 초록불로 넘어간다. `packages/devkit-cli/tests/lint-coverage.test.ts`가
+이 사각지대를 방어 테스트로 잡는다.
 
 ### e2e 테스트는 디스크를 쓴다
 
@@ -174,15 +221,18 @@ rm -rf ~/Documents/develop/devkit-e2e-*
 ## 저장소 구조
 
 ```
-packages/           7개 패키지
+packages/           7개 패키지, 각자 eslint.config.mjs·vitest.config.ts 보유(e2e는 devkit-cli만)
 docs/superpowers/   설계 문서(specs)와 구현 계획(plans)
 work-log.md         날짜별 작업 기록
-eslint.config.mjs   저장소 자체 ESLint (하이브리드 구성)
-.oxlintrc.json      저장소 자체 oxlint
+turbo.json          루트 태스크 정의(build/typecheck/lint/test)와 캐시 설정
+eslint.config.mjs   저장소 자체 ESLint — packages/**는 무시(패키지별 설정과 스코프 충돌 방지)
+eslint.base.mjs     패키지 eslint.config.mjs가 공유하는 규칙 배열
+.oxlintrc.json      저장소 자체 oxlint (패키지별로 나누지 않음, 전체가 밀리초 단위)
 tsconfig.base.json  패키지들이 extends하는 공통 tsconfig
-vitest.config.ts    단위·스냅샷 테스트
-vitest.e2e.config.ts 실생성 통합 테스트
 ```
+
+vitest·tsconfig가 패키지별로 흩어져 있어 단위 테스트와 타입체크는 각 패키지
+디렉토리 안에서 완결된다. 루트에는 이들을 묶는 turbo 태스크 정의만 남는다.
 
 각 패키지의 "왜 이렇게 했는가"는 해당 README에, 그보다 앞선 설계 판단은
 `docs/superpowers/specs/`에 있다.

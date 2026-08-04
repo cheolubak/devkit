@@ -1,5 +1,18 @@
 # Work Log
 
+## 2026-08-04
+
+### Turborepo 도입 (설계 → Task 1~5 구현·검증)
+- **변경 파일**: `turbo.json`(신규), `eslint.base.mjs`(신규), 패키지 7개에 `eslint.config.mjs`·`vitest.config.ts` 신설(기존 것 이동/분할), `devkit-cli`에 `vitest.e2e.config.ts`·`turbo.json`, `prettier-config`·`tsconfig` 패키지에 `tests/tsconfig.json` 신설, 각 `package.json`에 `typecheck` 스크립트 추가, `packages/devkit-cli/tests/lint-coverage.test.ts`(신규), 루트 `package.json`(스크립트 전부 `turbo run`으로 교체), 루트 `eslint.config.mjs`(`packages/**` 무시), 루트 `vitest.config.ts`·`vitest.e2e.config.ts` 삭제, `README.md`
+- **내용**: 저장소 자체(`eslint-workspace`)에 Turborepo를 붙여 `build`·`test`·`lint`·`typecheck`를 패키지 단위 태스크로 쪼갰다. 설계 문서 `docs/superpowers/specs/2026-08-04-turbo-toolkit-design.md`.
+  - **얻은 것은 캐싱과 도그푸딩뿐이다.** 실측대로 패키지 7개 사이에 워크스페이스 의존이 0이라(설정 패키지는 서로 import하지 않고 `devkit-cli`는 이들을 템플릿 내용으로만 조립한다) `dependsOn: ["^build"]`가 no-op이고 `pnpm -r`이 이미 하던 동시 실행 이상의 스케줄링 이득이 없다. "빌드가 빨라진다"는 기대는 틀린 기대다 — 실제로 얻은 것은 (1) 안 바뀐 패키지의 재실행을 건너뛰는 캐시, (2) 툴킷이 `monorepo` 레시피로 남에게 권하는 구조를 자기도 쓰는 도그푸딩 두 가지뿐이다.
+  - Task 3(`typecheck` 신설)에서 `prettier-config`·`tsconfig` 패키지가 그동안 `tsc`로 검사된 적이 없다는 사실이 드러났다 — TS 소스인데 `tsconfig.json`이 없어 ESLint의 `projectService`만 파싱했다. `tests/tsconfig.json`을 새로 얹자 TS7016(암묵적 `any`, 타입 선언 없는 모듈) 2건이 실제로 나왔고, 원인을 "형제 프로젝트가 `../tsconfig.json`의 옵션을 상속한다"고 반대로 적어 둔 주석도 함께 발견돼 고쳤다.
+  - Task 4(ESLint 분할)가 가장 위험했다. 패키지마다 `eslint.config.mjs`를 두면 `tsconfigRootDir` 후보가 갈려 `multiple candidate TSConfigRootDirs`로 저장소 전체 린트가 죽는다 — 루트 설정이 `packages/**`를 무시하게 해 어떤 실행에서도 스코프 안 설정이 정확히 하나이게 만들어 해소했다. 공유 규칙 배열 파일명은 `eslint.base.mjs`여야 한다(`eslint.config.*`면 ESLint가 자동 탐색해 중첩이 재발한다). 대가는 **격리** — 새 패키지가 `eslint.config.mjs`나 `"lint": "eslint ."`를 빠뜨리면 조용히 린트 대상에서 빠진다(분할 전엔 설정이 없으면 요란하게 전체가 죽었는데, 지금은 초록불로 넘어간다). `tests/lint-coverage.test.ts`를 방어 테스트로 추가해 막았다.
+  - Task 5(이 항목)에서 설계 6절의 검증 6개를 전부 재현했다: 테스트 41파일/363개 보존, `pnpm lint` 에러 0·`multiple candidate` 0건, 빌드 성공, 두 번째 `pnpm build && pnpm test && pnpm lint`가 전부 `FULL TURBO`, **부분 무효화**는 `eslint-plugin-fsd/src/index.ts`만 고쳤을 때 그 패키지만 `cache miss`(나머지 6개 `cache hit`)로 정확히 재현됐다(turbo는 mtime이 아니라 파일 내용 해시로 캐시 키를 만들어 `touch`로는 무효화되지 않는다는 점을 확인), 기본 `pnpm test`에 e2e가 섞이지 않음(태스크 수 7개, e2e 태스크 없음). `pnpm test:e2e` 11개도 정상 통과.
+  - 알려진 유예 지적 넷을 README에 남기고 고치지는 않았다: turbo가 첫 실패에서 나머지 태스크를 죽여 원인이 가려질 수 있다(`--continue`로 우회), `lint:fix`는 여전히 `&&` 단락 평가(분할 전과 동일, 회귀 아님), `//#lint:root`의 캐시가 과잉 무효화된다(inputs가 넓어 실제 린트 대상 2개보다 훨씬 많은 파일에 반응), `devkit-cli:test`가 형제 패키지 `package.json`이 바뀌면 271개 전부 재실행된다(커버리지 테스트가 다른 패키지 파일을 읽는데 그것이 캐시 키에 안 잡히면 새 패키지 추가가 조용히 안 걸리기 때문 — 자기 캐시 때문에 죽을 뻔한 재귀적 함정을 커버리지 테스트 자신이 안고 있다).
+- **검증**: `pnpm test`(41파일/363개), `pnpm lint`(oxlint+ESLint 병렬, 에러 0, `multiple candidate` 0), `pnpm build`, 두 번째 실행 `FULL TURBO` 3종, 부분 무효화 실측(`eslint-plugin-fsd`만 miss), `pnpm test:e2e` 11개 통과.
+- **커밋**: `feature/turbo-toolkit` 브랜치. main 미머지.
+
 ## 2026-08-03
 
 ### devbak update 사용 안내 보강 및 main 통합
