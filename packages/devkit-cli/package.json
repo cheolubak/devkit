@@ -23,6 +23,8 @@
   },
   "scripts": {
     "build": "tsup",
+    "test": "vitest run --passWithNoTests",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "prepublishOnly": "pnpm build"
   },
   "devDependencies": {

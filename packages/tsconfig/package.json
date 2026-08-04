@@ -11,6 +11,9 @@
     "./lib": "./lib.json"
   },
   "files": ["base.json", "nest.json", "next.json", "lib.json"],
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || >=24"
   },

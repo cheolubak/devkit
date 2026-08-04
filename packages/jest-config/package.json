@@ -9,6 +9,9 @@
     "./nest-e2e": "./nest-e2e.js"
   },
   "files": ["nest.js", "nest-e2e.js"],
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || >=24"
   },

@@ -10,6 +10,9 @@
     "./node": "./node.js"
   },
   "files": ["next.js", "node.js"],
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || >=24"
   },

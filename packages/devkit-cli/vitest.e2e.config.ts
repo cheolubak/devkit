@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['packages/*/tests/e2e/**/*.e2e.test.ts'],
+    include: ['tests/e2e/**/*.e2e.test.ts'],
     // pnpm dlx 다운로드 + pnpm install + next build가 들어간다
     testTimeout: 900_000,
     hookTimeout: 900_000,

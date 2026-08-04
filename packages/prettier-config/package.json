@@ -11,6 +11,9 @@
   "files": [
     "index.json"
   ],
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
   "publishConfig": {
     "access": "public"
   }

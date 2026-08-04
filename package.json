@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "turbo run build",
-    "test": "vitest run --passWithNoTests",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
     "lint": "oxlint && eslint .",
     "lint:ox": "oxlint",
     "lint:es": "eslint .",
