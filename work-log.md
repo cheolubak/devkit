@@ -11,7 +11,7 @@
   - Task 5(이 항목)에서 설계 6절의 검증 6개를 전부 재현했다: 테스트 41파일/363개 보존, `pnpm lint` 에러 0·`multiple candidate` 0건, 빌드 성공, 두 번째 `pnpm build && pnpm test && pnpm lint`가 전부 `FULL TURBO`, **부분 무효화**는 `eslint-plugin-fsd/src/index.ts`만 고쳤을 때 그 패키지만 `cache miss`(나머지 6개 `cache hit`)로 정확히 재현됐다(turbo는 mtime이 아니라 파일 내용 해시로 캐시 키를 만들어 `touch`로는 무효화되지 않는다는 점을 확인), 기본 `pnpm test`에 e2e가 섞이지 않음(태스크 수 7개, e2e 태스크 없음). `pnpm test:e2e` 11개도 정상 통과.
   - 알려진 유예 지적 넷을 README에 남기고 고치지는 않았다: turbo가 첫 실패에서 나머지 태스크를 죽여 원인이 가려질 수 있다(`--continue`로 우회), `lint:fix`는 여전히 `&&` 단락 평가(분할 전과 동일, 회귀 아님), `//#lint:root`의 캐시가 과잉 무효화된다(inputs가 넓어 실제 린트 대상 2개보다 훨씬 많은 파일에 반응), `devkit-cli:test`가 형제 패키지 `package.json`이 바뀌면 271개 전부 재실행된다(커버리지 테스트가 다른 패키지 파일을 읽는데 그것이 캐시 키에 안 잡히면 새 패키지 추가가 조용히 안 걸리기 때문 — 자기 캐시 때문에 죽을 뻔한 재귀적 함정을 커버리지 테스트 자신이 안고 있다).
 - **검증**: `pnpm test`(41파일/363개), `pnpm lint`(oxlint+ESLint 병렬, 에러 0, `multiple candidate` 0), `pnpm build`, 두 번째 실행 `FULL TURBO` 3종, 부분 무효화 실측(`eslint-plugin-fsd`만 miss), `pnpm test:e2e` 11개 통과.
-- **커밋**: `feature/turbo-toolkit` 브랜치. main 미머지.
+- **커밋**: `e2c14c6`(설계) ~ `70a9d47`(이 항목, 문서). `feature/turbo-toolkit` 브랜치, 총 13커밋. main 미머지.
 
 ## 2026-08-03
 
