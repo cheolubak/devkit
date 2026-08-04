@@ -78,6 +78,11 @@ export function baseConfig(tsconfigRootDir, extra = []) {
       // eslint.base.mjs 자신도 여기 포함해야 한다: 이름이 `*.config.*`가
       // 아니라 위 glob에 안 걸리는데, 어떤 tsconfig에도 속하지 않으므로
       // projectService가 파싱에 실패한다.
+      //
+      // 'eslint.base.mjs' 항목은 flat config의 files가 **이 설정 파일 기준
+      // 상대경로**로 해석되므로 루트 실행에서만 유효하다. 패키지 실행에서는
+      // 존재하지 않는 packages/<pkg>/eslint.base.mjs를 가리켜 아무것도
+      // 매칭하지 않는다(무해한 no-op — 패키지에는 이 파일이 애초에 없다).
       files: ['**/*.config.{ts,mts,cts,js,mjs,cjs}', 'eslint.base.mjs'],
       extends: [tseslint.configs.disableTypeChecked],
       languageOptions: {

@@ -1,6 +1,11 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalDependencies": ["tsconfig.base.json", ".oxlintrc.json", "eslint.base.mjs"],
+  "globalDependencies": [
+    "tsconfig.base.json",
+    ".oxlintrc.json",
+    "eslint.base.mjs",
+    "pnpm-workspace.yaml"
+  ],
   "tasks": {
     "build": { "outputs": ["dist/**"] },
     "typecheck": {},
