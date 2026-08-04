@@ -2,6 +2,7 @@ node_modules/
 dist/
 *.log
 .DS_Store
+.turbo/
 
 # 테스트가 생성하는 실행용 픽스처(예: packages/jest-config/tests/.fixtures)
 .fixtures/

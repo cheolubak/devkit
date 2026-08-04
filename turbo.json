@@ -1,0 +1,7 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["tsconfig.base.json", ".oxlintrc.json", "eslint.base.mjs"],
+  "tasks": {
+    "build": { "outputs": ["dist/**"] }
+  }
+}
