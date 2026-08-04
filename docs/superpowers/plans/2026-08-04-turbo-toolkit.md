@@ -586,8 +586,11 @@ pnpm build
 pnpm build && pnpm test && pnpm lint
 
 # 5. 부분 무효화 — 이 작업의 존재 이유
-touch packages/eslint-plugin-fsd/src/index.ts
+#    turbo는 mtime이 아니라 파일 **내용 해시**로 캐시 키를 만든다(Task 1 실측).
+#    touch만으로는 무효화되지 않으므로 내용을 실제로 바꿔야 한다.
+printf '\n// cache invalidation check\n' >> packages/eslint-plugin-fsd/src/index.ts
 pnpm test 2>&1 | grep -E "cache hit|cache miss"
+git checkout -- packages/eslint-plugin-fsd/src/index.ts
 
 # 6. e2e 격리
 pnpm test 2>&1 | grep -c "e2e" || echo "기본 test에 e2e 미포함"
