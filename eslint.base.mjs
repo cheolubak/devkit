@@ -18,6 +18,18 @@ import oxlint from 'eslint-plugin-oxlint';
  * @param {unknown[]} extra oxlint 스프레드 **앞**에 끼울 추가 config
  */
 export function baseConfig(tsconfigRootDir, extra = []) {
+  // 빠뜨리면 undefined가 되는데, typescript-eslint는 이때 던지지 않고 자체
+  // 추론으로 넘어간다 — 설정이 조용히 엉뚱한 루트를 잡고, 그것이 이 분할이
+  // 막으려 한 `multiple candidate TSConfigRootDirs` 그 자체다. 여기서 끊는다.
+  if (!tsconfigRootDir) {
+    throw new Error(
+      'baseConfig(tsconfigRootDir): tsconfigRootDir는 필수다. 패키지의 ' +
+        'eslint.config.mjs에서 `baseConfig(import.meta.dirname)`처럼 절대경로를 넘겨라. ' +
+        '생략하면 typescript-eslint가 던지지 않고 자체 추론으로 넘어가 ' +
+        'multiple candidate TSConfigRootDirs로 저장소 전체 lint가 죽을 수 있다.',
+    );
+  }
+
   return tseslint.config(
     {
       // .superpowers/는 git-ignored 스크래치(SDD 워크스페이스), .claude/는
