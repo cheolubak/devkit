@@ -1,5 +1,14 @@
 # Work Log
 
+## 2026-08-04
+
+### Turbo 도입 (Task 1/5): turbo 설치와 build 태스크
+- **변경 파일**: `turbo.json`(신규), `package.json`(루트 — `packageManager`, `build` 스크립트, `turbo` devDependency), `pnpm-lock.yaml`, `.gitignore`
+- **내용**: 패키지 7개 사이에 workspace 의존이 하나도 없어 turbo의 스케줄링 이득은 0이고, 이 도입이 주는 것은 **캐싱**과 **도그푸딩**(툴킷이 `monorepo` 레시피로 남에게 권하는 구조를 자기도 씀)뿐이다. `dependsOn: ["^build"]`는 없는 관계를 선언하는 셈이라 넣지 않았다. `globalDependencies`에 아직 없는 `eslint.base.mjs`(Task 4에서 생성 예정)를 미리 선언해 뒀다 — 없는 파일은 무시되어 무해하다.
+- **캐시 검증**: `dist/` 삭제 후 재빌드 → 1차 cache miss, 2차 `pnpm build`는 `FULL TURBO`(3/3 cache hit, 28ms). `touch`만으로는 무효화되지 않음을 확인(turbo는 mtime이 아니라 **내용 해시**로 캐시 키를 만든다 — 브리프의 `touch` 예시는 이 저장소에서 검증 수단으로 부정확하다). 실제로 `devkit-cli/src/bin.ts` 내용을 수정해 재검증하니 해당 패키지만 cache miss, 나머지 둘은 cache hit — 부분 무효화가 정상 동작함을 확인. 검증 후 소스를 원복하고 다시 빌드해 dist가 최초 해시로 복원됨을 확인.
+- **검증**: 테스트 362개 통과, oxlint 에러 0(warning 3, 기준선과 동일), ESLint 에러 0, 빌드 성공.
+- **커밋**: `c84bad8`
+
 ## 2026-08-03
 
 ### devbak update 사용 안내 보강 및 main 통합
