@@ -4,6 +4,9 @@
   "tasks": {
     "build": { "outputs": ["dist/**"] },
     "typecheck": {},
+    "lint": {},
+    "//#lint:ox": {},
+    "//#lint:root": {},
     "test": {},
     "test:e2e": { "dependsOn": ["build"], "cache": false }
   }

@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tests/tsconfig.json",
+    "lint": "eslint .",
     "test": "vitest run --passWithNoTests"
   },
   "publishConfig": {

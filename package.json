@@ -8,10 +8,11 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
-    "lint": "oxlint && eslint .",
+    "lint": "turbo run lint:ox lint lint:root",
+    "lint:root": "eslint .",
     "lint:ox": "oxlint",
-    "lint:es": "eslint .",
-    "lint:fix": "oxlint --fix && eslint . --fix",
+    "lint:es": "turbo run lint lint:root",
+    "lint:fix": "oxlint --fix && turbo run lint -- --fix && eslint . --fix",
     "devbak": "node packages/devkit-cli/dist/bin.js"
   },
   "devDependencies": {

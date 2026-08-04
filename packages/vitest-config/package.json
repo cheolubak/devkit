@@ -12,6 +12,7 @@
   "files": ["next.js", "node.js"],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tests/tsconfig.json",
+    "lint": "eslint .",
     "test": "vitest run --passWithNoTests"
   },
   "engines": {
