@@ -12,6 +12,7 @@
     "index.json"
   ],
   "scripts": {
+    "typecheck": "tsc --noEmit -p tests/tsconfig.json",
     "test": "vitest run --passWithNoTests"
   },
   "publishConfig": {

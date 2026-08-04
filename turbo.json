@@ -3,6 +3,7 @@
   "globalDependencies": ["tsconfig.base.json", ".oxlintrc.json", "eslint.base.mjs"],
   "tasks": {
     "build": { "outputs": ["dist/**"] },
+    "typecheck": {},
     "test": {},
     "test:e2e": { "dependsOn": ["build"], "cache": false }
   }

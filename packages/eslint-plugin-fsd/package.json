@@ -26,6 +26,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tests/tsconfig.json",
     "test": "vitest run --passWithNoTests",
     "prepublishOnly": "pnpm build"
   },
