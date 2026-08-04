@@ -36,11 +36,18 @@
 | `packages/<pkg>/package.json` | 태스크 스크립트 | 수정 ×7 |
 | `package.json` (루트) | turbo 위임 스크립트 | 수정 |
 
-### 설계 대비 확장 1건 — `tests/tsconfig.json`을 6개 패키지에 만든다
+### ~~설계 대비 확장 1건 — `tests/tsconfig.json`을 6개 패키지에 만든다~~ (2026-08-04 정정: 틀린 전제였다)
 
-설계 4.3절은 `prettier-config`·`tsconfig` 둘만 언급하지만, **실측하면 더 넓다.** 패키지 tsconfig들은 전부 `include: ["src"]` 또는 `include: ["*.js"]`라 **테스트가 어느 tsconfig에도 속하지 않는다.** `devkit-cli`만 `tests/tsconfig.json`을 따로 갖는다.
+**이 절의 원래 주장은 사실이 아니었다.** Task 3 실행 중 구현자가 실측으로 잡았다 — `tests/tsconfig.json`은 **7개 패키지 전부에 이미 있다.** 그중 둘은 이유가 주석으로 적힌 채 커스터마이즈돼 있다:
 
-즉 **지금 `tsc`로 검사되는 테스트는 `devkit-cli`의 것뿐이다.** `typecheck`가 테스트를 덮으려면 6개 패키지 전부에 필요하다. `devkit-cli`의 기존 파일이 그 본이다.
+- `eslint-config-nest`: `"exclude": ["fixtures"]` — `tests/fixtures/nest-app/`이 자체 tsconfig를 가진 독립 픽스처다. 바닐라 템플릿으로 덮으면 데코레이터 시그니처 오류(TS1241·TS1270)가 난다.
+- `eslint-plugin-fsd`: `"include": [".", "../src/types"]` — `src/types/eslint-plugin-jsx-a11y.d.ts`의 모듈 보강이 필요하다. 빼면 TS7016이 난다.
+
+**계획이 이렇게 틀린 이유**: 사실 수집 때 패키지 **루트**의 `tsconfig.json`만 세고, `tests/` 아래는 `devkit-cli` 하나만 확인했다. "나머지는 없다"는 어느 조사도 확인하지 않은 명제였다. `ls packages/*/tests/tsconfig.json` 한 줄이면 드러났다.
+
+**그래도 이 태스크의 값어치는 그대로다.** 파일이 있었다는 것과 `tsc`가 돌았다는 것은 다르다 — 이 저장소에는 `typecheck` 스크립트가 **아예 없었으므로**, 그 tsconfig들은 ESLint `projectService`의 파싱에만 쓰였고 **타입 검사는 한 번도 실행된 적이 없다.** Task 3이 그 검사를 처음 켠다.
+
+따라서 Task 3의 Step 1은 **신설이 아니라 확인**이고, 커스터마이즈된 둘은 **그대로 둔다.**
 
 ---
 
