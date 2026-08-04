@@ -199,12 +199,24 @@ ESLint 쪽에서 꺼 두므로, `no-unused-vars` 같은 규칙은 **oxlint에만
 --fix`로 `&&` 단락 평가다 — fix는 순서가 중요해(oxlint가 먼저 고치고 나서
 ESLint가 나머지를 보는 편이 재작업이 적다) 병렬화하지 않았다.
 
-새 패키지를 추가할 때는 `eslint.config.mjs`와 `package.json`의
-`"lint": "eslint ."`가 **둘 다** 있어야 한다. 하나라도 빠지면 루트가
-`packages/**`를 무시하므로 그 패키지는 `pnpm lint`에서 조용히 빠진다 —
-분할 전에는 설정이 아예 없으면 저장소 전체 린트가 요란하게 죽었지만, 지금은
-빠진 패키지 하나만 초록불로 넘어간다. `packages/devkit-cli/tests/lint-coverage.test.ts`가
-이 사각지대를 방어 테스트로 잡는다.
+### 새 패키지 체크리스트
+
+루트 `eslint.config.mjs`는 `packages/**`를 무시하고, 루트 `vitest.config.ts`·
+`vitest.e2e.config.ts`는 Task 2에서 삭제됐다. 그 결과 `turbo run lint`·
+`turbo run test`·`turbo run typecheck`는 각각 해당 스크립트가 **있는** 패키지만
+실행한다 — 새 패키지를 만들며 다음 중 하나라도 빠뜨리면 그 태스크만 조용히
+건너뛰고 `pnpm lint`/`pnpm test`/`pnpm typecheck`는 초록불로 통과한다(분할 전에는
+설정이 아예 없으면 저장소 전체가 요란하게 죽었지만, 지금은 빠진 패키지 하나만
+넘어간다):
+
+- `eslint.config.mjs` + `package.json`의 `"lint": "eslint ."`
+- `vitest.config.ts` + `package.json`의 `"test": "vitest run --passWithNoTests"`
+- `package.json`의 `"typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tests/tsconfig.json"`
+  (패키지 루트에 `tsconfig.json`이 없으면 `tests/tsconfig.json`만 검사해도 된다)
+
+lint가 빠지면 품질 손실이지만 test가 빠지면 **정확성 손실**이다 — 테스트를
+아무리 써 놓아도 0개가 돌고 아무도 모른다. `packages/devkit-cli/tests/package-task-coverage.test.ts`가
+이 사각지대 세 곳을 전부 방어 테스트로 잡는다.
 
 ### e2e 테스트는 디스크를 쓴다
 

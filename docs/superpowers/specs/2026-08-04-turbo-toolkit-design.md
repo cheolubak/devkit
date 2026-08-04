@@ -227,7 +227,7 @@ turbo는 `lint:ox`와 `lint`를 **독립 태스크로 병렬 실행**한다. 하
 | 상황 | 동작 |
 | --- | --- |
 | `multiple candidate TSConfigRootDirs` | **설계 실패다.** 3.1절의 격리가 깨졌다는 뜻이므로 되돌아가 원인을 찾는다 |
-| 패키지 테스트 수 합계가 362와 다름 | `include` 패턴이 파일을 놓쳤다. 패턴을 고친다 |
+| 패키지 테스트 수 합계가 기대와 다름(Task 1~3: 362, Task 4 이후: 363 — `lint-coverage.test.ts` 1개 추가) | `include` 패턴이 파일을 놓쳤다. 패턴을 고친다 |
 | `typecheck`에서 새 타입 오류 | 4.3절 — 발견이다. 코드를 고친다 |
 | turbo 캐시가 안 걸림 | `globalDependencies`·`outputs` 선언을 점검한다 |
 
@@ -239,7 +239,7 @@ turbo 도입 자체는 새 단위 테스트를 만들지 않는다. **검증은 
 
 | 층 | 확인 |
 | --- | --- |
-| 1 | `pnpm test`가 **362개 전부 통과** |
+| 1 | `pnpm test`가 **363개 전부 통과**(Task 4가 `lint-coverage.test.ts` 1개를 더해 362 → 363) |
 | 2 | `pnpm lint` 에러 0, `multiple candidate` 없음 |
 | 3 | `pnpm build` 산출물이 이전과 동일 |
 | 4 | 두 번째 실행이 `>>> FULL TURBO`로 즉시 종료 |

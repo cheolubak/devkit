@@ -654,7 +654,7 @@ git commit -m "docs: turbo 도입에 맞춰 개발 안내를 갱신한다"
 
 - [ ] `turbo.json`·`eslint.base.mjs`가 있고 패키지 7개가 각자 `eslint.config.mjs`·`vitest.config.ts`를 갖는다 (Task 2·4)
 - [ ] 루트 `vitest.config.ts`·`vitest.e2e.config.ts`가 삭제됐다 (Task 2)
-- [ ] 테스트 362개 통과 (Task 2·5)
+- [ ] 테스트 363개 통과(Task 2는 362 보존, Task 4가 `lint-coverage.test.ts` 1개를 더해 363) (Task 2·4·5)
 - [ ] `pnpm lint` 에러 0, `multiple candidate TSConfigRootDirs` 없음 (Task 4·5)
 - [ ] 두 번째 실행이 `>>> FULL TURBO` (Task 1·5)
 - [ ] **한 패키지만 고치면 그 패키지 태스크만 재실행** (Task 5)
