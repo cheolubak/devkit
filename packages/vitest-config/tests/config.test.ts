@@ -5,9 +5,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import nextConfigDefault from '../next.js';
 import nodeConfigDefault from '../node.js';
 
-// next.js/node.js는 checkJs: false로 타입 검사 대상에서 제외돼 있어(../tsconfig.json),
-// import 결과가 `any`로 좁혀진다. @devbak/jest-config가 require 결과를 캐스팅하는 것과
-// 같은 이유로, 여기서도 실제로 검증할 필드만 명시한 타입으로 캐스팅한다.
+// 이 파일이 속한 프로젝트는 ../tsconfig.json이 아니라 tests/tsconfig.json이다 —
+// 형제 프로젝트라 allowJs·checkJs가 상속되지 않는다(실측: 없이 돌리면 TS7016).
+// tests/tsconfig.json에도 allowJs: true를 켜 next.js/node.js를 읽게 하되
+// checkJs는 그대로 꺼 둔다 — JS 파일 내부는 검사하지 않지만 구조는 추론되므로
+// import 결과가 `any`가 아니라 실제 형태로 잡힌다. @devbak/jest-config가 require
+// 결과를 캐스팅하는 것과 같은 이유로, 여기서도 실제로 검증할 필드만 명시한
+// 타입으로 캐스팅한다.
 const nextConfig = nextConfigDefault as { test: { environment: string; passWithNoTests: boolean } };
 const nodeConfig = nodeConfigDefault as { test: { environment: string } };
 
