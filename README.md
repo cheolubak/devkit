@@ -127,8 +127,11 @@ pnpm devbak --help
 [CLI 설치](#cli-설치)를 마쳤다면:
 
 ```bash
-pnpm devbak create my-api --type nest             # 또는 --type next | monorepo
+pnpm dlx @cheolubak/devkit-cli create my-api --type nest   # 또는 --type next | monorepo
 ```
+
+저장소에서 개발 중이라면 위 `## CLI 설치`의 `### 개발·기여용` 소절대로
+`pnpm devbak create ...`로 같은 일을 한다.
 
 | 유형 | 뼈대 | 얹는 표준 |
 | --- | --- | --- |
@@ -179,10 +182,11 @@ pnpm devbak create my-api --type nest             # 또는 --type next | monorep
 대상의 워킹트리를 깨끗하게 만든 뒤 실행한다.
 
 ```bash
-pnpm build
-pnpm devbak update ../my-api --type nest --dry-run   # 변경 목록만 본다
-pnpm devbak update ../my-api --type nest             # 확인 후 적용
+pnpm dlx @cheolubak/devkit-cli update ../my-api --type nest --dry-run   # 변경 목록만 본다
+pnpm dlx @cheolubak/devkit-cli update ../my-api --type nest             # 확인 후 적용
 ```
+
+저장소에서 개발 중이라면 `pnpm build` 후 `pnpm devbak update ...`로 같은 일을 한다.
 
 ```console
 devkit update — my-api (nest)

@@ -31,6 +31,10 @@ export GITHUB_TOKEN=$(gh auth token)   # 또는 read:packages 권한의 PAT
 
 ## 사용법
 
+**이 저장소에서 직접 실행할 때다.** `pnpm dlx`로 쓸 때는 위 첫 문단처럼
+`pnpm dlx @cheolubak/devkit-cli <command>` 뒤에 아래와 같은 인자·옵션을
+그대로 붙이면 된다.
+
 ```bash
 pnpm build            # devkit-cli의 dist를 최신화한다 (필수 — 아래 참고)
 pnpm devbak create <name> --type <nest|next|monorepo> [--no-verify]
