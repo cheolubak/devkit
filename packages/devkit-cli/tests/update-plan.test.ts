@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CATEGORIES, type Category } from '../src/lib/categories.js';
-import { DEVKIT_VERSION_RANGE } from '../src/ops/registry-deps.js';
 import type { Ctx } from '../src/types.js';
 import { buildPlan, effectiveCategories } from '../src/update/plan.js';
 
@@ -83,7 +82,9 @@ describe('buildPlan', () => {
     expect(parsed.name).toBe('demo');
     // 레시피의 devDependencies와 registryDeps의 버전 범위가 함께 들어간다.
     expect(parsed.devDependencies['typescript-eslint']).toBe('^8.65.0');
-    expect(parsed.devDependencies['@cheolubak/tsconfig']).toBe(DEVKIT_VERSION_RANGE);
+    // 상수를 import해 자기 자신과 비교하면 값이 무엇으로 바뀌어도 통과한다.
+    // 리터럴로 고정한다 — 실제 게시 버전과의 정합은 registry-version.test.ts 가 지킨다.
+    expect(parsed.devDependencies['@cheolubak/tsconfig']).toBe('^0.1.0');
   });
 
   it('마커를 주면 package.json에 얹힌다 — 쓰기 뒤가 아니라 계획 안이다', async () => {

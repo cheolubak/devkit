@@ -48,8 +48,11 @@ const FILE_PATTERNS: ReadonlyArray<readonly [RegExp, Category]> = [
   [/^eslint\.config\.mjs$/, 'lint'],
   [/^_?\.?prettierignore$/, 'lint'],
   // .npmrc 는 레지스트리 접근 설정이라 의존성과 함께 움직인다(설계 5.3절).
-  // 덕분에 `devbak update --only deps` 가 기존 link: 프로젝트를 버전 범위로
-  // 옮기는 마이그레이션 경로가 된다 — 별도 도구가 필요 없다.
+  // 덕분에 `devbak update --only deps` 가 기존 link: 프로젝트에 .npmrc 와
+  // @cheolubak/* 버전 범위를 한 번에 놓는다. 다만 **완전한 마이그레이션은
+  // 아니다** — registryDeps 는 새 키를 얹기만 하므로 옛 `@devbak/*`: `link:...`
+  // 항목은 그대로 남고, 손으로 지워야 한다. 지우지 않으면 이어지는
+  // pnpm install 이 옛 패키지를 같이 설치하거나(중복 설정) 경로가 깨져 죽는다.
   [/^_?\.?npmrc$/, 'deps'],
   [/^tsconfig(?:\.build)?\.json$/, 'ts'],
   [/^(?:jest|jest-e2e|vitest)\.config\.[cm]?[jt]s$/, 'test'],

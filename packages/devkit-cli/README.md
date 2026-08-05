@@ -237,6 +237,13 @@ devkit update — demo-api (nest)
 | `repo` | `.gitignore`, `pnpm-workspace.yaml`, `turbo.json`, `package.json`의 `packageManager`·`private`·`type`과 `scripts.build`·`dev`·`typecheck` |
 | `scaffold` | `src/**` — 프레임워크 뼈대. **기본 제외**이며 명시해야만 대상이 된다 |
 
+`link:`로 이 툴킷을 쓰던 프로젝트를 옮길 때는 한 가지를 손으로 해야 한다.
+`deps`는 `@cheolubak/*` 버전 범위와 `.npmrc`를 **얹기만** 하므로, 기존
+`"@devbak/tsconfig": "link:../eslint/packages/tsconfig"` 같은 항목은 그대로
+남는다. 지우지 않으면 이어지는 `pnpm install`이 옛 패키지를 같이 설치하거나
+(중복 설정) 경로가 깨져 실패한다. update를 돌린 뒤 `package.json`에서
+`@devbak/` 항목을 지워라.
+
 `scaffold`가 기본 제외인 이유는 그 파일들이 생성 시점에 한 번 놓이고 그 뒤로는 사람이 고쳐 쓰는 것이기 때문이다. 재적용이 덮으면 사용자의 작업이 사라진다.
 
 ### 사용자가 손댄 것은 어디까지 보존되는가
