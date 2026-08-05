@@ -119,7 +119,10 @@ export async function main(argv: string[], options: MainOptions = {}): Promise<v
 
   const pkgDir = packageRoot(fileURLToPath(import.meta.url));
   assertDistFresh(pkgDir);
-  const toolkitRoot = findToolkitRoot(pkgDir);
+  // 게시본에는 툴킷 저장소가 없다. 여기서 findToolkitRoot 를 부르면 소비자가
+  // 모노레포일 때 소비자의 pnpm-workspace.yaml 을 찾아 toolkitRoot 로 삼고,
+  // 그러면 자기보호 가드가 정당한 update 를 거부한다.
+  const toolkitRoot = packageLayout(pkgDir) === 'source' ? findToolkitRoot(pkgDir) : null;
 
   if (createArgs !== null) {
     await runCreate(createArgs, values, toolkitRoot, options.cwd ?? process.cwd());
@@ -150,7 +153,7 @@ function validateCreate(name: string | undefined, requested: string | undefined)
 async function runCreate(
   { name, recipe }: CreateArgs,
   values: Record<string, unknown>,
-  toolkitRoot: string,
+  toolkitRoot: string | null,
   baseDir: string,
 ): Promise<void> {
   // 기준 디렉토리(기본값 process.cwd()) 아래에 만든다. link: 시절에는
@@ -181,7 +184,7 @@ async function runCreate(
 async function runUpdateCommand(
   path: string | undefined,
   values: Record<string, unknown>,
-  toolkitRoot: string,
+  toolkitRoot: string | null,
 ): Promise<void> {
   // 비대화형에서 확인 프롬프트를 만나면 영원히 멈춰 선다. CI 에서 이 명령이
   // 걸리면 원인을 찾기 어려우므로 먼저 막고 대안을 알린다.

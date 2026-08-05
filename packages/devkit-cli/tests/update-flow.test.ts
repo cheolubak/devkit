@@ -191,3 +191,46 @@ describe('runUpdate', () => {
     await expect(runUpdate({ ...base(TOOLKIT), type: 'nest' })).rejects.toThrow(/툴킷 저장소/);
   });
 });
+
+describe('toolkitRoot가 null일 때 (게시본 실행)', () => {
+  it('자기보호 가드가 발동하지 않는다 — 소비자 워크스페이스 루트를 막으면 안 된다', async () => {
+    // 게시본에는 툴킷 저장소가 없다. 예전처럼 findToolkitRoot 로 위를 뒤지면
+    // 소비자가 모노레포일 때 소비자의 루트를 toolkitRoot 로 잡아버리고,
+    // 사용자가 바로 그 루트에서 update 를 돌릴 때 거부당한다.
+    const target = mkdtempSync(join(tmpdir(), 'devbak-consumer-'));
+    created.push(target);
+    writeFileSync(join(target, 'pnpm-workspace.yaml'), "packages:\n  - 'packages/*'\n");
+    writeFileSync(
+      join(target, 'package.json'),
+      `${JSON.stringify({ name: 'consumer', devkit: { type: 'nest', version: '0.1.0' } }, null, 2)}\n`,
+    );
+
+    await expect(
+      runUpdate({
+        targetDir: target,
+        toolkitRoot: null,
+        dryRun: true,
+        yes: true,
+        skipInstall: true,
+        log: () => {},
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('toolkitRoot가 있으면 그 디렉토리를 대상으로 삼는 것은 여전히 막는다', async () => {
+    const toolkit = mkdtempSync(join(tmpdir(), 'devbak-toolkit-'));
+    created.push(toolkit);
+    writeFileSync(join(toolkit, 'package.json'), '{"name":"eslint-workspace"}\n');
+
+    await expect(
+      runUpdate({
+        targetDir: toolkit,
+        toolkitRoot: toolkit,
+        dryRun: true,
+        yes: true,
+        skipInstall: true,
+        log: () => {},
+      }),
+    ).rejects.toThrow(/툴킷 저장소 자신은 update 대상이 될 수 없습니다/);
+  });
+});

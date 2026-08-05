@@ -27,7 +27,8 @@ describe('flattenSteps', () => {
 
     expect(nextOverlay!.ctx.targetDir).toBe(join('/a/b/demo', 'apps', 'web'));
     expect(nextOverlay!.ctx.name).toBe('web');
-    // toolkitRoot는 매핑되지 않는다 — link: 상대경로 계산의 기준점이다.
+    // toolkitRoot는 매핑되지 않는다 — 하위 ctx 로 내려가도 툴킷 저장소는
+    // 그대로 하나다(자기보호 가드가 보는 값이다).
     expect(nextOverlay!.ctx.toolkitRoot).toBe('/a/b/eslint');
   });
 

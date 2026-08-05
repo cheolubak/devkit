@@ -3,8 +3,12 @@ import type { JsonObject } from './ops/merge-json.js';
 export interface Ctx {
   /** 생성될 프로젝트의 절대경로 */
   targetDir: string;
-  /** 이 저장소 루트의 절대경로 */
-  toolkitRoot: string;
+  /**
+   * 툴킷 저장소 루트의 절대경로. **게시본으로 실행하면 `null` 이다** —
+   * 그 경우 툴킷 저장소라는 것이 존재하지 않는다(설계 3.2절). 검사를
+   * 생략한다는 뜻이 아니라 대상이 없다는 뜻이다.
+   */
+  toolkitRoot: string | null;
   /** 프로젝트 이름 (= basename(targetDir)) */
   name: string;
   log: (message: string) => void;

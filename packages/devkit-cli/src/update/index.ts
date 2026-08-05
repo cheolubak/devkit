@@ -13,7 +13,8 @@ import { resolveType } from './resolve-type.js';
 
 export interface UpdateOptions {
   targetDir: string;
-  toolkitRoot: string;
+  /** 게시본 실행에서는 null 이다. types.ts 의 Ctx.toolkitRoot 와 같은 계약이다. */
+  toolkitRoot: string | null;
   only?: string;
   type?: string;
   dryRun?: boolean;
@@ -29,11 +30,12 @@ export async function runUpdate(options: UpdateOptions): Promise<void> {
   const log = options.log ?? ((message: string) => process.stdout.write(`${message}\n`));
   const ask = options.ask ?? confirm;
   const targetDir = resolve(options.targetDir);
-  const toolkitRoot = resolve(options.toolkitRoot);
+  const toolkitRoot = options.toolkitRoot === null ? null : resolve(options.toolkitRoot);
 
   // 1. 대상 확정. 툴킷 저장소 자신을 대상으로 삼으면 `pnpm devbak update` 한 번에
   // 이 저장소가 프로젝트 템플릿으로 덮인다 — 무심코 칠 수 있는 명령이라 막는다.
-  if (targetDir === toolkitRoot) {
+  // 게시본(toolkitRoot === null)에는 막을 저장소가 없다.
+  if (toolkitRoot !== null && targetDir === toolkitRoot) {
     throw new Error(
       '툴킷 저장소 자신은 update 대상이 될 수 없습니다. 대상 프로젝트 경로를 지정하세요.',
     );
