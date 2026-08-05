@@ -26,6 +26,7 @@ describe('copyOverlay.plan', () => {
     expect(paths).toEqual([
       '.claude/commands/review.md',
       '.github/workflows/claude-review.yml',
+      '.npmrc',
     ]);
     expect(changes.every((c) => c.kind === 'file')).toBe(true);
   });

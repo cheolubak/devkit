@@ -47,6 +47,10 @@ const FILE_PATTERNS: ReadonlyArray<readonly [RegExp, Category]> = [
   [/^\.github\/workflows\/.+/, 'ci'],
   [/^eslint\.config\.mjs$/, 'lint'],
   [/^_?\.?prettierignore$/, 'lint'],
+  // .npmrc 는 레지스트리 접근 설정이라 의존성과 함께 움직인다(설계 5.3절).
+  // 덕분에 `devbak update --only deps` 가 기존 link: 프로젝트를 버전 범위로
+  // 옮기는 마이그레이션 경로가 된다 — 별도 도구가 필요 없다.
+  [/^_?\.?npmrc$/, 'deps'],
   [/^tsconfig(?:\.build)?\.json$/, 'ts'],
   [/^(?:jest|jest-e2e|vitest)\.config\.[cm]?[jt]s$/, 'test'],
   [/^test\/jest-e2e\.config\.[cm]?[jt]s$/, 'test'],

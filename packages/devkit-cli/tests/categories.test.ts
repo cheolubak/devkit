@@ -40,6 +40,8 @@ describe('categoryOf', () => {
     ['_gitignore', 'repo'],
     ['_prettierignore', 'lint'],
     ['.prettierignore', 'lint'],
+    ['.npmrc', 'deps'],
+    ['_npmrc', 'deps'],
   ])('언더스코어 접두 템플릿 %s → %s', (relPath, expected) => {
     expect(categoryOf(relPath)).toBe(expected);
   });
