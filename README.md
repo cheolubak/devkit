@@ -6,7 +6,7 @@
 두 갈래로 쓴다.
 
 1. **설정 패키지를 직접 소비한다** — 기존 프로젝트에서 `@cheolubak/eslint-config-nest`,
-   `@cheolubak/tsconfig` 같은 패키지를 `link:`로 붙여 쓴다.
+   `@cheolubak/tsconfig` 같은 패키지를 GitHub Packages에서 `pnpm add -D`로 설치해 쓴다.
 2. **새 프로젝트를 생성한다** — `devbak create`가 공식 CLI로 뼈대를 만든 뒤 위
    패키지들로 설정을 교체한다.
 
@@ -27,12 +27,14 @@
 | [`@cheolubak/jest-config`](packages/jest-config) | NestJS용 Jest 설정 (`nest`·`nest-e2e`) | 없음 (CJS) |
 | [`@cheolubak/vitest-config`](packages/vitest-config) | Vitest 설정 (`next`·`node`) | 없음 (ESM) |
 
-**빌드가 없는 쪽이 기본이고, 있는 쪽이 예외다.** `link:` 의존은 어떤 라이프사이클
-스크립트도 실행하지 않는다. 그래서 빌드가 필요한 패키지는 `dist`가 낡으면 소비자가
-조용히 옛 설정을 쓰게 된다. JSON·CJS·ESM 순수 객체로 낼 수 있는 것은 전부 빌드
-없이 두어 이 문제를 아예 겪지 않게 했다. 반대로 빌드가 필요한 `devkit-cli`는
-`dist/bin.js`가 `src/`보다 오래되면 **실행 자체를 거부한다** — 같은 함정을 스스로
-막기 위해서다.
+**빌드가 없는 쪽이 기본이고, 있는 쪽이 예외다.** 게시된 tarball은 게시 시점의
+`dist`를 그대로 얼려 담는다. 그래서 빌드가 필요한 패키지는 `pnpm build`를 잊고
+게시하면 낡거나 빈 `dist`가 그 버전으로 굳어버린다(같은 버전 재게시는 안 된다 —
+바로잡으려면 버전을 올려 다시 게시해야 한다). JSON·CJS·ESM 순수 객체로 낼 수
+있는 것은 전부 빌드 없이 두어 이 위험을 아예 겪지 않게 했다. 반대로 빌드가
+필요한 `devkit-cli`는 `dist/bin.js`가 `src/`보다 오래되면 **실행 자체를
+거부한다** — 같은 함정을 스스로 막기 위해서다(`devkit-cli`는 `private: true`라
+게시되지 않고 저장소에서 직접 실행되므로, 이 검사가 유일한 방어선이다).
 
 ## 의존 방향
 
@@ -40,7 +42,7 @@
 @cheolubak/tsconfig ─┐
 @cheolubak/prettier-config ─┤
 @cheolubak/jest-config ─┼─→ devkit-cli 템플릿 ─→ 생성된 프로젝트
-@cheolubak/vitest-config ─┤        (link: 상대경로로 선언)
+@cheolubak/vitest-config ─┤        (GitHub Packages 버전 범위로 선언)
 @cheolubak/eslint-config-nest ─┤
 @cheolubak/eslint-plugin-fsd ─┘
 ```
@@ -64,12 +66,13 @@ pnpm devbak create my-api --type nest             # 또는 --type next | monorep
 | `next` | `create-next-app` | eslint-plugin-fsd/next, prettier-config, vitest-config/next, FSD 레이어 |
 | `monorepo` | Turborepo + 위 `next` 레시피를 `apps/web`에 합성 | 루트에서 한 번만 lint/build |
 
-### 위치 제약 — 반드시 이 저장소의 형제 디렉토리로 생성된다
-
-생성물은 `@cheolubak/*`를 `link:../eslint/packages/...` 같은 **상대경로**로 선언한다.
-따라서 `devbak create`는 항상 이 저장소의 부모 디렉토리(`~/Documents/develop/`)
-아래에 프로젝트를 만든다. 생성 후 다른 위치로 옮기면 `link:` 경로가 깨져
-`pnpm install`부터 실패한다.
+`devbak create`는 실행한 위치(cwd) 기준으로 `<name>` 디렉토리를 만든다 — 이
+저장소의 형제 디렉토리여야 한다는 제약은 없다. 생성물은 `@cheolubak/*`를
+`^0.1.0` 같은 **버전 범위**로 선언하고 GitHub Packages에서 내려받으므로, 어디로
+옮겨도 `pnpm install`이 그대로 동작한다. 다만 생성물에는 `.npmrc`가 함께
+놓이고, `pnpm install`이 되려면 `GITHUB_TOKEN` 환경변수가 있어야 한다 —
+**공개 패키지도 예외가 아니다**(GitHub Packages 자체 제약, 아래 "기존
+프로젝트에 붙이기" 참고).
 
 세 유형 모두 Claude 기반 코드 리뷰 자산(`/review` 슬래시 커맨드, PR 자동 리뷰
 워크플로, 유형별 리뷰어 에이전트)을 함께 놓는다. CI 워크플로를 실제로 돌리려면
@@ -111,17 +114,26 @@ JSON이 아닌 파일은 **통째로 덮인다** — `--only`로 그 카테고�
 [`packages/devkit-cli/README.md`](packages/devkit-cli/README.md#devbak-update--기존-프로젝트에-표준-재적용).
 
 수동으로 붙이려면 아래처럼 한다. 각 패키지 README에도 설치·설정 예시가 있다.
-요약하면 소비자 `package.json`에 `link:` 상대경로로 넣고, peer는 직접 설치한다.
+패키지는 GitHub Packages에 게시돼 있으므로 `pnpm add -D`로 설치하고, peer는
+직접 설치한다.
 
-```jsonc
-{
-  "devDependencies": {
-    "@cheolubak/eslint-config-nest": "link:../eslint/packages/eslint-config-nest",
-    "@cheolubak/tsconfig": "link:../eslint/packages/tsconfig",
-    "eslint": "^10.0.0",
-    "typescript-eslint": "^8.0.0"
-  }
-}
+```bash
+pnpm add -D @cheolubak/eslint-config-nest @cheolubak/tsconfig eslint typescript-eslint
+```
+
+**GitHub Packages는 `@cheolubak` 스코프를 npm 기본 레지스트리로 풀지 않는다.**
+소비자 프로젝트 루트에 아래 `.npmrc`가 있어야 하고 — `devbak create`/`devbak
+update`가 놓아주는 것과 같다 —, `GITHUB_TOKEN` 환경변수도 있어야 `pnpm
+install`이 된다. **공개(public) 패키지도 마찬가지다** — GitHub Packages는
+익명 접근을 지원하지 않아 `read:packages` 권한이 있는 토큰이 항상 필요하다.
+
+```
+@cheolubak:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+```bash
+export GITHUB_TOKEN=$(gh auth token)   # 또는 read:packages 권한의 PAT
 ```
 
 **ESLint 버전 요구가 패키지마다 다르다.** `@cheolubak/eslint-config-nest`는 ESLint 10
@@ -252,4 +264,5 @@ vitest·tsconfig가 패키지별로 흩어져 있어 단위 테스트와 타입�
 ## 요구 사항
 
 - Node.js `^20.19.0 || ^22.13.0 || >=24`
-- pnpm (npm으로 실행하지 않는다 — 워크스페이스와 `link:` 해석이 pnpm 전제다)
+- pnpm (npm으로 실행하지 않는다 — 이 저장소 자체가 pnpm 워크스페이스이고, 생성물의
+  GitHub Packages 설치도 pnpm 기준으로 검증했다)

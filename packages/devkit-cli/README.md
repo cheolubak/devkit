@@ -2,17 +2,25 @@
 
 devkit 표준(ESLint·Prettier·tsconfig·테스트 설정)이 적용된 프로젝트를 생성하는 CLI.
 
-## 위치 제약 — 반드시 `~/Documents/develop/` 아래에서 실행한다
+**이 패키지는 게시하지 않는다** (`private: true`). 다른 6개 패키지와 달리
+`pnpm add -D`로 설치할 수 없고, 이 저장소를 클론해 `pnpm build` 후
+`pnpm devbak ...`로 저장소 안에서 직접 실행한다.
 
-생성물의 `package.json`은 `@cheolubak/*` 패키지를 `link:` **상대경로**로 선언한다
-(예: `link:../eslint/packages/eslint-config-nest`, 모노레포의 `apps/web`은
-`link:../../../eslint/packages/...`). 이 상대경로는 생성물이 이 저장소
-(devkit 툴킷, 예: `~/Documents/develop/eslint`)와 **형제 디렉토리**일 때만
-유효하다.
+## 위치 — 실행한 위치(cwd) 기준이다
 
-즉 `devbak create <name>`은 항상 이 저장소의 **부모 디렉토리**(`~/Documents/develop/`)
-아래에 `<name>` 디렉토리를 새로 만든다. 다른 위치로 프로젝트를 옮기면 `link:`
-경로가 깨져 `pnpm install`부터 실패한다.
+`devbak create <name>`은 실행한 디렉토리(cwd) 아래에 `<name>` 디렉토리를
+만든다. 이 저장소(devkit 툴킷)와 형제 디렉토리여야 한다는 제약은 없다 —
+생성물의 `package.json`은 `@cheolubak/*` 패키지를 `^0.1.0` 같은 **버전
+범위**로 선언하고 GitHub Packages에서 내려받으므로, 생성물을 어디로
+옮겨도(또는 아예 다른 머신에서 클론해도) `pnpm install`이 그대로 동작한다.
+
+다만 생성물의 `pnpm install`이 되려면 `.npmrc`(생성물에 자동으로 놓인다)와
+함께 `GITHUB_TOKEN` 환경변수가 있어야 한다 — GitHub Packages는 **공개
+패키지도** 토큰 없는 접근을 허용하지 않는다.
+
+```bash
+export GITHUB_TOKEN=$(gh auth token)   # 또는 read:packages 권한의 PAT
+```
 
 ## 사용법
 
@@ -75,8 +83,10 @@ CLI는 실행 전에 `dist/bin.js`가 `src/`보다 새로운지 확인하고, �
 - 설치·자가검증(`lint`/`build`)은 루트에서 한 번만 한다. `apps/web`에서 따로
   하면 중첩 `node_modules`가 생긴다.
 - 일반 의존성은 `pnpm-workspace.yaml`의 `catalog:`를 참조하게 한다.
-  `@cheolubak/*`는 catalog에 넣을 수 없다(pnpm이 `link:` 항목을 거부) — 루트와
-  `apps/web`이 각자 (깊이가 다른) `link:` 상대경로로 직접 선언한다.
+  `@cheolubak/*`는 catalog에 넣지 않는다 — `link:` 상대경로 시절에는 pnpm이
+  catalog의 `link:` 항목을 거부해 그럴 수도 없었고, 레지스트리 버전 범위로
+  바뀐 지금도 루트와 `apps/web`이 각자 버전 범위를 직접 선언하는 편이 더
+  단순하다(둘 다 값이 같은 `^0.1.0`이라 catalog로 묶을 이득이 크지 않다).
 
 ## 검증 (3층)
 
@@ -223,7 +233,7 @@ devkit update — demo-api (nest)
 | `lint` | `eslint.config.mjs`, `.prettierignore`, `package.json`의 `prettier` 키와 `scripts.lint`·`format`·`format:check` |
 | `ts` | `tsconfig.json`, `tsconfig.build.json` |
 | `test` | `jest.config.js`, `jest-e2e.config.js`, `test/jest-e2e.config.ts`, `vitest.config.ts`, `package.json`의 `jest` 키와 `scripts.test`·`test:watch`·`test:e2e` |
-| `deps` | `package.json`의 `dependencies`·`devDependencies`(`link:` 재계산 포함). **이 카테고리가 대상이고 `package.json`이 실제로 바뀌면 `pnpm install`이 돈다** |
+| `deps` | `package.json`의 `dependencies`·`devDependencies`(`@cheolubak/*` 버전 범위 재선언 포함), `.npmrc`. **이 카테고리가 대상이고 `package.json`이 실제로 바뀌면 `pnpm install`이 돈다** |
 | `repo` | `.gitignore`, `pnpm-workspace.yaml`, `turbo.json`, `package.json`의 `packageManager`·`private`·`type`과 `scripts.build`·`dev`·`typecheck` |
 | `scaffold` | `src/**` — 프레임워크 뼈대. **기본 제외**이며 명시해야만 대상이 된다 |
 
@@ -261,7 +271,7 @@ devkit update — demo-api (nest)
 | `--force` | git 관련 거부만 우회 |
 | `--help` | (`create`·`update` 공통) 사용법 두 줄을 출력하고 종료. 다른 옵션이 있어도 우선한다 |
 
-**`create`와 달리 공식 CLI를 다시 돌리지 않는다.** 파일 삭제·디렉토리 생성·자가검증도 하지 않는다 — 기존 프로젝트에서는 lint 실패가 update의 실패가 아니기 때문이다. 실행하는 것은 오버레이 복사와 `package.json` 병합, `link:` 재계산이다.
+**`create`와 달리 공식 CLI를 다시 돌리지 않는다.** 파일 삭제·디렉토리 생성·자가검증도 하지 않는다 — 기존 프로젝트에서는 lint 실패가 update의 실패가 아니기 때문이다. 실행하는 것은 오버레이 복사와 `package.json` 병합, `@cheolubak/*` 버전 범위 재선언이다.
 
 **단, `deps` 카테고리가 대상이고 `package.json`이 실제로 쓸 파일 목록에 있으면 그 뒤에 대상 프로젝트에서 `pnpm install`도 돈다.** 네트워크를 타고 대상의 `node_modules`를 갈아엎는다는 뜻이다. `--only`로 `deps`를 뺐거나 이번 실행에서 `package.json`이 실제로 바뀌지 않았다면(마커 version만 바뀐 경우도 "바뀐 것"으로 친다) install은 돌지 않는다. 끄는 CLI 플래그는 없다 — `runUpdate`의 `skipInstall`은 프로그램으로 호출할 때만 쓸 수 있는 옵션이고 `devbak update`에는 전달되지 않는다.
 

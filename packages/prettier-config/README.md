@@ -4,15 +4,16 @@
 
 ## 사용법
 
-소비자 `package.json`에 링크와 참조를 함께 넣는다.
+소비자 `package.json`에 설치와 참조를 함께 넣는다. 루트 README의
+[".npmrc·GITHUB_TOKEN"](../../README.md#기존-프로젝트에-붙이기) 안내를 먼저 본다.
+
+```bash
+pnpm add -D @cheolubak/prettier-config prettier
+```
 
 ```jsonc
 {
-  "prettier": "@cheolubak/prettier-config",
-  "devDependencies": {
-    "@cheolubak/prettier-config": "link:../eslint/packages/prettier-config",
-    "prettier": "^3.0.0"
-  }
+  "prettier": "@cheolubak/prettier-config"
 }
 ```
 
@@ -27,4 +28,4 @@
 
 ## 왜 빌드가 없는가
 
-JSON이므로 트랜스파일할 것이 없다. 이는 부수 효과가 크다 — `link:` 의존은 라이프사이클 스크립트를 실행하지 않으므로, 빌드가 필요한 패키지는 `dist`가 낡으면 소비자가 조용히 옛 설정을 쓰게 된다. 이 패키지는 그 문제를 아예 겪지 않는다.
+JSON이므로 트랜스파일할 것이 없다. 이는 부수 효과가 크다 — 게시된 tarball은 게시 시점의 파일을 그대로 얼려 담으므로, 빌드가 필요한 패키지는 `dist`가 낡거나 비어 있으면 그 버전에 그대로 굳는다(같은 버전 재게시는 안 된다). 이 패키지는 빌드 자체가 없어 그 문제를 아예 겪지 않는다.

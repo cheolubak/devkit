@@ -1,5 +1,22 @@
 # Work Log
 
+## 2026-08-05
+
+### 레지스트리 설치 전환 (설계 → Task 1~8 구현·게시·검증)
+- **변경 파일**: 패키지 7개의 `package.json`(스코프 개명 + 게시 메타데이터), `src/ops/link-deps.ts` → `registry-deps.ts`(신설, `linkSpec`·`normalizeToPosix` 삭제), 레시피 3종(`nest`·`next`·`monorepo`)과 `update/plan.ts`가 `registryDeps` 참조, `templates/**/_npmrc`(신설, `categoryOf('.npmrc') === 'deps'`), `src/main.ts`(`cwd` 주입 → `resolve(baseDir, name)`, 위치 제약 제거), `.gitignore`(`.npmrc` 등록), 루트 `package.json`(`publish:packages` 스크립트), `packages/devkit-cli/tests/e2e/{create,update}.e2e.test.ts`(`GITHUB_TOKEN` 가드), `README.md` + `packages/*/README.md` 6건(설치 예시를 `pnpm add -D`로, "위치 제약" 절 삭제/재작성)
+- **내용**: 설정 패키지를 `link:` 상대경로 대신 GitHub Packages(npm 레지스트리)에서 설치하는 방식으로 바꿨다. 설계 문서 `docs/superpowers/specs/2026-08-05-registry-install-design.md`, 계획 `docs/superpowers/plans/2026-08-05-registry-install.md`.
+  - **스코프 개명**: `@devbak/*` → `@cheolubak/*`(GitHub Packages는 npm 스코프가 저장소 소유자와 같아야 한다). 코드·템플릿·테스트·현행 README는 전부 개명했지만 **`docs/superpowers/**`와 이 파일의 기존 항목(2026-08-04 이전)은 그대로 뒀다** — "언제 왜 이름이 바뀌었는가"를 아는 과거 기록이 사라지면 안 되기 때문이다.
+  - **게시 메타데이터**: `devkit-cli`는 `private: true`(findToolkitRoot가 `pnpm-workspace.yaml`을 못 찾으면 던져 `pnpm dlx`로 못 쓴다 — 게시해도 실질적으로 무의미하다). 나머지 6개에 `repository`·`publishConfig.registry`·`publishConfig.access: public`.
+  - **`linkDeps` → `registryDeps`**: 소비자 `package.json`에 `@cheolubak/*`를 `^0.1.0` 버전 범위로 선언한다. 상대경로 계산(`linkSpec`·`normalizeToPosix`, 모노레포 `apps/web`의 깊이 다른 경로)이 통째로 사라졌다 — 대상이 어디에 있든 값이 같다.
+  - **`.npmrc` 템플릿**: 생성물에 `@cheolubak:registry=https://npm.pkg.github.com` + `//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}`을 놓는다. npm이 패키지 안 dot-file을 걸러내므로 `_npmrc`로 저장해두고 `copyOverlay`가 복사 시 점 이름으로 복원한다. 카테고리는 `deps`(의존성과 함께 움직여야 하므로) — 덕분에 `devbak update --only deps`가 기존 `link:` 프로젝트를 버전 범위로 옮기는 마이그레이션 경로도 겸한다.
+  - **위치 제약 제거**: `create`가 `main(argv, { cwd })`를 주입받아 `resolve(cwd, name)`으로 대상을 정한다. 예전엔 언제나 툴킷의 부모 디렉토리에만 생성됐지만, 이제 실행한 위치 기준이다.
+  - **실제 게시(Task 8, 사람 승인 후)**: 6개 전부 `0.1.0`으로 첫 게시 성공(사전에 `npm view`로 404 확인 — 버전 충돌 없음). tarball 내용이 Task 7 dry-run 예측과 정확히 일치했다. 게시 후 `npm view`로 레지스트리 반영 확인, 빈 디렉토리에서 `pnpm add -D @cheolubak/tsconfig@^0.1.0` 성공(`base`·`nest`·`next`·`lib` json 4개 확인), `devbak create demo-api --type nest --no-verify` → `pnpm install` 성공(`.npmrc` 배치, `"@cheolubak/tsconfig": "^0.1.0"` 확인, cwd 기준 생성 확인) — 이 전환의 실질 증거.
+  - **e2e 토큰 가드**: `GITHUB_TOKEN` 없이 e2e를 돌리면(레지스트리를 타므로 반드시 401로 죽는다) 원인을 알 수 없는 채로 죽거나 조용히 넘어가는 것을 막기 위해 두 e2e 파일 맨 위에 명시적 `throw`를 넣었다. `describe.skip` 없이, 토큰 없으면 설치 시도 전(318ms)에 알아볼 수 있는 메시지로 실패하는 것을 확인했다.
+  - **e2e 실행 결과 — 11개 전부 실패, 원인은 발행이 아니라 e2e 테스트 하네스 자체다.** `create`/`update`는 실측으로 정상 동작함을 확인했는데(위 sandbox 검증), `packages/devkit-cli/tests/e2e/{create,update}.e2e.test.ts`가 Task 6이 바꾼 cwd 기준 동작에 맞춰 갱신되지 않았다 — 여전히 `execFileSync(..., { cwd: TOOLKIT })`로 CLI를 실행하면서, 결과 경로는 예전 위치 제약 시절 그대로 `PARENT`(`TOOLKIT`의 부모)로 계산해 기록한다. cwd 기준 로직에서는 `resolve(cwd=TOOLKIT, name)`이 되어 생성물이 **툴킷 저장소 자기 자신 안**(`eslint/devkit-e2e-*`)에 만들어지는데, 그 위치는 저장소의 `pnpm-workspace.yaml`(`packages: - 'packages/*'`) 범위에 속하지 않아 `pnpm install`이 `@cheolubak/*`를 설치하지 못한다(`node_modules/@cheolubak`가 아예 안 생김) — ESLint가 `Cannot find package '@cheolubak/eslint-config-nest'`로 죽는다. `create` 5개·`update` 6개 전부 이 경로로 실패했다. **테스트를 고치지 않고 원인만 보고했다**(사람 지시). 잘못 생성된 픽스처 11개(`eslint/devkit-e2e-*`)는 진단 정보를 이 로그에 남긴 뒤 `rm -r`로 정리했다(lint 스캔 오염 확인 후 복구).
+  - **README**: 루트와 패키지 6개(devkit-cli 포함 7개) 전부에서 `link:` 설치 예시를 `pnpm add -D`로, "위치 제약" 절을 cwd 기준 서술로 바꿨다. `.npmrc`·`GITHUB_TOKEN`이 **공개 패키지에도** 필요하다는 점을 루트 README에 명시했다. `devkit-cli`는 게시하지 않으므로 그 README에 "저장소를 클론해 직접 실행한다"고 적었다.
+- **검증**: `pnpm test`(41파일/363개, 기준선과 동일), `pnpm typecheck`(7/7), `pnpm lint:ox`(에러 0, warning 3 — 픽스처 정리 후 기준선과 동일), `pnpm lint:es`(8/8), `pnpm build` 성공. e2e는 11개 실패(위 원인, 미수정). `git status`에 `.npmrc` 없음 확인.
+- **커밋**: `f4fbfda`(설계) ~ `1d4a8d8`(게시 스크립트, Task 7까지) + 이 문서 커밋들(Task 8). `feature/registry-install` 브랜치. main 미머지.
+
 ## 2026-08-04
 
 ### Turborepo 도입 (설계 → Task 1~5 구현·검증)

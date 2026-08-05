@@ -26,15 +26,11 @@
 }
 ```
 
-소비자 `package.json`에는 `link:` 의존으로 추가한다.
+소비자 `package.json`에는 GitHub Packages에서 설치한다. 루트 README의
+[".npmrc·GITHUB_TOKEN"](../../README.md#기존-프로젝트에-붙이기) 안내를 먼저 본다.
 
-```jsonc
-{
-  "devDependencies": {
-    "@cheolubak/tsconfig": "link:../eslint/packages/tsconfig",
-    "typescript": "^5.6.0"
-  }
-}
+```bash
+pnpm add -D @cheolubak/tsconfig typescript
 ```
 
 `outDir`/`rootDir` 등 프로젝트별 경로 옵션은 프리셋에 두지 않는다 — 소비자 프로젝트 위치에 따라 값이 달라야 하고, 공유 설정 파일 안에 상대 경로로 박아두면 그 경로는 설정 파일 자신의 위치를 기준으로 해석돼(소비자 위치 기준이 아니다) 소비자마다 깨진다. 소비자가 자신의 tsconfig에서 직접 지정한다.
@@ -47,4 +43,4 @@ NestJS는 `module`/`moduleResolution`을 `nodenext`로, 데코레이터 관련 �
 
 ## 왜 빌드가 없는가
 
-JSON이므로 트랜스파일할 것이 없다. `link:` 의존은 라이프사이클 스크립트를 실행하지 않으므로, 빌드가 필요한 패키지는 `dist`가 낡으면 소비자가 조용히 옛 설정을 쓰게 된다. 이 패키지는 그 문제를 아예 겪지 않는다.
+JSON이므로 트랜스파일할 것이 없다. 게시된 tarball은 게시 시점의 파일을 그대로 얼려 담으므로, 빌드가 필요한 패키지는 `dist`가 낡거나 비어 있으면 그 버전에 그대로 굳는다(같은 버전 재게시는 안 된다). 이 패키지는 빌드 자체가 없어 그 문제를 아예 겪지 않는다.
