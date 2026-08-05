@@ -2,9 +2,10 @@ packages:
   - 'apps/*'
   - 'packages/*'
 
-# @devbak/* 는 여기에 넣을 수 없다. pnpm이 catalog 항목의 link: 프로토콜을
-# 거부한다(ERR_PNPM_CATALOG_ENTRY_INVALID_SPEC). 각 package.json이
-# link: 상대경로로 직접 선언한다.
+# @cheolubak/* 는 각 package.json에 버전 범위(^0.1.0)로 개별 선언한다.
+# link: 상대경로였을 때는 pnpm이 catalog 항목의 link: 프로토콜을 거부해
+# (ERR_PNPM_CATALOG_ENTRY_INVALID_SPEC) 여기 넣을 수 없었다. 지금은
+# 버전 범위라 넣을 수 있지만 아직 그렇게 바꾸지 않았다.
 catalog:
   next: ^16.2.12
   react: ^19.2.4

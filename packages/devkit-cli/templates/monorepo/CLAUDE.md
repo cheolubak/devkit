@@ -22,9 +22,10 @@ packages/       공유 패키지 (필요할 때 추가)
 일반 의존은 `pnpm-workspace.yaml`의 `catalog:`에서 버전을 정한다.
 각 `package.json`은 `"next": "catalog:"`처럼 참조만 한다.
 
-**`@cheolubak/*`는 catalog에 넣을 수 없다.** pnpm이 catalog 항목의 `link:`
-프로토콜을 거부하기 때문이다. 각 `package.json`이 `link:` 상대경로로 직접
-선언하며, 루트와 `apps/web`은 깊이가 달라 경로도 다르다.
+`@cheolubak/*`는 각 `package.json`에 버전 범위(`"^0.1.0"`)로 개별
+선언돼 있다. `link:` 상대경로였을 때는 pnpm이 catalog 항목의 `link:`
+프로토콜을 거부해 catalog에 넣을 수 없었다. 지금은 버전 범위라 catalog에
+넣을 수 있지만, 이 프로젝트는 아직 그렇게 바꾸지 않았다.
 
 ## 아키텍처
 
@@ -44,8 +45,12 @@ Vite의 config 로더가 `vitest.config.ts`를 번들링할 때 ESM 전용인
 
 ## devkit 의존
 
-루트와 `apps/web`의 `package.json` 모두 `@cheolubak/*`를 `link:` 상대경로로
-선언한다. 두 곳은 툴킷(`~/Documents/develop/eslint`)까지의 깊이가 달라
-경로도 다르다 — 루트는 `link:../eslint/packages/...`, `apps/web`은
-`link:../../../eslint/packages/...`(위로 두 단계 더). 이 프로젝트를 다른
-위치로 옮기면 두 곳의 경로가 모두 깨진다.
+루트와 `apps/web`의 `package.json` 모두 `@cheolubak/*`를 GitHub Packages에서
+설치한다(`"^0.1.0"`처럼 버전 범위로 선언). `.npmrc`가
+`@cheolubak:registry=https://npm.pkg.github.com`을 가리키므로 `GITHUB_TOKEN`
+환경변수가 없으면 `pnpm install`이 실패한다 — 공개 패키지도 마찬가지다
+(GitHub Packages는 공개 패키지도 접근 토큰을 요구한다). 새 버전을 받으려면
+버전을 올리고 다시 설치해야 한다. `link:` 시절에는 루트와 `apps/web`이
+툴킷까지의 깊이가 달라 상대경로도 서로 달랐지만, 지금은 두 곳 모두 같은
+버전 범위를 선언하면 된다. 이 프로젝트를 다른 위치로 옮겨도 경로가
+깨지지 않는다.
