@@ -539,31 +539,42 @@ git commit -m "docs: 생성물 문서의 link: 서술을 레지스트리 설치�
 `packages/devkit-cli/tests/bin.test.ts`에 추가:
 
 ```ts
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 describe('create 대상 경로', () => {
-  it('cwd 기준으로 해석한다 — 툴킷의 형제 디렉토리로 강제하지 않는다', async () => {
+  it('기준 디렉토리 아래에 만든다 — 툴킷의 형제로 강제하지 않는다', async () => {
     const sandbox = mkdtempSync(join(tmpdir(), 'devbak-cwd-'));
     created.push(sandbox);
-    const before = process.cwd();
-    process.chdir(sandbox);
+    // 존재하는 대상으로 부딪혀 "어느 경로를 대상으로 잡았는지"를 에러에서 읽는다.
+    // 레시피를 실제로 돌리면 네트워크·설치가 붙어 단위 테스트가 아니게 된다.
+    mkdirSync(join(sandbox, 'taken'));
 
-    try {
-      // 존재하는 대상으로 부딪혀 "어느 경로를 대상으로 잡았는지"를 에러에서 읽는다.
-      // 레시피를 실제로 돌리면 네트워크·설치가 붙어 단위 테스트가 아니게 된다.
-      mkdirSync(join(sandbox, 'taken'));
-      await expect(main(['create', 'taken', '--type', 'nest'])).rejects.toThrow(
-        new RegExp(`${sandbox.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*taken.*이미 존재합니다`),
-      );
-    } finally {
-      process.chdir(before);
-    }
+    await expect(
+      main(['create', 'taken', '--type', 'nest'], { cwd: sandbox }),
+    ).rejects.toThrow(new RegExp(`${escapeRegExp(join(sandbox, 'taken'))}.*이미 존재합니다`));
+  });
+
+  it('기준을 안 주면 process.cwd()를 쓴다 — CLI 의 기본 경로', async () => {
+    // 툴킷 저장소 안에서 돌리므로 대상은 <저장소>/taken-here 가 된다.
+    await expect(main(['create', 'taken-here', '--type', 'nest'])).rejects.toThrow(
+      new RegExp(`${escapeRegExp(join(process.cwd(), 'taken-here'))}`),
+    );
   });
 });
 ```
 
-`mkdirSync`를 `node:fs` import에 추가하라.
+`escapeRegExp`는 파일 안에 두는 작은 헬퍼다:
+
+```ts
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+```
+
+**`process.chdir()`를 쓰지 않는 것이 요구다.** cwd는 프로세스 전역 상태라 같은 워커에서 도는 다른 테스트와 순서가 얽힌다. 기준 디렉토리를 **인자로 주입**하면 테스트가 전역을 건드리지 않고, 의존이 시그니처에 드러난다 — 이 저장소가 `findToolkitRoot`에서 cwd 폴백을 일부러 막은 것과 같은 결이다(암묵보다 명시).
+
+두 번째 테스트는 **기본값이 실제로 `process.cwd()`인지**를 고정한다. 이게 없으면 주입 경로만 검증되고 CLI가 실제로 쓰는 경로는 미검증으로 남는다.
 
 - [ ] **Step 2: 테스트가 실패하는지 확인한다**
 
@@ -573,7 +584,27 @@ pnpm exec vitest run packages/devkit-cli/tests/bin.test.ts
 
 Expected: FAIL — 대상이 툴킷의 형제로 계산되어 sandbox 경로가 에러에 안 나온다.
 
-- [ ] **Step 3: `runCreate`의 경로 계산을 바꾼다**
+- [ ] **Step 3: `main`이 기준 디렉토리를 주입받게 하고 경로 계산을 바꾼다**
+
+`src/bin.ts`에 옵션 인자를 하나 더한다. **기본값이 있으므로 기존 호출부는 그대로 동작한다.**
+
+```ts
+export interface MainOptions {
+  /**
+   * `create` 의 대상을 해석할 기준 디렉토리. 기본값은 `process.cwd()`.
+   *
+   * 인자로 받는 이유는 테스트다 — cwd 는 프로세스 전역 상태라
+   * `process.chdir()` 로 바꾸면 같은 워커의 다른 테스트와 순서가 얽힌다.
+   */
+  cwd?: string;
+}
+
+export async function main(argv: string[], options: MainOptions = {}): Promise<void> {
+```
+
+`runCreate` 호출부에 그 값을 넘기고, `runCreate`의 시그니처에 `baseDir: string`을 더한 뒤 아래 Step 3-2의 계산을 쓴다.
+
+- [ ] **Step 3-2: `runCreate`의 경로 계산을 바꾼다**
 
 `src/bin.ts`의 `runCreate`에서:
 
@@ -584,11 +615,14 @@ const targetDir = resolve(dirname(toolkitRoot), name);
 를 다음으로 바꾼다:
 
 ```ts
-// cwd 기준으로 해석한다. link: 시절에는 생성물이 툴킷의 형제여야
-// 상대경로가 성립해 부모 디렉토리로 강제했지만, 레지스트리 설치에는
-// 그 이유가 없다(설계 5.4절). nest new·create-next-app 과 같은 관습이다.
-const targetDir = resolve(process.cwd(), name);
+// 기준 디렉토리(기본값 process.cwd()) 아래에 만든다. link: 시절에는
+// 생성물이 툴킷의 형제여야 상대경로가 성립해 부모 디렉토리로
+// 강제했지만, 레지스트리 설치에는 그 이유가 없다(설계 5.4절).
+// nest new·create-next-app 과 같은 관습이다.
+const targetDir = resolve(baseDir, name);
 ```
+
+`baseDir`은 Step 3에서 더한 `runCreate`의 인자이며, `main`이 `options.cwd ?? process.cwd()`를 넘긴다.
 
 **기존 안전장치는 그대로 둔다** — 대상이 이미 있으면 던진다. 임의 경로를 받게 되면서 오히려 더 중요해진다.
 
