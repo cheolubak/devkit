@@ -19,7 +19,13 @@
     "node": "^20.19.0 || ^22.13.0 || >=24"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cheolubak/devkit.git",
+    "directory": "packages/vitest-config"
   },
   "peerDependencies": {
     "vitest": "^2.1.0 || ^3.0.0",

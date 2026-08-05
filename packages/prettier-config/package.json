@@ -17,6 +17,12 @@
     "test": "vitest run --passWithNoTests"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cheolubak/devkit.git",
+    "directory": "packages/prettier-config"
   }
 }
