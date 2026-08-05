@@ -2,6 +2,15 @@
 
 ## 2026-08-05
 
+### 게시 가능한 CLI로 전환 — Task 2 (`toolkitRoot` nullable화) · Task 3 (버전 관문 대상 축소)
+- **변경 파일**: `packages/devkit-cli/src/types.ts`, `src/bin.ts`, `src/update/index.ts`, `tests/flatten.test.ts`, `tests/update-flow.test.ts`(Task 2) · `tests/registry-version.test.ts`(Task 3)
+- **내용**: `docs/superpowers/sdd/2026-08-05-publishable-cli` 계획의 7태스크 중 Task 2·3. `devkit-cli`가 지금 `private: true`인 이유는 `findToolkitRoot`가 `pnpm-workspace.yaml`을 못 찾으면 던지기 때문(위 항목) — 게시 가능하게 만드는 작업의 일부다.
+  - **Task 2**: `Ctx.toolkitRoot`/`UpdateOptions.toolkitRoot`를 `string`에서 `string | null`로 확장. 게시본 실행에서 `findToolkitRoot`를 그대로 부르면 소비자가 pnpm 모노레포일 때 **소비자의** 워크스페이스 루트를 `toolkitRoot`로 잡아버려, 그 루트에서 `devbak update`를 돌리는 사용자를 자기보호 가드가 부당하게 거부한다(`pnpm dlx`면 아예 던진다). `null`은 "검사 생략"이 아니라 "툴킷 저장소가 존재하지 않는다"는 사실의 표현 — `bin.ts`에서 `packageLayout(pkgDir) === 'source' ? findToolkitRoot(pkgDir) : null`로 계산하고, `runUpdate`의 가드는 `toolkitRoot !== null && targetDir === toolkitRoot`로 고쳐 null이면 건너뛰되 값이 있으면 여전히 문다. 테스트 2건(null일 때 안 걸림 / 값 있을 때 여전히 걸림)을 짝으로 추가 — 후자가 없으면 가드를 통째로 지워도 통과한다.
+  - **Task 3**: 버전 관문(`registry-version.test.ts`)이 지금은 "`private`이 아닌 패키지 전부"를 훑는데, `devkit-cli`의 `private: true`가 떼이는 순간(Task 4) CLI가 대상에 들어온다. 하지만 관문이 검사하려던 명제는 "생성물이 `^0.1.0`으로 선언하는 범위가 실제 게시본을 가리키는가"이고, CLI는 아무도 의존으로 선언하지 않는 도구라 이 명제의 대상이 아니다. 대상을 `declaredShortNames()`(세 레시피가 `registryDeps`로 실제 선언하는 이름)로 좁혀 `devkit-cli`가 예외 목록 없이 자동으로 빠지게 했다. `DEVKIT_VERSION_RANGE`를 `^0.2.0`으로 바꿔 관문이 실제로 무는 것을 확인(`@cheolubak/eslint-config-nest@0.1.0 이 ^0.2.0 를 벗어난다`)한 뒤 원복, `private: true`를 잠시 지워 `devkit-cli`가 PASS로 빠지는 것을 확인한 뒤 원복 — 다만 devkit-cli 자체 버전이 `0.1.0`이라 이 PASS만으로는 증거가 약해, `declaredShortNames()`가 실제로 담는 6개 이름(devkit-cli 미포함)을 임시 테스트로 직접 확인했다.
+  - 두 태스크 모두 `pkgDir` 계산 줄(`packageRoot(fileURLToPath(import.meta.url))`, 선행 Task 1 산출물)은 건드리지 않았다.
+- **검증**: `pnpm test` 43파일/374개(Task 2가 +2, Task 3은 변화 없음), `pnpm typecheck` 7/7, `pnpm lint:ox` 에러 0·warning 3, `pnpm lint:es` 8/8 — 전부 기준선 유지. src 편집 직후 `dist`가 낡아 `bin.test.ts` 2건이 무관하게 실패한 적이 있었는데(Task 2·3 공통) `pnpm build`로 해소됨을 확인.
+- **커밋**: `d4642e1`(Task 2, `feature/publishable-cli`) · `02f04df`(Task 3, 같은 브랜치). main 미머지.
+
 ### 루트 README에 CLI 설치·사용 절 추가
 - **변경 파일**: `README.md`
 - **내용**: 레지스트리 전환으로 소비 쪽 문서는 충실해졌는데 **CLI를 어떻게 손에 넣는가**가 비어 있었다. `## CLI 설치` 절을 신설했다 — ① `devkit-cli`는 `private: true`라 `pnpm add -D`·`pnpm dlx` 둘 다 안 되고 클론해서 쓴다는 것과 그 이유(`findToolkitRoot`가 `pnpm-workspace.yaml`을 못 찾으면 던지므로 게시본은 첫 줄에서 죽는다), ② 클론·`pnpm build`와 빌드가 필수인 이유(`dist`가 `src`보다 오래되면 실행을 거부한다), ③ `gh auth refresh -h github.com -s read:packages` → `export GITHUB_TOKEN=$(gh auth token)`(생성물의 `pnpm install`이 요구한다 — 공개 패키지도 예외가 아니다), ④ `pnpm devbak --help` 실측 출력, ⑤ **저장소 밖에서 쓰는 법** — `findToolkitRoot`가 cwd가 아니라 `bin.js` 위치에서 탐색하므로 절대경로 alias로 어느 디렉토리에서든 생성할 수 있다(저장소 밖 cwd에서 실행해 실증했다), ⑥ 증상별 트러블슈팅 표 5건(에러 문구는 `bin.ts`·테스트에서 실제 문자열을 확인해 옮겼다). `새 프로젝트 만들기`에는 인자·옵션 표와 "무엇이 일어나는가" 5단계(자가검증 실패 시 생성물을 지우지 않는다 — 설계 6.3절)를 덧붙였다.
