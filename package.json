@@ -13,7 +13,8 @@
     "lint:ox": "oxlint",
     "lint:es": "turbo run lint lint:root",
     "lint:fix": "oxlint --fix && turbo run lint -- --fix && eslint . --fix",
-    "devbak": "node packages/devkit-cli/dist/bin.js"
+    "devbak": "node packages/devkit-cli/dist/bin.js",
+    "publish:packages": "pnpm -r --filter '!@cheolubak/devkit-cli' publish --no-git-checks"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
