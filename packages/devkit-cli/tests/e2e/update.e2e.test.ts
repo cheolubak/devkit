@@ -18,6 +18,9 @@ if (process.env.GITHUB_TOKEN === undefined || process.env.GITHUB_TOKEN === '') {
 
 const TOOLKIT = resolve(import.meta.dirname, '../../../..');
 const PARENT = resolve(TOOLKIT, '..');
+// bin.js는 절대경로로 부른다 — create()가 cwd를 PARENT로 세우므로(아래
+// 참고) 상대경로 'packages/devkit-cli/dist/bin.js'는 더 이상 안전하지 않다.
+const BIN = join(TOOLKIT, 'packages/devkit-cli/dist/bin.js');
 const RUN_ID = process.pid;
 const created: string[] = [];
 
@@ -46,8 +49,11 @@ afterEach((context) => {
   }
 });
 
+// update는 대상을 절대경로(dir)로 받으므로 cwd가 어디든 상관없다 —
+// 기본값 TOOLKIT을 그대로 둔다. create만 cwd 기준으로 동작하므로(Task 6)
+// 아래 create()에서 별도로 cwd를 PARENT로 넘긴다.
 function devbak(args: string[], cwd = TOOLKIT): string {
-  return execFileSync('node', ['packages/devkit-cli/dist/bin.js', ...args], {
+  return execFileSync('node', [BIN, ...args], {
     cwd,
     stdio: 'pipe',
     encoding: 'utf8',
@@ -57,7 +63,11 @@ function devbak(args: string[], cwd = TOOLKIT): string {
 function create(name: string, type: string): string {
   const dir = join(PARENT, `${name}-${RUN_ID}`);
   created.push(dir);
-  devbak(['create', basename(dir), '--type', type, '--no-verify']);
+  // cwd를 명시적으로 PARENT로 세운다 — TOOLKIT을 cwd로 넘기면 생성물이
+  // 툴킷 저장소 "안"에 만들어져(예: eslint/devkit-e2e-*) pnpm-workspace.yaml
+  // 범위 밖 취급을 받고, @cheolubak/* 설치가 조용히 실패한다
+  // (node_modules/@cheolubak 자체가 안 생김). TOOLKIT으로 되돌리지 말 것.
+  devbak(['create', basename(dir), '--type', type, '--no-verify'], PARENT);
   return dir;
 }
 
