@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { copyOverlay } from '../src/ops/copy-overlay.js';
-import { linkDeps } from '../src/ops/link-deps.js';
 import { mergeJson } from '../src/ops/merge-json.js';
 import type { Ctx } from '../src/types.js';
 
@@ -76,25 +75,5 @@ describe('mergeJson.plan', () => {
     const changes = await step.plan!(makeCtx());
 
     expect(changes[0]).toMatchObject({ kind: 'json', file: 'apps/web/package.json' });
-  });
-});
-
-describe('linkDeps.plan', () => {
-  it('toolkitRoot까지의 상대경로로 devDependencies 패치를 낸다', async () => {
-    const ctx = { ...makeCtx(), targetDir: '/a/b/demo', toolkitRoot: '/a/b/eslint' };
-    const changes = await linkDeps(['tsconfig', 'prettier-config']).plan!(ctx);
-
-    expect(changes).toEqual([
-      {
-        kind: 'json',
-        file: 'package.json',
-        patch: {
-          devDependencies: {
-            '@cheolubak/tsconfig': 'link:../eslint/packages/tsconfig',
-            '@cheolubak/prettier-config': 'link:../eslint/packages/prettier-config',
-          },
-        },
-      },
-    ]);
   });
 });

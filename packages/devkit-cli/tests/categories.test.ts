@@ -67,7 +67,7 @@ describe('categoryOf', () => {
   });
 
   it('deps 카테고리는 어떤 경로로도 매칭되지 않는다', () => {
-    // deps는 package.json 패치와 linkDeps를 가리키는 논리 카테고리다.
+    // deps는 package.json 패치와 registryDeps를 가리키는 논리 카테고리다.
     const everyPath = [
       '.claude/agents/devkit-reviewer.md',
       'CLAUDE.md',

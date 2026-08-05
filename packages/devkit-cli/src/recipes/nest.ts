@@ -1,7 +1,7 @@
 import type { Recipe, Step } from '../types.js';
 import { markerPatch } from '../lib/marker.js';
 import { devkitVersion } from '../lib/version.js';
-import { copyOverlay, delegate, linkDeps, makeDirs, mergeJson, removeFiles, scaffold } from '../ops/index.js';
+import { copyOverlay, delegate, registryDeps, makeDirs, mergeJson, removeFiles, scaffold } from '../ops/index.js';
 
 /**
  * NestJS API 레시피. 설계 5.1절.
@@ -81,7 +81,7 @@ export const nestRecipe: Recipe = (options = {}) => {
       { required: ['jest', 'devDependencies.eslint-plugin-prettier'] },
     ),
 
-    linkDeps(['eslint-config-nest', 'prettier-config', 'tsconfig', 'jest-config']),
+    registryDeps(['eslint-config-nest', 'prettier-config', 'tsconfig', 'jest-config']),
 
     // 소비자 3개 프로젝트에서 실측된 관용 구조(로드맵 1.3절)
     makeDirs(['src/modules', 'src/common']),

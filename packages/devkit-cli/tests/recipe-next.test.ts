@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { devkitVersion } from '../src/lib/version.js';
 import { nextRecipe } from '../src/recipes/next.js';
 
-// 라벨 부분일치(includes)는 쓰지 않는다 — linkDeps가 링크하는
+// 라벨 부분일치(includes)는 쓰지 않는다 — registryDeps가 선언하는
 // '@cheolubak/eslint-plugin-fsd'라는 문자열 자체가 'lint'를 부분 문자열로
 // 포함해(esLINT) skipInstall이어도 거짓양성이 난다. recipe-nest.test.ts와
 // 같은 이유로 정확 일치를 쓴다.

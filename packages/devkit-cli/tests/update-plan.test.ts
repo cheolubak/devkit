@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CATEGORIES, type Category } from '../src/lib/categories.js';
+import { DEVKIT_VERSION_RANGE } from '../src/ops/registry-deps.js';
 import type { Ctx } from '../src/types.js';
 import { buildPlan, effectiveCategories } from '../src/update/plan.js';
 
@@ -80,9 +81,9 @@ describe('buildPlan', () => {
     const parsed = JSON.parse(pkg!.content) as { devDependencies: Record<string, string>; name: string };
     // 기존 값은 보존된다.
     expect(parsed.name).toBe('demo');
-    // 레시피의 devDependencies와 linkDeps의 link:가 함께 들어간다.
+    // 레시피의 devDependencies와 registryDeps의 버전 범위가 함께 들어간다.
     expect(parsed.devDependencies['typescript-eslint']).toBe('^8.65.0');
-    expect(parsed.devDependencies['@cheolubak/tsconfig']).toMatch(/^link:/);
+    expect(parsed.devDependencies['@cheolubak/tsconfig']).toBe(DEVKIT_VERSION_RANGE);
   });
 
   it('마커를 주면 package.json에 얹힌다 — 쓰기 뒤가 아니라 계획 안이다', async () => {

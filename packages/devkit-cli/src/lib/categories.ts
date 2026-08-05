@@ -31,7 +31,7 @@ export const DEFAULT_EXCLUDED_CATEGORIES: readonly Category[] = ['scaffold'];
 /**
  * 프로젝트 상대 경로 → 카테고리.
  *
- * `deps`는 여기에 없다 — package.json 패치와 linkDeps를 가리키는
+ * `deps`는 여기에 없다 — package.json 패치와 registryDeps를 가리키는
  * 논리 카테고리라 대응하는 파일이 없다. `lint`의 일부도 마찬가지다 —
  * `eslint.config.mjs`는 파일이지만 `package.json`의 prettier 키는
  * 그렇지 않다(설계 5.4절). 그 몫은 아래 `JSON_KEY_CATEGORIES`가 정의한다.

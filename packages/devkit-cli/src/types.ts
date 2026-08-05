@@ -10,7 +10,7 @@ export interface Ctx {
   log: (message: string) => void;
 }
 
-export type StepKind = 'delegate' | 'removeFiles' | 'copyOverlay' | 'mergeJson' | 'linkDeps' | 'makeDirs' | 'compose';
+export type StepKind = 'delegate' | 'removeFiles' | 'copyOverlay' | 'mergeJson' | 'registryDeps' | 'makeDirs' | 'compose';
 
 /**
  * 쓰기 전에 계산해 둔 변경. update 는 이것을 사람에게 보여주고 확인을 받은

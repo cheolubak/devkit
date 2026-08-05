@@ -63,9 +63,9 @@ describe('monorepo 레시피', () => {
     expect(detail.patch.devDependencies['typescript-eslint']).toBeNull();
   });
 
-  it('루트와 apps/web에 각각 link: 배선을 한다', () => {
-    // catalog:가 link:를 거부하므로 각자 선언해야 한다(설계 2.3절).
-    const links = monorepoRecipe().filter((s) => s.kind === 'linkDeps');
+  it('루트와 apps/web에 각각 의존 선언을 한다', () => {
+    // package.json이 둘로 나뉘므로(루트·apps/web) 레지스트리 선언도 각자 필요하다.
+    const links = monorepoRecipe().filter((s) => s.kind === 'registryDeps');
     const composed = monorepoRecipe().find((s) => s.kind === 'compose');
     const composedDetail = composed?.describe() as { steps: { packages?: string[] }[] };
     const nested = composedDetail.steps.filter((s) => s.packages !== undefined);

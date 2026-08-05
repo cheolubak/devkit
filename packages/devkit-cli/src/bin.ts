@@ -15,8 +15,8 @@ import { runUpdate } from './update/index.js';
 /**
  * pnpm-workspace.yaml을 상위로 탐색해 툴킷 저장소 루트를 찾는다.
  *
- * 못 찾으면 던진다. cwd로 폴백하면 linkDeps가 엉뚱한 상대경로를 계산해
- * 아무 에러 없이 잘못된 프로젝트가 생성된다(설계 6.1절).
+ * 못 찾으면 던진다. cwd로 폴백하면 잘못된 toolkitRoot로 targetDir 위치가
+ * 계산돼 아무 에러 없이 엉뚱한 곳에 프로젝트가 생성된다(설계 6.1절).
  */
 export function findToolkitRoot(from: string): string {
   let dir = resolve(from);

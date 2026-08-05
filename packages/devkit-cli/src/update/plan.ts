@@ -24,7 +24,7 @@ const RECIPES: Record<ProjectType, Recipe> = {
 
 /**
  * 재적용 대상 연산은 `step.plan` 유무만으로 가른다(설계 5.3절 표와 일치 —
- * `copyOverlay`·`mergeJson`·`linkDeps`만 `plan()`을 정의한다).
+ * `copyOverlay`·`mergeJson`·`registryDeps`만 `plan()`을 정의한다).
  *
  * 예전엔 `PLANNABLE = new Set(['copyOverlay', 'mergeJson', 'linkDeps'])`
  * 화이트리스트를 따로 두고 `!PLANNABLE.has(step.kind) || step.plan ===
