@@ -3,6 +3,19 @@ import { rmSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
+// e2e 는 생성물에서 pnpm install 을 돌리고, 그 설치가 GitHub Packages 를
+// 탄다. GitHub Packages 는 **공개 패키지도** 토큰을 요구하므로(설계 0.2절)
+// 토큰이 없으면 pnpm install 깊숙한 곳에서 401 로 죽는다. 원인을 읽을 수
+// 있게 여기서 먼저 멈춘다 — 조용히 건너뛰면 e2e 가 있다는 사실이 거짓
+// 안심을 준다.
+if (process.env.GITHUB_TOKEN === undefined || process.env.GITHUB_TOKEN === '') {
+  throw new Error(
+    'e2e 에는 GITHUB_TOKEN 이 필요합니다 (@cheolubak/* 를 GitHub Packages 에서 설치합니다).\n' +
+      '  export GITHUB_TOKEN=$(gh auth token)\n' +
+      '토큰에 read:packages 권한이 있어야 합니다.',
+  );
+}
+
 const TOOLKIT = resolve(import.meta.dirname, '../../../..');
 const PARENT = resolve(TOOLKIT, '..');
 const RUN_ID = process.pid;
