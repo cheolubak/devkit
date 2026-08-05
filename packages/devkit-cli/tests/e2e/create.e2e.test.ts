@@ -193,8 +193,13 @@ describe('devkit create --type monorepo', () => {
     expect(existsSync(join(dir, 'apps', 'web', 'pnpm-workspace.yaml'))).toBe(false);
     expect(existsSync(join(dir, 'apps', 'web', 'node_modules', '.pnpm'))).toBe(false);
 
+    // apps/web은 루트보다 두 단계 깊다. link: 시절에는 이 깊이 차이 때문에
+    // 깊이별 상대경로를 계산해야 했고(linkSpec), 이 단언도 그 경로 모양을
+    // 확인했다. 레지스트리 설치로 바꾼 뒤로는 깊이가 무의미하다 — 루트든
+    // apps/web이든 같은 버전 범위를 선언한다. 그것이 여기서 확인할 것이다.
     const webPkg = readFileSync(join(dir, 'apps', 'web', 'package.json'), 'utf8');
-    expect(webPkg).toContain('link:../../../eslint/packages/');
+    expect(webPkg).toContain('"@cheolubak/eslint-plugin-fsd": "^0.1.0"');
+    expect(webPkg).not.toContain('link:');
 
     expect(runIn(dir, 'lint')).toBe(0);
     expect(runIn(dir, 'build')).toBe(0);

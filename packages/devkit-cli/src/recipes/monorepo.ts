@@ -96,7 +96,10 @@ export const monorepoRecipe: Recipe = (options = {}) => {
     // 마커를 심으므로, 루트는 monorepo·앱은 next 로 각각 update 할 수 있다.
     mergeJson({ ...markerPatch('monorepo', devkitVersion()) }),
 
-    // 루트도 @cheolubak/* 를 직접 선언해야 한다 — catalog:가 link:를 거부한다.
+    // 루트도 @cheolubak/* 를 직접 선언한다. 원래 이유는 pnpm catalog:가 link:를
+    // 거부해서였는데(ERR_PNPM_CATALOG_ENTRY_INVALID_SPEC), 레지스트리 설치로
+    // 바꾼 지금은 그 제약이 없다 — 다만 루트 eslint.config.mjs와 prettier 설정이
+    // 이 둘을 직접 import하므로 선언은 그대로 필요하다.
     // 'tsconfig'는 넣지 않는다 — 루트에는 tsconfig.json이 없고(각 앱이
     // 자기 tsconfig를 관리), apps/web도 next 레시피와 동일하게 링크하지
     // 않는다(Task 13 Step 4 확인). 소비처 없는 선언은 완료 기준 6번 위반이다.
