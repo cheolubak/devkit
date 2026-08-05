@@ -44,6 +44,11 @@ describe('게시본(tarball) 으로 실행하기', () => {
     const root = packAndExtract();
     expect(existsSync(join(root, 'dist', 'bin.js'))).toBe(true);
     expect(existsSync(join(root, 'templates', 'nest'))).toBe(true);
+    // nest 만 보면 files·무시 규칙이 next·monorepo 만 빼먹어도 이 관문을
+    // 통과한다 — 세 유형 전부를 확인해야 "템플릿이 tarball에서 빠졌다"는
+    // 회귀를 실제로 잡는다.
+    expect(existsSync(join(root, 'templates', 'next'))).toBe(true);
+    expect(existsSync(join(root, 'templates', 'monorepo'))).toBe(true);
     // _npmrc 는 npm 이 dot-file 을 거르므로 밑줄 이름으로 실린다.
     expect(existsSync(join(root, 'templates', '_shared', '_npmrc'))).toBe(true);
     // src 가 실리면 assertDistFresh 가 게시본에서도 돌아 레이아웃 판별이 깨진다.

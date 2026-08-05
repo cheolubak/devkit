@@ -46,8 +46,9 @@ function newestMtime(dir: string): number {
 /**
  * dist가 src보다 오래됐으면 중단한다.
  *
- * link: 소비에서는 어떤 라이프사이클 스크립트도 돌지 않아, 빌드를 잊으면
- * 옛 코드가 조용히 실행된다(로드맵 4.2절). CLI만은 스스로 이를 막는다.
+ * 저장소에서 직접 실행하는 방식에는 어떤 라이프사이클 스크립트도 돌지
+ * 않아, 빌드를 잊으면 옛 코드가 조용히 실행된다(로드맵 4.2절). CLI만은
+ * 스스로 이를 막는다.
  */
 export function assertDistFresh(pkgDir: string): void {
   // 게시본에는 src 가 없다. 여기서 newestMtime 을 부르면 readdirSync 가

@@ -16,8 +16,8 @@ import { packageRoot } from './layout.js';
  * 다르다: vitest는 src/lib/version.ts(패키지 루트에서 두 단계 아래)를
  * 그대로 싣지만, 빌드 산출물은 dist/bin.js(한 단계 아래)뿐이다. 두 단계로
  * 고정하면 빌드 산출물에서 packages/package.json(존재하지 않음)을 가리켜
- * ENOENT로 죽는다. bin.ts의 findToolkitRoot와 같은 방식으로 package.json을
- * 찾을 때까지 위로 걷는다.
+ * ENOENT로 죽는다. lib/layout.ts의 packageRoot가 package.json을 찾을
+ * 때까지 위로 걷는다.
  */
 export function devkitVersion(): string {
   const pkgPath = join(packageRoot(fileURLToPath(import.meta.url)), 'package.json');

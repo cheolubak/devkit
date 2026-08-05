@@ -29,10 +29,7 @@ describe('packageRoot', () => {
   });
 
   it('찾지 못하면 던진다 — 조용히 상위 아무 곳이나 고르지 않는다', () => {
-    const orphan = mkdtempSync(join(tmpdir(), 'devbak-orphan-'));
-    created.push(orphan);
-    // tmpdir 위로는 package.json이 없다고 단정할 수 없으므로, 루트까지
-    // 올라가도 못 찾는 상황 대신 "던진다"는 계약만 확인한다.
+    // 루트까지 올라가도 못 찾는 상황에서 "던진다"는 계약만 확인한다.
     expect(() => packageRoot('/')).toThrow(/package\.json/);
   });
 });
