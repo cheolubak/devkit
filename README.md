@@ -33,8 +33,9 @@
 바로잡으려면 버전을 올려 다시 게시해야 한다). JSON·CJS·ESM 순수 객체로 낼 수
 있는 것은 전부 빌드 없이 두어 이 위험을 아예 겪지 않게 했다. 반대로 빌드가
 필요한 `devkit-cli`는 `dist/bin.js`가 `src/`보다 오래되면 **실행 자체를
-거부한다** — 같은 함정을 스스로 막기 위해서다(`devkit-cli`는 `private: true`라
-게시되지 않고 저장소에서 직접 실행되므로, 이 검사가 유일한 방어선이다).
+거부한다** — 같은 함정을 스스로 막기 위해서다(게시 경로는
+`prepublishOnly: pnpm build`가 지키지만, 저장소에서 직접 실행할 때는 어떤
+훅도 돌지 않으므로 이 검사가 유일한 방어선이다).
 
 ## 의존 방향
 
@@ -54,43 +55,24 @@
 
 ## CLI 설치
 
-**`devbak`은 설치하는 것이 아니라 이 저장소를 클론해서 쓴다.** 다른 6개 패키지와
-달리 `@cheolubak/devkit-cli`는 게시되지 않는다(`private: true`) — `pnpm add -D`도
-`pnpm dlx`도 안 된다.
-
-이유는 CLI가 자기 위치에서 위로 올라가며 `pnpm-workspace.yaml`을 찾고, 못 찾으면
-던지기 때문이다(`findToolkitRoot`). 생성에 쓸 템플릿이 이 저장소 안에 있으므로
-저장소를 못 찾으면 할 수 있는 일이 없다. 게시본은 소비자의 `node_modules` 안에
-놓여 그 파일이 없으니 **첫 줄에서 죽는다.** 그래서 게시 자체를 하지 않는다.
-
-### 1. 클론과 빌드
+`devbak`은 설치 없이 바로 쓸 수 있다.
 
 ```bash
-git clone https://github.com/cheolubak/devkit.git
-cd devkit
-pnpm install
-pnpm build            # devkit-cli의 dist 생성 — 이걸 빼먹으면 CLI가 실행을 거부한다
+pnpm dlx @cheolubak/devkit-cli create my-api --type nest
 ```
 
-`pnpm build`가 필수인 이유는 CLI가 매 실행마다 `dist/bin.js`가 `src/`보다
-새로운지 확인하고 오래됐으면 막기 때문이다. 저장소에서 직접 실행하는 방식에는
-`prepare` 같은 라이프사이클 훅이 안 돌아 빌드를 잊기 쉬운데, 그러면 옛 코드가
-조용히 실행된다 — 그것을 막는 방어다. **`git pull` 뒤에는 `pnpm build`를 다시
-돌려라.**
+**단, GitHub Packages는 공개 패키지도 익명 접근을 허용하지 않는다.** CLI를
+받는 것부터 인증이 필요하므로 `~/.npmrc`에 스코프와 토큰을 한 번 설정해야
+한다.
 
-### 2. GitHub Packages 토큰
-
-CLI 자체는 토큰 없이 돈다. 하지만 **생성물의 `pnpm install`이 토큰을 요구한다** —
-생성물이 `@cheolubak/*`를 GitHub Packages에서 받기 때문이고, GitHub Packages는
-**공개 패키지도** 익명 접근을 허용하지 않는다. `devbak create`는 마지막에
-`pnpm install`을 돌리므로 토큰이 없으면 거기서 실패한다.
-
-기존 `gh` 로그인에 스코프를 덧붙이는 것이 가장 간단하다(PAT을 손으로 만들 필요가
-없다):
+```
+@cheolubak:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
 
 ```bash
 gh auth refresh -h github.com -s read:packages   # 브라우저에서 승인
-export GITHUB_TOKEN=$(gh auth token)
+export GITHUB_TOKEN=$(gh auth token)             # ~/.zshrc 에 넣어두면 편하다
 ```
 
 확인:
@@ -99,13 +81,19 @@ export GITHUB_TOKEN=$(gh auth token)
 gh auth status | grep -i scopes                  # read:packages 가 보여야 한다
 ```
 
-`GITHUB_TOKEN`은 셸을 새로 열 때마다 필요하므로 `~/.zshrc`에 넣어두는 편이 낫다.
 `gh` 대신 [PAT](https://github.com/settings/tokens)(classic, `read:packages`)을
-써도 된다.
+써도 된다. 토큰은 생성물의 `pnpm install`에도 그대로 쓰인다 — 생성물이
+`@cheolubak/*` 설정 패키지를 같은 레지스트리에서 받기 때문이다.
 
-### 3. 동작 확인
+### 개발·기여용 — 저장소에서 실행하기
+
+이 저장소 자체를 고치거나 템플릿을 바꿔가며 시험하려면 클론해서 직접 돌린다.
 
 ```bash
+git clone https://github.com/cheolubak/devkit.git
+cd devkit
+pnpm install
+pnpm build            # devkit-cli의 dist 생성 — 이걸 빼먹으면 CLI가 실행을 거부한다
 pnpm devbak --help
 ```
 
@@ -115,35 +103,20 @@ pnpm devbak --help
   pnpm devbak update [path] [--only <categories>] [--type <t>] [--dry-run] [--yes] [--force]
 ```
 
-### 저장소 밖 어디서든 쓰기 (선택)
-
-`devbak create`는 **실행한 위치(cwd) 아래에** 프로젝트를 만든다. 그런데
-`pnpm devbak`은 스크립트가 이 저장소의 `package.json`에 있으므로 저장소 안에서만
-동작한다. 임의의 작업 디렉토리에서 쓰려면 `bin.js`를 절대경로로 부르면 된다 —
-`findToolkitRoot`는 **cwd가 아니라 `bin.js`의 위치**에서 탐색하므로 어디서
-실행해도 툴킷을 정확히 찾는다.
-
-```bash
-# ~/.zshrc
-alias devbak='node ~/dev/devkit/packages/devkit-cli/dist/bin.js'
-export GITHUB_TOKEN=$(gh auth token)
-```
-
-```bash
-cd ~/projects
-devbak create my-api --type nest      # ~/projects/my-api 에 생성된다
-```
-
-alias는 `pnpm build`를 대신 돌려주지 않는다. 저장소를 갱신했으면 거기서 한 번
-빌드해야 한다.
+`pnpm build`가 필수인 이유는 CLI가 매 실행마다 `dist/bin.js`가 `src/`보다
+새로운지 확인하고 오래됐으면 막기 때문이다. 저장소에서 직접 실행하는 방식에는
+`prepare` 같은 라이프사이클 훅이 안 돌아 빌드를 잊기 쉬운데, 그러면 옛 코드가
+조용히 실행된다 — 그것을 막는 방어다. **`git pull` 뒤에는 `pnpm build`를 다시
+돌려라.** `devbak create`가 끝에 `pnpm install`을 돌리므로 위에서 설정한
+`GITHUB_TOKEN`이 이 경로에도 그대로 필요하다.
 
 ### 문제가 생기면
 
 | 증상 | 원인과 해결 |
 | --- | --- |
 | `devkit-cli의 dist가 src보다 오래됐습니다` | 저장소에서 `pnpm build` |
-| `툴킷 저장소 루트를 찾지 못했습니다` | `bin.js`를 저장소 밖으로 복사했거나 게시본을 쓰려 한 것이다. 저장소 안의 `dist/bin.js`를 부를 것 |
-| 생성 도중 `pnpm install` 실패, `401`/`ERR_PNPM_FETCH_401` | `GITHUB_TOKEN`이 없거나 `read:packages` 스코프가 없다. 위 2단계 |
+| `pnpm dlx` 가 `401`/`ERR_PNPM_FETCH_401` 로 실패 | `~/.npmrc`에 `@cheolubak` 스코프 설정이 없거나 `GITHUB_TOKEN`이 비어 있다. 위 설치 절 참고 |
+| 생성 도중 `pnpm install` 실패, `401`/`ERR_PNPM_FETCH_401` | `GITHUB_TOKEN`이 없거나 `read:packages` 스코프가 없다. 위 설치 절 참고 |
 | `Cannot find package '@cheolubak/...'` | 설치가 안 된 상태로 린트·빌드가 돈 것이다. 생성물에서 `pnpm install`을 먼저 |
 | `<name> 디렉토리가 이미 존재합니다` | 덮어쓰지 않는 것이 의도다. 다른 이름을 쓰거나 기존 디렉토리를 치울 것 |
 

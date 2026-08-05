@@ -2,9 +2,16 @@
 
 devkit 표준(ESLint·Prettier·tsconfig·테스트 설정)이 적용된 프로젝트를 생성하는 CLI.
 
-**이 패키지는 게시하지 않는다** (`private: true`). 다른 6개 패키지와 달리
-`pnpm add -D`로 설치할 수 없고, 이 저장소를 클론해 `pnpm build` 후
-`pnpm devbak ...`로 저장소 안에서 직접 실행한다.
+```bash
+pnpm dlx @cheolubak/devkit-cli create my-api --type nest
+```
+
+`~/.npmrc`에 `@cheolubak` 스코프와 토큰이 있어야 한다(GitHub Packages는
+공개 패키지도 익명 접근을 허용하지 않는다). 자세한 것은
+[루트 README의 CLI 설치](../../README.md#cli-설치).
+
+이 저장소에서 직접 실행할 수도 있다 — `pnpm install && pnpm build` 후
+`pnpm devbak ...`. 개발·기여할 때 쓰는 경로다.
 
 ## 위치 — 실행한 위치(cwd) 기준이다
 
