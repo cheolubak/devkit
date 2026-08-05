@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { packageRoot } from './layout.js';
 
 /**
  * 마커에 심을 devkit 버전.
@@ -19,20 +20,10 @@ import { fileURLToPath } from 'node:url';
  * 찾을 때까지 위로 걷는다.
  */
 export function devkitVersion(): string {
-  let dir = dirname(fileURLToPath(import.meta.url));
-  for (;;) {
-    const pkgPath = join(dir, 'package.json');
-    if (existsSync(pkgPath)) {
-      const parsed = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: unknown };
-      if (typeof parsed.version !== 'string' || parsed.version.length === 0) {
-        throw new Error(`${pkgPath} 에 version 문자열이 없습니다.`);
-      }
-      return parsed.version;
-    }
-    const parent = dirname(dir);
-    if (parent === dir) {
-      throw new Error('devkit-cli의 package.json을 찾지 못했습니다.');
-    }
-    dir = parent;
+  const pkgPath = join(packageRoot(fileURLToPath(import.meta.url)), 'package.json');
+  const parsed = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: unknown };
+  if (typeof parsed.version !== 'string' || parsed.version.length === 0) {
+    throw new Error(`${pkgPath} 에 version 문자열이 없습니다.`);
   }
+  return parsed.version;
 }

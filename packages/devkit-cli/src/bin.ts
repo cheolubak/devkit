@@ -4,6 +4,7 @@ import { mkdir } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { packageLayout, packageRoot } from './lib/layout.js';
 import { pathExists } from './ops/path-exists.js';
 import { monorepoRecipe } from './recipes/monorepo.js';
 import { nestRecipe } from './recipes/nest.js';
@@ -49,6 +50,12 @@ function newestMtime(dir: string): number {
  * 옛 코드가 조용히 실행된다(로드맵 4.2절). CLI만은 스스로 이를 막는다.
  */
 export function assertDistFresh(pkgDir: string): void {
+  // 게시본에는 src 가 없다. 여기서 newestMtime 을 부르면 readdirSync 가
+  // ENOENT 로 죽는다. 검사를 건너뛰는 것이 방어를 포기하는 것은 아니다 —
+  // 게시 경로는 prepublishOnly: pnpm build 가 tarball 을 만들 때 이미
+  // 보장하고, 게시본의 dist 는 그 버전에 얼어붙어 낡을 수 없다.
+  if (packageLayout(pkgDir) === 'bundled') return;
+
   const distBin = join(pkgDir, 'dist', 'bin.js');
   if (!existsSync(distBin)) return;
   if (newestMtime(join(pkgDir, 'src')) > statSync(distBin).mtimeMs) {
@@ -110,7 +117,7 @@ export async function main(argv: string[], options: MainOptions = {}): Promise<v
   // 먼저 실행하세요"가 인자 오류를 가려 원인이 두 단계 멀어진다.
   const createArgs = command === 'create' ? validateCreate(rest[0], values.type) : null;
 
-  const pkgDir = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const pkgDir = packageRoot(fileURLToPath(import.meta.url));
   assertDistFresh(pkgDir);
   const toolkitRoot = findToolkitRoot(pkgDir);
 

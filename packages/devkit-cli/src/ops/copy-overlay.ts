@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join, posix, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { packageRoot } from '../lib/layout.js';
 import type { Ctx, PlannedChange, Step } from '../types.js';
 import { pathExists } from './path-exists.js';
 
@@ -12,25 +13,19 @@ export function templateFileName(name: string): string {
 }
 
 /**
- * templates/ 디렉토리를 찾는다. 이 모듈이 두 레이아웃으로 로드될 수 있다는
- * 실측 사실 때문에 한 단계가 아니다:
+ * 템플릿 트리의 루트.
  *
- * - 배포판(tsup 번들): dist/ 아래가 flat 하다(dist/bin.js, dist/chunk-*.js —
- *   서브폴더 없음). 이 파일의 위치가 dist/이므로 한 단계(..)만 올라가면
- *   templates/에 닿는다.
- * - vitest(소스 직접 실행): 이 파일이 src/ops/에 있으므로 devkit-cli
- *   루트까지 두 단계(../..)를 올라가야 한다.
- *
- * 조용히 잘못된 경로를 고르면 호출부가 `scandir ENOENT`라는 엉뚱한 에러로
- * 죽는다 — 둘 다 없으면 원인을 바로 알 수 있도록 명시적으로 던진다.
+ * 두 레이아웃 모두 템플릿은 패키지 루트 바로 아래에 있다(게시본은 files 로
+ * `templates` 를 함께 싣는다). 그래서 파일 기준 상대 깊이를 세지 않고 패키지
+ * 루트를 찾아 거기서 잡는다 — 번들되면 이 파일이 dist/chunk-*.js 가 되어
+ * 깊이가 달라지므로, 깊이를 세는 방식은 레이아웃마다 후보를 늘려야 한다.
  */
 function templatesRoot(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const bundledLayout = join(here, '..', 'templates');
-  const sourceLayout = join(here, '..', '..', 'templates');
-  if (existsSync(bundledLayout)) return bundledLayout;
-  if (existsSync(sourceLayout)) return sourceLayout;
-  throw new Error(`templates 디렉토리를 찾지 못했습니다 (확인한 경로: ${bundledLayout}, ${sourceLayout}).`);
+  const root = join(packageRoot(fileURLToPath(import.meta.url)), 'templates');
+  if (!existsSync(root)) {
+    throw new Error(`templates 디렉토리를 찾지 못했습니다 (확인한 경로: ${root}).`);
+  }
+  return root;
 }
 
 /**

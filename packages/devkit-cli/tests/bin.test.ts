@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { findToolkitRoot, main } from '../src/bin.js';
+import { assertDistFresh, findToolkitRoot, main } from '../src/bin.js';
 
 const created: string[] = [];
 
@@ -97,5 +97,31 @@ describe('create 대상 경로', () => {
     await expect(main(['create', 'taken-here', '--type', 'nest'])).rejects.toThrow(
       new RegExp(`${escapeRegExp(target)}.*이미 존재합니다`),
     );
+  });
+});
+
+describe('assertDistFresh', () => {
+  it('source 레이아웃에서 dist가 src보다 오래되면 던진다', () => {
+    const pkg = mkdtempSync(join(tmpdir(), 'devbak-fresh-'));
+    created.push(pkg);
+    mkdirSync(join(pkg, 'dist'), { recursive: true });
+    writeFileSync(join(pkg, 'dist', 'bin.js'), '');
+    // dist 를 먼저 쓰고 src 를 나중에 써서 src 가 더 새롭게 만든다.
+    mkdirSync(join(pkg, 'src'), { recursive: true });
+    writeFileSync(join(pkg, 'src', 'bin.ts'), '');
+
+    expect(() => assertDistFresh(pkg)).toThrow(/pnpm build/);
+  });
+
+  it('bundled 레이아웃에서는 검사하지 않는다 — src가 없어도 죽지 않는다', () => {
+    // 게시본의 실제 모양: dist 와 templates 만 있고 src 가 없다.
+    // 이 방어가 없으면 readdirSync 가 ENOENT 로 던져 CLI 가 첫 줄에서 죽는다.
+    const pkg = mkdtempSync(join(tmpdir(), 'devbak-bundled-'));
+    created.push(pkg);
+    mkdirSync(join(pkg, 'dist'), { recursive: true });
+    writeFileSync(join(pkg, 'dist', 'bin.js'), '');
+    mkdirSync(join(pkg, 'templates'), { recursive: true });
+
+    expect(() => assertDistFresh(pkg)).not.toThrow();
   });
 });
