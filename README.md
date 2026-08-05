@@ -52,11 +52,108 @@
 
 ---
 
-## 새 프로젝트 만들기
+## CLI 설치
+
+**`devbak`은 설치하는 것이 아니라 이 저장소를 클론해서 쓴다.** 다른 6개 패키지와
+달리 `@cheolubak/devkit-cli`는 게시되지 않는다(`private: true`) — `pnpm add -D`도
+`pnpm dlx`도 안 된다.
+
+이유는 CLI가 자기 위치에서 위로 올라가며 `pnpm-workspace.yaml`을 찾고, 못 찾으면
+던지기 때문이다(`findToolkitRoot`). 생성에 쓸 템플릿이 이 저장소 안에 있으므로
+저장소를 못 찾으면 할 수 있는 일이 없다. 게시본은 소비자의 `node_modules` 안에
+놓여 그 파일이 없으니 **첫 줄에서 죽는다.** 그래서 게시 자체를 하지 않는다.
+
+### 1. 클론과 빌드
 
 ```bash
+git clone https://github.com/cheolubak/devkit.git
+cd devkit
 pnpm install
-pnpm build                                        # devkit-cli의 dist 최신화 (필수)
+pnpm build            # devkit-cli의 dist 생성 — 이걸 빼먹으면 CLI가 실행을 거부한다
+```
+
+`pnpm build`가 필수인 이유는 CLI가 매 실행마다 `dist/bin.js`가 `src/`보다
+새로운지 확인하고 오래됐으면 막기 때문이다. 저장소에서 직접 실행하는 방식에는
+`prepare` 같은 라이프사이클 훅이 안 돌아 빌드를 잊기 쉬운데, 그러면 옛 코드가
+조용히 실행된다 — 그것을 막는 방어다. **`git pull` 뒤에는 `pnpm build`를 다시
+돌려라.**
+
+### 2. GitHub Packages 토큰
+
+CLI 자체는 토큰 없이 돈다. 하지만 **생성물의 `pnpm install`이 토큰을 요구한다** —
+생성물이 `@cheolubak/*`를 GitHub Packages에서 받기 때문이고, GitHub Packages는
+**공개 패키지도** 익명 접근을 허용하지 않는다. `devbak create`는 마지막에
+`pnpm install`을 돌리므로 토큰이 없으면 거기서 실패한다.
+
+기존 `gh` 로그인에 스코프를 덧붙이는 것이 가장 간단하다(PAT을 손으로 만들 필요가
+없다):
+
+```bash
+gh auth refresh -h github.com -s read:packages   # 브라우저에서 승인
+export GITHUB_TOKEN=$(gh auth token)
+```
+
+확인:
+
+```bash
+gh auth status | grep -i scopes                  # read:packages 가 보여야 한다
+```
+
+`GITHUB_TOKEN`은 셸을 새로 열 때마다 필요하므로 `~/.zshrc`에 넣어두는 편이 낫다.
+`gh` 대신 [PAT](https://github.com/settings/tokens)(classic, `read:packages`)을
+써도 된다.
+
+### 3. 동작 확인
+
+```bash
+pnpm devbak --help
+```
+
+```console
+사용법:
+  pnpm devbak create <name> --type <nest|next|monorepo> [--no-verify]
+  pnpm devbak update [path] [--only <categories>] [--type <t>] [--dry-run] [--yes] [--force]
+```
+
+### 저장소 밖 어디서든 쓰기 (선택)
+
+`devbak create`는 **실행한 위치(cwd) 아래에** 프로젝트를 만든다. 그런데
+`pnpm devbak`은 스크립트가 이 저장소의 `package.json`에 있으므로 저장소 안에서만
+동작한다. 임의의 작업 디렉토리에서 쓰려면 `bin.js`를 절대경로로 부르면 된다 —
+`findToolkitRoot`는 **cwd가 아니라 `bin.js`의 위치**에서 탐색하므로 어디서
+실행해도 툴킷을 정확히 찾는다.
+
+```bash
+# ~/.zshrc
+alias devbak='node ~/dev/devkit/packages/devkit-cli/dist/bin.js'
+export GITHUB_TOKEN=$(gh auth token)
+```
+
+```bash
+cd ~/projects
+devbak create my-api --type nest      # ~/projects/my-api 에 생성된다
+```
+
+alias는 `pnpm build`를 대신 돌려주지 않는다. 저장소를 갱신했으면 거기서 한 번
+빌드해야 한다.
+
+### 문제가 생기면
+
+| 증상 | 원인과 해결 |
+| --- | --- |
+| `devkit-cli의 dist가 src보다 오래됐습니다` | 저장소에서 `pnpm build` |
+| `툴킷 저장소 루트를 찾지 못했습니다` | `bin.js`를 저장소 밖으로 복사했거나 게시본을 쓰려 한 것이다. 저장소 안의 `dist/bin.js`를 부를 것 |
+| 생성 도중 `pnpm install` 실패, `401`/`ERR_PNPM_FETCH_401` | `GITHUB_TOKEN`이 없거나 `read:packages` 스코프가 없다. 위 2단계 |
+| `Cannot find package '@cheolubak/...'` | 설치가 안 된 상태로 린트·빌드가 돈 것이다. 생성물에서 `pnpm install`을 먼저 |
+| `<name> 디렉토리가 이미 존재합니다` | 덮어쓰지 않는 것이 의도다. 다른 이름을 쓰거나 기존 디렉토리를 치울 것 |
+
+---
+
+## 새 프로젝트 만들기
+
+[CLI 설치](#cli-설치)를 마쳤다면:
+
+```bash
 pnpm devbak create my-api --type nest             # 또는 --type next | monorepo
 ```
 
@@ -65,6 +162,28 @@ pnpm devbak create my-api --type nest             # 또는 --type next | monorep
 | `nest` | `@nestjs/cli new` | eslint-config-nest, prettier-config, jest-config, zod |
 | `next` | `create-next-app` | eslint-plugin-fsd/next, prettier-config, vitest-config/next, FSD 레이어 |
 | `monorepo` | Turborepo + 위 `next` 레시피를 `apps/web`에 합성 | 루트에서 한 번만 lint/build |
+
+### 인자와 옵션
+
+| 인자·옵션 | 설명 |
+| --- | --- |
+| `<name>` (필수) | 생성할 디렉토리 이름이자 프로젝트 이름. **이미 있으면 덮어쓰지 않고 던진다** |
+| `--type <t>` (필수) | `nest` \| `next` \| `monorepo` |
+| `--no-verify` | `pnpm install`은 그대로 하되 자가검증(`pnpm lint`·`pnpm build`)만 건너뛴다. 설치까지 건너뛰는 옵션은 없다 — 설치 없이는 린트·빌드가 애초에 의미가 없다 |
+| `--help` | 사용법 두 줄을 출력하고 exit 0 |
+
+### 무엇이 일어나는가
+
+1. **공식 CLI로 뼈대를 만든다** — `@nestjs/cli new` 또는 `create-next-app`.
+   뼈대는 직접 손으로 흉내 내지 않는다(프레임워크가 바뀌면 따라가야 하므로).
+2. **설정을 devkit 표준으로 교체한다** — `eslint.config.mjs`·`tsconfig.json`·
+   테스트 설정·`.prettierignore`를 얹고, `package.json`에 `@cheolubak/*`를
+   `^0.1.0` 버전 범위로 선언한다. `.npmrc`도 함께 놓는다.
+3. **`package.json`에 마커를 심는다** — `{"devkit": {"type", "version"}}`.
+   나중에 `devbak update`가 `--type` 없이도 유형을 알아낸다.
+4. **`pnpm install`을 돌린다** — 여기서 토큰이 필요하다.
+5. **자가검증** — `pnpm lint`와 `pnpm build`를 돌려 생성물이 실제로 통과하는지
+   확인한다. 실패하면 **생성물을 지우지 않고 남긴다**(지우면 디버깅이 불가능하다).
 
 `devbak create`는 실행한 위치(cwd) 기준으로 `<name>` 디렉토리를 만든다 — 이
 저장소의 형제 디렉토리여야 한다는 제약은 없다. 생성물은 `@cheolubak/*`를

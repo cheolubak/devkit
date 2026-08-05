@@ -2,6 +2,11 @@
 
 ## 2026-08-05
 
+### 루트 README에 CLI 설치·사용 절 추가
+- **변경 파일**: `README.md`
+- **내용**: 레지스트리 전환으로 소비 쪽 문서는 충실해졌는데 **CLI를 어떻게 손에 넣는가**가 비어 있었다. `## CLI 설치` 절을 신설했다 — ① `devkit-cli`는 `private: true`라 `pnpm add -D`·`pnpm dlx` 둘 다 안 되고 클론해서 쓴다는 것과 그 이유(`findToolkitRoot`가 `pnpm-workspace.yaml`을 못 찾으면 던지므로 게시본은 첫 줄에서 죽는다), ② 클론·`pnpm build`와 빌드가 필수인 이유(`dist`가 `src`보다 오래되면 실행을 거부한다), ③ `gh auth refresh -h github.com -s read:packages` → `export GITHUB_TOKEN=$(gh auth token)`(생성물의 `pnpm install`이 요구한다 — 공개 패키지도 예외가 아니다), ④ `pnpm devbak --help` 실측 출력, ⑤ **저장소 밖에서 쓰는 법** — `findToolkitRoot`가 cwd가 아니라 `bin.js` 위치에서 탐색하므로 절대경로 alias로 어느 디렉토리에서든 생성할 수 있다(저장소 밖 cwd에서 실행해 실증했다), ⑥ 증상별 트러블슈팅 표 5건(에러 문구는 `bin.ts`·테스트에서 실제 문자열을 확인해 옮겼다). `새 프로젝트 만들기`에는 인자·옵션 표와 "무엇이 일어나는가" 5단계(자가검증 실패 시 생성물을 지우지 않는다 — 설계 6.3절)를 덧붙였다.
+- **커밋**: 아래
+
 ### 레지스트리 설치 전환 (설계 → Task 1~8 구현·게시·검증)
 - **변경 파일**: 패키지 7개의 `package.json`(스코프 개명 + 게시 메타데이터), `src/ops/link-deps.ts` → `registry-deps.ts`(신설, `linkSpec`·`normalizeToPosix` 삭제), 레시피 3종(`nest`·`next`·`monorepo`)과 `update/plan.ts`가 `registryDeps` 참조, `templates/**/_npmrc`(신설, `categoryOf('.npmrc') === 'deps'`), `src/bin.ts`(`cwd` 주입 → `resolve(baseDir, name)`, 위치 제약 제거), `.gitignore`(`.npmrc` 등록), 루트 `package.json`(`publish:packages` 스크립트), `packages/devkit-cli/tests/e2e/{create,update}.e2e.test.ts`(`GITHUB_TOKEN` 가드), `README.md` + `packages/*/README.md` 6건(설치 예시를 `pnpm add -D`로, "위치 제약" 절 삭제/재작성)
 - **내용**: 설정 패키지를 `link:` 상대경로 대신 GitHub Packages(npm 레지스트리)에서 설치하는 방식으로 바꿨다. 설계 문서 `docs/superpowers/specs/2026-08-05-registry-install-design.md`, 계획 `docs/superpowers/plans/2026-08-05-registry-install.md`.
