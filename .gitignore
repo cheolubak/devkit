@@ -11,3 +11,6 @@ dist/
 .claude/
 .idea/
 .superpowers/
+
+# 게시용 토큰이 들어간다. 절대 커밋되면 안 된다.
+.npmrc

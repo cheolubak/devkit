@@ -65,3 +65,37 @@ describe('--type 검증', () => {
     );
   });
 });
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+describe('create 대상 경로', () => {
+  it('기준 디렉토리 아래에 만든다 — 툴킷의 형제로 강제하지 않는다', async () => {
+    const sandbox = mkdtempSync(join(tmpdir(), 'devbak-cwd-'));
+    created.push(sandbox);
+    // 존재하는 대상으로 부딪혀 "어느 경로를 대상으로 잡았는지"를 에러에서 읽는다.
+    // 레시피를 실제로 돌리면 네트워크·설치가 붙어 단위 테스트가 아니게 된다.
+    mkdirSync(join(sandbox, 'taken'));
+
+    await expect(
+      main(['create', 'taken', '--type', 'nest'], { cwd: sandbox }),
+    ).rejects.toThrow(new RegExp(`${escapeRegExp(join(sandbox, 'taken'))}.*이미 존재합니다`));
+  });
+
+  it('기준을 안 주면 process.cwd()를 쓴다 — CLI 의 기본 경로', async () => {
+    // 툴킷 저장소 안에서 돌리므로 대상은 <저장소>/taken-here 가 된다.
+    // 브리프 원문은 이 디렉토리를 미리 만들지 않았는데, 그러면 존재 검사를
+    // 통과해 레시피가 실제로 실행된다 — 실제 저장소 루트에 네트워크·설치가
+    // 붙은 프로젝트가 생성되는 부작용이 실측으로 확인됐다(RI Task 6 보고서
+    // 참고). 첫 번째 테스트와 같은 방식으로 미리 만들어 존재 검사에서
+    // 막히게 한다.
+    const target = join(process.cwd(), 'taken-here');
+    mkdirSync(target);
+    created.push(target);
+
+    await expect(main(['create', 'taken-here', '--type', 'nest'])).rejects.toThrow(
+      new RegExp(`${escapeRegExp(target)}.*이미 존재합니다`),
+    );
+  });
+});

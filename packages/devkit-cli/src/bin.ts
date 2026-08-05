@@ -67,7 +67,17 @@ const USAGE =
   '  pnpm devbak create <name> --type <nest|next|monorepo> [--no-verify]\n' +
   '  pnpm devbak update [path] [--only <categories>] [--type <t>] [--dry-run] [--yes] [--force]';
 
-export async function main(argv: string[]): Promise<void> {
+export interface MainOptions {
+  /**
+   * `create` 의 대상을 해석할 기준 디렉토리. 기본값은 `process.cwd()`.
+   *
+   * 인자로 받는 이유는 테스트다 — cwd 는 프로세스 전역 상태라
+   * `process.chdir()` 로 바꾸면 같은 워커의 다른 테스트와 순서가 얽힌다.
+   */
+  cwd?: string;
+}
+
+export async function main(argv: string[], options: MainOptions = {}): Promise<void> {
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
@@ -105,7 +115,7 @@ export async function main(argv: string[]): Promise<void> {
   const toolkitRoot = findToolkitRoot(pkgDir);
 
   if (createArgs !== null) {
-    await runCreate(createArgs, values, toolkitRoot);
+    await runCreate(createArgs, values, toolkitRoot, options.cwd ?? process.cwd());
     return;
   }
   await runUpdateCommand(rest[0], values, toolkitRoot);
@@ -134,8 +144,13 @@ async function runCreate(
   { name, recipe }: CreateArgs,
   values: Record<string, unknown>,
   toolkitRoot: string,
+  baseDir: string,
 ): Promise<void> {
-  const targetDir = resolve(dirname(toolkitRoot), name);
+  // 기준 디렉토리(기본값 process.cwd()) 아래에 만든다. link: 시절에는
+  // 생성물이 툴킷의 형제여야 상대경로가 성립해 부모 디렉토리로
+  // 강제했지만, 레지스트리 설치에는 그 이유가 없다(설계 5.4절).
+  // nest new·create-next-app 과 같은 관습이다.
+  const targetDir = resolve(baseDir, name);
 
   const exists = await pathExists(targetDir);
   if (exists) {
