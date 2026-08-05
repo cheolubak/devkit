@@ -364,9 +364,11 @@ import 목록의 `linkDeps`도 `registryDeps`로 바꾼다.
 - [ ] **Step 7: 스냅샷을 갱신하고 diff를 본다**
 
 ```bash
-pnpm exec vitest run packages/devkit-cli/tests -u
+(cd packages/devkit-cli && pnpm exec vitest run -u)
 git diff packages/devkit-cli/tests/__snapshots__
 ```
+
+**패키지 디렉토리 안에서 돌리는 것이 요구다**(Task 1 실측). 루트에서 `vitest run packages/devkit-cli/tests -u` 를 쓰면 vitest 기본 glob 이 `tests/e2e/**` 까지 잡아 e2e 11 개가 딸려 온다 — 패키지 안에서 돌면 그 패키지의 `vitest.config.ts`(`include: ['tests/*.test.ts']`)가 적용돼 한 단계만 매칭한다.
 
 Expected: 스냅샷 diff가 `linkDeps` → `registryDeps`(kind·label)뿐이어야 한다. `describe()`가 `{file, packages}`로 같으므로 그 부분은 안 바뀐다.
 
