@@ -42,15 +42,15 @@ function satisfiesCaretZero(version: string, range: string): boolean {
 
 async function publishedPackages(): Promise<PackageJson[]> {
   const dirs = await readdir(PACKAGES, { withFileTypes: true });
-  const found: PackageJson[] = [];
-  for (const dir of dirs) {
-    if (!dir.isDirectory()) continue;
-    const raw = await readFile(`${PACKAGES}${dir.name}/package.json`, 'utf8').catch(() => null);
-    if (raw === null) continue;
-    const pkg = JSON.parse(raw) as PackageJson;
-    if (pkg.private === true) continue;
-    found.push(pkg);
-  }
+  const raws = await Promise.all(
+    dirs
+      .filter((d) => d.isDirectory())
+      .map((d) => readFile(`${PACKAGES}${d.name}/package.json`, 'utf8').catch(() => null)),
+  );
+  const found = raws
+    .filter((raw): raw is string => raw !== null)
+    .map((raw) => JSON.parse(raw) as PackageJson)
+    .filter((pkg) => pkg.private !== true);
   // 하나도 못 찾으면 아래 단언이 "검사할 것이 없으니 통과"로 끝난다.
   if (found.length === 0) {
     throw new Error(`게시 대상 패키지를 하나도 찾지 못했다: ${PACKAGES}`);
@@ -58,23 +58,24 @@ async function publishedPackages(): Promise<PackageJson[]> {
   return found;
 }
 
-/** 세 레시피가 registryDeps 로 선언하는 짧은 이름을 전부 모은다. */
+/**
+ * 세 레시피가 registryDeps 로 선언하는 짧은 이름을 전부 모은다.
+ *
+ * compose 는 실행 단위가 아니라 컨테이너다. `children.steps` 로 따라 들어가야
+ * monorepo 가 apps/web 에 합성한 next 레시피의 선언까지 잡힌다 — describe() 로
+ * 얻는 평평한 detail 에는 중첩 단계의 kind 가 남지 않아 걸러낼 수 없다.
+ */
 function declaredShortNames(): Set<string> {
   const names = new Set<string>();
   const collect = (steps: Step[]): void => {
     for (const step of steps) {
+      if (step.children !== undefined) {
+        collect(step.children.steps);
+        continue;
+      }
       if (step.kind === 'registryDeps') {
         const detail = step.describe() as { packages?: string[] };
         for (const name of detail.packages ?? []) names.add(name);
-      }
-      if (step.kind === 'compose') {
-        const detail = step.describe() as { steps?: unknown[] };
-        // compose 의 describe 는 중첩 단계를 평평한 detail 로만 준다.
-        // 짧은 이름은 label 에 `@cheolubak/<name>` 으로 남으므로 거기서 뽑는다.
-        for (const nested of detail.steps ?? []) {
-          const label = (nested as { label?: string }).label ?? '';
-          for (const m of label.matchAll(/@cheolubak\/([\w-]+)/g)) names.add(m[1]);
-        }
       }
     }
   };
