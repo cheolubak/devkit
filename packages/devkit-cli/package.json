@@ -18,7 +18,15 @@
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || >=24"
   },
-  "private": true,
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cheolubak/devkit.git",
+    "directory": "packages/devkit-cli"
+  },
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tests/tsconfig.json",
