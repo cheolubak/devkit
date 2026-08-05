@@ -1,4 +1,4 @@
-# @devbak/tsconfig
+# @cheolubak/tsconfig
 
 개인 프로젝트 공용 TypeScript 설정 프리셋. **빌드가 없다** — JSON 파일 4개가 전부다.
 
@@ -6,10 +6,10 @@
 
 | 서브패스 | 용도 |
 | --- | --- |
-| `@devbak/tsconfig/base` | 모든 프리셋의 공통 기반값 (ES2022, strict, `noUncheckedIndexedAccess` 등). 단독으로 extends하는 경우는 드물다 |
-| `@devbak/tsconfig/nest` | NestJS 백엔드. `module: nodenext` + 데코레이터 지원. `base`를 extends하지 않는다 (아래 참고) |
-| `@devbak/tsconfig/next` | Next.js 프론트엔드. `base`를 extends하고 DOM lib·JSX·noEmit을 추가한다 |
-| `@devbak/tsconfig/lib` | 순수 TypeScript 라이브러리. `base`를 extends한다 |
+| `@cheolubak/tsconfig/base` | 모든 프리셋의 공통 기반값 (ES2022, strict, `noUncheckedIndexedAccess` 등). 단독으로 extends하는 경우는 드물다 |
+| `@cheolubak/tsconfig/nest` | NestJS 백엔드. `module: nodenext` + 데코레이터 지원. `base`를 extends하지 않는다 (아래 참고) |
+| `@cheolubak/tsconfig/next` | Next.js 프론트엔드. `base`를 extends하고 DOM lib·JSX·noEmit을 추가한다 |
+| `@cheolubak/tsconfig/lib` | 순수 TypeScript 라이브러리. `base`를 extends한다 |
 
 ## 사용법
 
@@ -17,7 +17,7 @@
 
 ```jsonc
 {
-  "extends": "@devbak/tsconfig/nest",
+  "extends": "@cheolubak/tsconfig/nest",
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src"
@@ -31,7 +31,7 @@
 ```jsonc
 {
   "devDependencies": {
-    "@devbak/tsconfig": "link:../eslint/packages/tsconfig",
+    "@cheolubak/tsconfig": "link:../eslint/packages/tsconfig",
     "typescript": "^5.6.0"
   }
 }

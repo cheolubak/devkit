@@ -1,5 +1,5 @@
 {
-  "name": "@devbak/jest-config",
+  "name": "@cheolubak/jest-config",
   "version": "0.1.0",
   "description": "NestJS 프로젝트 공용 Jest 설정 (빌드 없음, CJS)",
   "license": "MIT",

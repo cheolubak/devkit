@@ -1,4 +1,4 @@
-# @devbak/vitest-config
+# @cheolubak/vitest-config
 
 프론트엔드/Node 프로젝트 공용 Vitest 설정. **빌드가 없다** — ESM `.js` 파일 2개가 전부다.
 
@@ -6,8 +6,8 @@
 
 | 서브패스 | 용도 | 환경 |
 | --- | --- | --- |
-| `@devbak/vitest-config/next` | Next.js 앱 (컴포넌트 테스트) | `jsdom` |
-| `@devbak/vitest-config/node` | Node 라이브러리/서버 | `node` |
+| `@cheolubak/vitest-config/next` | Next.js 앱 (컴포넌트 테스트) | `jsdom` |
+| `@cheolubak/vitest-config/node` | Node 라이브러리/서버 | `node` |
 
 ## 사용법
 
@@ -15,13 +15,13 @@
 
 ```ts
 // vitest.config.ts
-import config from '@devbak/vitest-config/next';
+import config from '@cheolubak/vitest-config/next';
 export default config;
 ```
 
 ```ts
 // vitest.config.ts
-import config from '@devbak/vitest-config/node';
+import config from '@cheolubak/vitest-config/node';
 export default config;
 ```
 
@@ -30,7 +30,7 @@ export default config;
 ```jsonc
 {
   "devDependencies": {
-    "@devbak/vitest-config": "link:../eslint/packages/vitest-config",
+    "@cheolubak/vitest-config": "link:../eslint/packages/vitest-config",
     "vitest": "^2.1.0",
     "jsdom": "^25.0.0"
   }
@@ -39,7 +39,7 @@ export default config;
 
 ## `include` 상대 경로는 누구 기준인가
 
-`next.js`/`node.js`의 `include: ['src/**/*.{test,spec}.ts', ...]` 같은 상대 경로는 이 패키지 파일의 위치가 아니라, **이 객체를 최종적으로 담는 소비자의 `vitest.config.ts` 위치(정확히는 vitest의 `root`)**를 기준으로 해석된다(실측 확인됨 — `tests/config.test.ts`의 "실제 vitest 실행" 스위트가 이를 검증한다: `packages/vitest-config`에는 `src/` 디렉터리가 없는데도, `--root`로 넘긴 픽스처 디렉터리의 `src/sample.test.ts`를 찾아 통과시킨다). 이는 `@devbak/jest-config`의 `rootDir`과 같은 동작이며, `@devbak/tsconfig`의 `extends` 상대 경로(프리셋 파일 자신의 위치 기준)와는 반대다. 별도 조치 없이 소비자를 안전하게 보호한다.
+`next.js`/`node.js`의 `include: ['src/**/*.{test,spec}.ts', ...]` 같은 상대 경로는 이 패키지 파일의 위치가 아니라, **이 객체를 최종적으로 담는 소비자의 `vitest.config.ts` 위치(정확히는 vitest의 `root`)**를 기준으로 해석된다(실측 확인됨 — `tests/config.test.ts`의 "실제 vitest 실행" 스위트가 이를 검증한다: `packages/vitest-config`에는 `src/` 디렉터리가 없는데도, `--root`로 넘긴 픽스처 디렉터리의 `src/sample.test.ts`를 찾아 통과시킨다). 이는 `@cheolubak/jest-config`의 `rootDir`과 같은 동작이며, `@cheolubak/tsconfig`의 `extends` 상대 경로(프리셋 파일 자신의 위치 기준)와는 반대다. 별도 조치 없이 소비자를 안전하게 보호한다.
 
 ## 왜 `passWithNoTests: true`인가
 
@@ -53,7 +53,7 @@ export default config;
 
 ## 왜 CJS가 아니라 ESM인가
 
-vitest는 ESM 기반이고 `vitest.config.ts`는 ESM으로 로드된다. `@devbak/jest-config`가 CJS인 것과 대칭이 아니지만, 각 도구의 실제 로딩 방식을 따른 것이다. 억지로 통일하지 않는다.
+vitest는 ESM 기반이고 `vitest.config.ts`는 ESM으로 로드된다. `@cheolubak/jest-config`가 CJS인 것과 대칭이 아니지만, 각 도구의 실제 로딩 방식을 따른 것이다. 억지로 통일하지 않는다.
 
 ## 왜 빌드가 없는가
 

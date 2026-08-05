@@ -46,7 +46,7 @@ export const nextRecipe: Recipe = (options = {}) => {
     copyOverlay('_shared'),
 
     // typescript-eslint는 templates/next/eslint.config.mjs가 파서로 쓴다.
-    // @devbak/eslint-plugin-fsd는 파서를 제공하지 않아(consumer 책임) 이게
+    // @cheolubak/eslint-plugin-fsd는 파서를 제공하지 않아(consumer 책임) 이게
     // 없으면 .ts/.tsx의 타입 문법을 espree가 파싱하지 못해 eslint가 죽는다
     // (Task 10 Step 7 실측).
     mergeJson(
@@ -56,11 +56,11 @@ export const nextRecipe: Recipe = (options = {}) => {
         ...markerPatch('next', devkitVersion()),
         // create-next-app은 "type"을 넣지 않아 프로젝트가 CJS로 취급된다.
         // 그러면 Vite의 config 로더가 vitest.config.ts를 CJS로 번들링하고,
-        // externalize-deps가 ESM 전용 @devbak/vitest-config를 require()로
+        // externalize-deps가 ESM 전용 @cheolubak/vitest-config를 require()로
         // 로드하려다 실패한다("resolved to an ESM file", 2026-08-01 실측).
         // create-next-app 산출물에 .js 파일이 없으므로(전부 .ts/.tsx/.mjs) 안전하다.
         type: 'module',
-        prettier: '@devbak/prettier-config',
+        prettier: '@cheolubak/prettier-config',
         scripts: {
           lint: 'eslint .',
           format: 'prettier --write .',
@@ -89,7 +89,7 @@ export const nextRecipe: Recipe = (options = {}) => {
 
     // 'tsconfig'는 링크하지 않는다 — create-next-app의 tsconfig.json을
     // 덮어쓰지 않기로 했으므로(Next가 관리하는 .next/types/** 항목이 있어서)
-    // @devbak/tsconfig를 extends로 소비할 곳이 없다(Task 13 Step 4 확인).
+    // @cheolubak/tsconfig를 extends로 소비할 곳이 없다(Task 13 Step 4 확인).
     linkDeps(['eslint-plugin-fsd', 'prettier-config', 'vitest-config']),
 
     // FSD 레이어. app은 create-next-app이 이미 만들었다.

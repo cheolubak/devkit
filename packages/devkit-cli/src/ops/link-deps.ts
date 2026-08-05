@@ -35,14 +35,14 @@ export function linkDeps(packages: string[], options: LinkDepsOptions = {}): Ste
   const buildPatch = (ctx: Ctx): JsonObject => {
     const devDependencies: JsonObject = {};
     for (const pkg of packages) {
-      devDependencies[`@devbak/${pkg}`] = linkSpec(ctx.targetDir, ctx.toolkitRoot, pkg);
+      devDependencies[`@cheolubak/${pkg}`] = linkSpec(ctx.targetDir, ctx.toolkitRoot, pkg);
     }
     return { devDependencies };
   };
 
   return {
     kind: 'linkDeps',
-    label: `link: 배선 — ${packages.map((p) => `@devbak/${p}`).join(', ')}`,
+    label: `link: 배선 — ${packages.map((p) => `@cheolubak/${p}`).join(', ')}`,
     describe: () => ({ file, packages }),
     plan: (ctx: Ctx) => Promise.resolve([{ kind: 'json', file, patch: buildPatch(ctx) }]),
     run: async (ctx: Ctx) => {
@@ -50,7 +50,7 @@ export function linkDeps(packages: string[], options: LinkDepsOptions = {}): Ste
       const parsed = JSON.parse(await readFile(path, 'utf8')) as JsonObject;
       const merged = applyPatch(parsed, buildPatch(ctx));
       await writeFile(path, `${JSON.stringify(merged, null, 2)}\n`);
-      for (const pkg of packages) ctx.log(`  링크: @devbak/${pkg}`);
+      for (const pkg of packages) ctx.log(`  링크: @cheolubak/${pkg}`);
     },
   };
 }

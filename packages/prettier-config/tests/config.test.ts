@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import config from '../index.json';
 
-describe('@devbak/prettier-config', () => {
+describe('@cheolubak/prettier-config', () => {
   it('세 소비자 프로젝트의 .prettierrc와 동일한 값을 갖는다', () => {
     expect(config).toEqual({
       singleQuote: true,

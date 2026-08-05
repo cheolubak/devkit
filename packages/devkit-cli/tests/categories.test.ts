@@ -167,7 +167,7 @@ describe('categoryOfJsonPath', () => {
     ['dependencies', 'deps'],
     ['devDependencies', 'deps'],
     ['devDependencies.eslint', 'deps'],
-    ['devDependencies.@devbak/tsconfig', 'deps'],
+    ['devDependencies.@cheolubak/tsconfig', 'deps'],
     ['prettier', 'lint'],
     ['jest', 'test'],
     ['scripts.lint', 'lint'],

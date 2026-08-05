@@ -119,7 +119,7 @@ describe('devkit create --type nest', () => {
     expect(claude).toContain(`# ${basename(dir)}`);
     expect(claude).not.toContain('__NAME__');
     const eslintConfig = readFileSync(join(dir, 'eslint.config.mjs'), 'utf8');
-    expect(eslintConfig).toContain('@devbak/eslint-config-nest');
+    expect(eslintConfig).toContain('@cheolubak/eslint-config-nest');
   });
 
   it('eslint-plugin-prettier가 남아 있지 않다', () => {
@@ -142,10 +142,10 @@ describe('devkit create --type next', () => {
     const dir = create('devkit-e2e-next', 'next');
     expect(runIn(dir, 'lint')).toBe(0);
     expect(runIn(dir, 'build')).toBe(0);
-    // 이월 (2): create-next-app은 테스트를 만들지 않으므로 @devbak/vitest-config의
+    // 이월 (2): create-next-app은 테스트를 만들지 않으므로 @cheolubak/vitest-config의
     // next 프리셋이 passWithNoTests: true를 켠다 — 그 배선이 실제로 통하는지
     // 여기서 확인한다. Task 11에서 "type" 필드 누락 때문에 이 스크립트가 실제로
-    // 죽었던 결함이 있었다(ESM 전용 @devbak/vitest-config를 CJS로 require()).
+    // 죽었던 결함이 있었다(ESM 전용 @cheolubak/vitest-config를 CJS로 require()).
     expect(runIn(dir, 'test')).toBe(0);
 
     for (const layer of ['views', 'widgets', 'features', 'entities', 'shared']) {
@@ -158,7 +158,7 @@ describe('devkit create --type next', () => {
     expect(claude).toContain(`# ${basename(dir)}`);
     expect(claude).not.toContain('__NAME__');
     const eslintConfig = readFileSync(join(dir, 'eslint.config.mjs'), 'utf8');
-    expect(eslintConfig).toContain('@devbak/eslint-plugin-fsd/next');
+    expect(eslintConfig).toContain('@cheolubak/eslint-plugin-fsd/next');
     expect(existsSync(join(dir, 'vitest.config.ts'))).toBe(true);
 
     // 이월 (6): "type": "module"이 안전하다는 근거(.js/.cjs 파일 0개)의 기계적 확인.

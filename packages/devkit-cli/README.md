@@ -1,13 +1,13 @@
-# @devbak/devkit-cli
+# @cheolubak/devkit-cli
 
-`@devbak` 표준(ESLint·Prettier·tsconfig·테스트 설정)이 적용된 프로젝트를 생성하는 CLI.
+devkit 표준(ESLint·Prettier·tsconfig·테스트 설정)이 적용된 프로젝트를 생성하는 CLI.
 
 ## 위치 제약 — 반드시 `~/Documents/develop/` 아래에서 실행한다
 
-생성물의 `package.json`은 `@devbak/*` 패키지를 `link:` **상대경로**로 선언한다
+생성물의 `package.json`은 `@cheolubak/*` 패키지를 `link:` **상대경로**로 선언한다
 (예: `link:../eslint/packages/eslint-config-nest`, 모노레포의 `apps/web`은
 `link:../../../eslint/packages/...`). 이 상대경로는 생성물이 이 저장소
-(`@devbak` 툴킷, 예: `~/Documents/develop/eslint`)와 **형제 디렉토리**일 때만
+(devkit 툴킷, 예: `~/Documents/develop/eslint`)와 **형제 디렉토리**일 때만
 유효하다.
 
 즉 `devbak create <name>`은 항상 이 저장소의 **부모 디렉토리**(`~/Documents/develop/`)
@@ -40,9 +40,9 @@ CLI는 실행 전에 `dist/bin.js`가 `src/`보다 새로운지 확인하고, �
 
 `@nestjs/cli new`로 스캐폴딩한 뒤:
 
-- Prettier·ESLint를 `@devbak/eslint-config-nest` + `@devbak/prettier-config`로
+- Prettier·ESLint를 `@cheolubak/eslint-config-nest` + `@cheolubak/prettier-config`로
   교체한다(`eslint-plugin-prettier` 제거, ESLint 10 전용).
-- Jest 설정을 `@devbak/jest-config`로 교체한다(`package.json`의 `"jest"` 키
+- Jest 설정을 `@cheolubak/jest-config`로 교체한다(`package.json`의 `"jest"` 키
   제거).
 - 입력 검증용 `zod`를 런타임 의존성으로 추가한다(devDependencies가 아님 —
   `pnpm install --prod` 배포 빌드에서 빠지면 안 되므로).
@@ -52,12 +52,12 @@ CLI는 실행 전에 `dist/bin.js`가 `src/`보다 새로운지 확인하고, �
 
 `create-next-app`으로 스캐폴딩한 뒤:
 
-- ESLint를 `@devbak/eslint-plugin-fsd/next` + `typescript-eslint`로 교체한다.
-- Vitest를 `@devbak/vitest-config/next`로 연결한다(`jsdom`, 테스트 0개에서도
+- ESLint를 `@cheolubak/eslint-plugin-fsd/next` + `typescript-eslint`로 교체한다.
+- Vitest를 `@cheolubak/vitest-config/next`로 연결한다(`jsdom`, 테스트 0개에서도
   통과하도록 `passWithNoTests: true`).
 - `package.json`에 `"type": "module"`을 추가한다 — `create-next-app` 산출물이
   `"type"` 필드 없이 CJS로 취급되면 Vite의 config 로더가 `vitest.config.ts`를
-  CJS로 번들링하다가 ESM 전용 `@devbak/vitest-config`를 `require()`하려고
+  CJS로 번들링하다가 ESM 전용 `@cheolubak/vitest-config`를 `require()`하려고
   시도해 실패한다. (산출물에 `.js`/`.cjs` 파일이 없어 안전하다 — 전부
   `.ts`/`.tsx`/`.mjs`.)
 - Feature-Sliced Design 레이어(`src/views`, `widgets`, `features`, `entities`,
@@ -75,7 +75,7 @@ CLI는 실행 전에 `dist/bin.js`가 `src/`보다 새로운지 확인하고, �
 - 설치·자가검증(`lint`/`build`)은 루트에서 한 번만 한다. `apps/web`에서 따로
   하면 중첩 `node_modules`가 생긴다.
 - 일반 의존성은 `pnpm-workspace.yaml`의 `catalog:`를 참조하게 한다.
-  `@devbak/*`는 catalog에 넣을 수 없다(pnpm이 `link:` 항목을 거부) — 루트와
+  `@cheolubak/*`는 catalog에 넣을 수 없다(pnpm이 `link:` 항목을 거부) — 루트와
   `apps/web`이 각자 (깊이가 다른) `link:` 상대경로로 직접 선언한다.
 
 ## 검증 (3층)
@@ -240,7 +240,7 @@ devkit update — demo-api (nest)
   "dependencies": {
     "my-lib": "^2.0.0"         // 보존
   },
-  "prettier": "@devbak/prettier-config",   // 얹힘
+  "prettier": "@cheolubak/prettier-config",   // 얹힘
   "scripts": {                             // 얹힘
     "lint": "eslint .",
     "format": "prettier --write .",

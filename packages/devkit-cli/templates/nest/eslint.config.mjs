@@ -1,4 +1,4 @@
-import nest from '@devbak/eslint-config-nest';
+import nest from '@cheolubak/eslint-config-nest';
 
 export default [
   {

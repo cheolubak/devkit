@@ -69,7 +69,7 @@ exports[`next 레시피 > 단계 목록이 스냅샷과 일치한다 1`] = `
           "type": "next",
           "version": "0.1.0",
         },
-        "prettier": "@devbak/prettier-config",
+        "prettier": "@cheolubak/prettier-config",
         "scripts": {
           "format": "prettier --write .",
           "format:check": "prettier --check .",

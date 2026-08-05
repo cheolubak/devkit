@@ -63,11 +63,11 @@ describe('mergeJson.plan', () => {
   it('패치를 그대로 낸다 — 대상 파일을 읽지 않는다', async () => {
     // 대상에 package.json이 아예 없어도 plan은 성공해야 한다. update의
     // 기준 내용은 조립자가 정하기 때문이다(가상 파일맵, 설계 5.4절).
-    const step = mergeJson({ prettier: '@devbak/prettier-config' });
+    const step = mergeJson({ prettier: '@cheolubak/prettier-config' });
     const changes = await step.plan!(makeCtx());
 
     expect(changes).toEqual([
-      { kind: 'json', file: 'package.json', patch: { prettier: '@devbak/prettier-config' } },
+      { kind: 'json', file: 'package.json', patch: { prettier: '@cheolubak/prettier-config' } },
     ]);
   });
 
@@ -90,8 +90,8 @@ describe('linkDeps.plan', () => {
         file: 'package.json',
         patch: {
           devDependencies: {
-            '@devbak/tsconfig': 'link:../eslint/packages/tsconfig',
-            '@devbak/prettier-config': 'link:../eslint/packages/prettier-config',
+            '@cheolubak/tsconfig': 'link:../eslint/packages/tsconfig',
+            '@cheolubak/prettier-config': 'link:../eslint/packages/prettier-config',
           },
         },
       },

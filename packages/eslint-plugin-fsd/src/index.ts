@@ -16,7 +16,7 @@ interface FsdPlugin {
 }
 
 const plugin = {
-  meta: { name: '@devbak/eslint-plugin-fsd', version: '0.1.0' },
+  meta: { name: '@cheolubak/eslint-plugin-fsd', version: '0.1.0' },
   rules: {
     'no-higher-level-imports': noHigherLevelImports,
     'no-cross-imports': noCrossImports,

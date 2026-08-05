@@ -13,7 +13,7 @@ description: devkit 표준(Next.js + FSD) 기준으로 변경분을 리뷰한다
 | --- | --- |
 | `prettier` | 포맷 |
 | `oxlint` | 비타입 correctness |
-| `@devbak/eslint-plugin-fsd` | FSD 레이어 간 import 방향 |
+| `@cheolubak/eslint-plugin-fsd` | FSD 레이어 간 import 방향 |
 | `tsc --noEmit` | 타입 |
 
 따라서 다음은 **코멘트하지 않는다.**

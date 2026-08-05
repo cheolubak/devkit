@@ -1,5 +1,5 @@
 {
-  "name": "@devbak/eslint-plugin-fsd",
+  "name": "@cheolubak/eslint-plugin-fsd",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",

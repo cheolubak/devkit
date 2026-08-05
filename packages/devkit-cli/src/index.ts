@@ -1,5 +1,5 @@
 /**
- * @devbak/devkit-cli 공개 표면.
+ * @cheolubak/devkit-cli 공개 표면.
  *
  * `create` 계열(레시피 실행기·원자 연산)과, `update` 관련 모듈을 함께
  * 노출한다. 후자는 순수 모듈(`categories`·`marker`·`classify`·`git`)뿐

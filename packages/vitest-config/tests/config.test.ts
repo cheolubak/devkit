@@ -9,7 +9,7 @@ import nodeConfigDefault from '../node.js';
 // 형제 프로젝트라 allowJs·checkJs가 상속되지 않는다(실측: 없이 돌리면 TS7016).
 // tests/tsconfig.json에도 allowJs: true를 켜 next.js/node.js를 읽게 하되
 // checkJs는 그대로 꺼 둔다 — JS 파일 내부는 검사하지 않지만 구조는 추론되므로
-// import 결과가 `any`가 아니라 실제 형태로 잡힌다. @devbak/jest-config가 require
+// import 결과가 `any`가 아니라 실제 형태로 잡힌다. @cheolubak/jest-config가 require
 // 결과를 캐스팅하는 것과 같은 이유로, 여기서도 실제로 검증할 필드만 명시한
 // 타입으로 캐스팅한다.
 const nextConfig = nextConfigDefault as { test: { environment: string; passWithNoTests: boolean } };
@@ -18,10 +18,10 @@ const nodeConfig = nodeConfigDefault as { test: { environment: string } };
 const PKG_DIR = resolve(import.meta.dirname, '..');
 const created: string[] = [];
 
-// os.tmpdir()에 픽스처를 두면 안 된다: Task 2(@devbak/jest-config)에서 그렇게
+// os.tmpdir()에 픽스처를 두면 안 된다: Task 2(@cheolubak/jest-config)에서 그렇게
 // 했다가 워크스페이스 트리 밖이라 Node 모듈 해석이 실패했다(실측 확인됨). 실제
 // 소비자는 자신의 프로젝트 안에서 vitest를 실행하므로 이 문제를 겪지 않는다 —
-// 즉 이는 @devbak/vitest-config의 결함이 아니라 픽스처 배치 문제다. 그래서
+// 즉 이는 @cheolubak/vitest-config의 결함이 아니라 픽스처 배치 문제다. 그래서
 // 픽스처를 워크스페이스 트리 안(따라서 루트 node_modules를 걸어 올라가 찾을 수
 // 있는 곳)에 둔다. `.fixtures/`는 이미 .gitignore·oxlint ignore에 등록돼 있다.
 const FIXTURES_ROOT = resolve(import.meta.dirname, '.fixtures');
@@ -31,14 +31,14 @@ afterEach(() => {
   for (const dir of created.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-describe('@devbak/vitest-config/next', () => {
+describe('@cheolubak/vitest-config/next', () => {
   it('jsdom 환경을 쓰고 테스트 0개를 통과시킨다', () => {
     expect(nextConfig.test.environment).toBe('jsdom');
     expect(nextConfig.test.passWithNoTests).toBe(true);
   });
 });
 
-describe('@devbak/vitest-config/node', () => {
+describe('@cheolubak/vitest-config/node', () => {
   it('node 환경을 쓴다 — DOM을 요구하지 않는다', () => {
     expect(nodeConfig.test.environment).toBe('node');
   });
@@ -63,7 +63,7 @@ describe('실제 vitest 실행', () => {
     // include: ['src/**/*.test.ts', ...]가 어느 위치 기준으로 해석되는지를
     // 이 테스트로 실측한다. node.js의 include 상대 경로가 --root로 넘긴 이
     // 픽스처 디렉터리(소비자 위치) 기준이라면 src/sample.test.ts가 매칭돼
-    // "1 passed"가 나온다. 만약 @devbak/vitest-config 패키지 자신의 위치
+    // "1 passed"가 나온다. 만약 @cheolubak/vitest-config 패키지 자신의 위치
     // 기준으로 해석된다면(PKG_DIR/src는 존재하지 않으므로) 테스트를 하나도
     // 찾지 못하고, passWithNoTests 덕에 exit 0이지만 "1 passed"는 나오지 않아
     // 이 assertion이 실패한다 — 즉 이 테스트 자체가 두 가설을 구분한다.

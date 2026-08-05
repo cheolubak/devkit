@@ -11,7 +11,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
-  "prettier": "@devbak/prettier-config",
+  "prettier": "@cheolubak/prettier-config",
   "devDependencies": {
     "eslint": "^10.8.0",
     "prettier": "^3.4.2",

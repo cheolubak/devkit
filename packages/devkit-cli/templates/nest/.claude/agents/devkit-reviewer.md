@@ -13,7 +13,7 @@ description: devkit 표준(NestJS) 기준으로 변경분을 리뷰한다. 린�
 | --- | --- |
 | `prettier` | 포맷 |
 | `oxlint` | 비타입 correctness |
-| `@devbak/eslint-config-nest` | 타입 인식 규칙 |
+| `@cheolubak/eslint-config-nest` | 타입 인식 규칙 |
 | `tsc --noEmit` | 타입 |
 
 따라서 다음은 **코멘트하지 않는다.**

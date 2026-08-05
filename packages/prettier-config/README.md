@@ -1,4 +1,4 @@
-# @devbak/prettier-config
+# @cheolubak/prettier-config
 
 개인 프로젝트 공용 Prettier 설정. **빌드가 없다** — `index.json` 한 파일이 전부다.
 
@@ -8,9 +8,9 @@
 
 ```jsonc
 {
-  "prettier": "@devbak/prettier-config",
+  "prettier": "@cheolubak/prettier-config",
   "devDependencies": {
-    "@devbak/prettier-config": "link:../eslint/packages/prettier-config",
+    "@cheolubak/prettier-config": "link:../eslint/packages/prettier-config",
     "prettier": "^3.0.0"
   }
 }

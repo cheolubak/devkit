@@ -1,5 +1,5 @@
 {
-  "name": "@devbak/vitest-config",
+  "name": "@cheolubak/vitest-config",
   "version": "0.1.0",
   "description": "프론트엔드/Node 프로젝트 공용 Vitest 설정 (빌드 없음, ESM)",
   "license": "MIT",

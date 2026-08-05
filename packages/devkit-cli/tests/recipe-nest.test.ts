@@ -3,7 +3,7 @@ import { devkitVersion } from '../src/lib/version.js';
 import { nestRecipe } from '../src/recipes/nest.js';
 
 // 라벨 부분일치(includes)는 쓰지 않는다 — linkDeps가 링크하는
-// '@devbak/eslint-config-nest'라는 문자열 자체가 'lint'를 부분
+// '@cheolubak/eslint-config-nest'라는 문자열 자체가 'lint'를 부분
 // 문자열로 포함해(e-s-LINT) skipVerify여도 거짓양성이 난다.
 const isVerifyStep = (s: { label: string }): boolean => s.label === 'pnpm lint' || s.label === 'pnpm build';
 

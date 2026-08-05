@@ -70,7 +70,7 @@ export const nestRecipe: Recipe = (options = {}) => {
           zod: '^4.4.3',
         },
         jest: null,
-        prettier: '@devbak/prettier-config',
+        prettier: '@cheolubak/prettier-config',
         scripts: {
           lint: 'eslint .',
           format: 'prettier --write .',

@@ -10,7 +10,7 @@ const only = (...cats: Category[]) => new Set(cats);
 
 describe('filterPatchByCategory — package.json (키 경로 판단)', () => {
   const PATCH = {
-    prettier: '@devbak/prettier-config',
+    prettier: '@cheolubak/prettier-config',
     jest: null,
     devDependencies: { eslint: '^10.8.0', 'eslint-plugin-prettier': null },
     scripts: { lint: 'eslint .', 'test:e2e': 'jest' },
@@ -18,7 +18,7 @@ describe('filterPatchByCategory — package.json (키 경로 판단)', () => {
 
   it('lint만 남긴다', () => {
     expect(filterPatchByCategory(PATCH, only('lint'), null)).toEqual({
-      prettier: '@devbak/prettier-config',
+      prettier: '@cheolubak/prettier-config',
       scripts: { lint: 'eslint .' },
     });
   });
@@ -50,7 +50,7 @@ describe('filterPatchByCategory — package.json (키 경로 판단)', () => {
 });
 
 describe('filterPatchByCategory — 그 외 JSON (파일 카테고리 판단)', () => {
-  const TSCONFIG = { extends: '@devbak/tsconfig/nest', compilerOptions: { outDir: './dist' } };
+  const TSCONFIG = { extends: '@cheolubak/tsconfig/nest', compilerOptions: { outDir: './dist' } };
 
   it('파일 카테고리가 포함되면 통째로 남는다', () => {
     expect(filterPatchByCategory(TSCONFIG, only('ts'), 'ts')).toEqual(TSCONFIG);
@@ -68,9 +68,9 @@ describe('reduceJsonOverlay', () => {
   });
 
   it('그 외 파일은 그대로 패치가 된다', () => {
-    const content = JSON.stringify({ extends: '@devbak/tsconfig/nest' });
+    const content = JSON.stringify({ extends: '@cheolubak/tsconfig/nest' });
     expect(reduceJsonOverlay('tsconfig.json', content)).toEqual({
-      extends: '@devbak/tsconfig/nest',
+      extends: '@cheolubak/tsconfig/nest',
     });
   });
 

@@ -64,8 +64,8 @@ describe('linkDeps', () => {
     const pkg = JSON.parse(readFileSync(join(project, 'package.json'), 'utf8')) as {
       devDependencies: Record<string, string>;
     };
-    expect(pkg.devDependencies['@devbak/tsconfig']).toBe('link:../eslint/packages/tsconfig');
-    expect(pkg.devDependencies['@devbak/jest-config']).toBe('link:../eslint/packages/jest-config');
+    expect(pkg.devDependencies['@cheolubak/tsconfig']).toBe('link:../eslint/packages/tsconfig');
+    expect(pkg.devDependencies['@cheolubak/jest-config']).toBe('link:../eslint/packages/jest-config');
     expect(pkg.devDependencies.typescript).toBe('^5.7.3');
   });
 
@@ -87,6 +87,6 @@ describe('linkDeps', () => {
     const pkg = JSON.parse(readFileSync(join(web, 'package.json'), 'utf8')) as {
       devDependencies: Record<string, string>;
     };
-    expect(pkg.devDependencies['@devbak/tsconfig']).toBe('link:../eslint/packages/tsconfig');
+    expect(pkg.devDependencies['@cheolubak/tsconfig']).toBe('link:../eslint/packages/tsconfig');
   });
 });

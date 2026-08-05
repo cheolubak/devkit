@@ -39,7 +39,7 @@ afterEach(() => {
   for (const dir of created.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-describe('@devbak/tsconfig/nest', () => {
+describe('@cheolubak/tsconfig/nest', () => {
   it('데코레이터가 붙은 클래스를 통과시킨다', () => {
     const result = typecheck('nest', {
       'src/app.service.ts': [
@@ -65,7 +65,7 @@ describe('@devbak/tsconfig/nest', () => {
   });
 });
 
-describe('@devbak/tsconfig/next', () => {
+describe('@cheolubak/tsconfig/next', () => {
   it('JSX를 통과시키고 emit하지 않는다', () => {
     const result = typecheck('next', {
       // 실제 Next.js 프로젝트는 @types/react가 JSX.IntrinsicElements를 제공한다.
@@ -84,7 +84,7 @@ describe('@devbak/tsconfig/next', () => {
   });
 });
 
-describe('@devbak/tsconfig/lib', () => {
+describe('@cheolubak/tsconfig/lib', () => {
   it('noUncheckedIndexedAccess를 켜서 배열 인덱싱을 undefined로 본다', () => {
     // eslint-plugin-fsd가 이 옵션 부재로 무의미한 non-null 단언을 갖게 된
     // 전례가 있다(work-log 2026-07-29). base가 이를 켜는지 고정한다.

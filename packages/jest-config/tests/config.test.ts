@@ -13,7 +13,7 @@ const created: string[] = [];
 // 찾는데, os.tmpdir()은 이 워크스페이스 트리 밖이라 어떤 node_modules도 찾지 못해
 // "Module ts-jest ... was not found"로 실패한다(실측 확인됨). 실제 소비자는
 // 자신의 프로젝트 안에 ts-jest를 설치하므로 이 문제를 겪지 않는다 — 즉 이는
-// @devbak/jest-config의 결함이 아니라 픽스처 배치 문제다. 그래서 픽스처를
+// @cheolubak/jest-config의 결함이 아니라 픽스처 배치 문제다. 그래서 픽스처를
 // 워크스페이스 트리 안(따라서 루트 node_modules를 걸어 올라가 찾을 수 있는 곳)에 둔다.
 const FIXTURES_ROOT = resolve(import.meta.dirname, '.fixtures');
 mkdirSync(FIXTURES_ROOT, { recursive: true });
@@ -22,7 +22,7 @@ afterEach(() => {
   for (const dir of created.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-describe('@devbak/jest-config/nest', () => {
+describe('@cheolubak/jest-config/nest', () => {
   it('nest new의 인라인 jest 블록과 같은 값을 갖는다', () => {
     const config = requireModule(join(PKG_DIR, 'nest.js')) as Record<string, unknown>;
     expect(config).toEqual({
@@ -66,7 +66,7 @@ describe('@devbak/jest-config/nest', () => {
   });
 });
 
-describe('@devbak/jest-config/nest-e2e', () => {
+describe('@cheolubak/jest-config/nest-e2e', () => {
   it('e2e-spec 파일만 대상으로 하는 testRegex를 갖는다', () => {
     const config = requireModule(join(PKG_DIR, 'nest-e2e.js')) as { testRegex: string };
     const re = new RegExp(config.testRegex);

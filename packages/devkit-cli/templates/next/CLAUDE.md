@@ -1,6 +1,6 @@
 # __NAME__
 
-Next.js App Router 앱. `@devbak` 표준 툴킷으로 생성됨.
+Next.js App Router 앱. devkit 표준 툴킷으로 생성됨.
 
 ## 명령어
 
@@ -24,7 +24,7 @@ entities → 비즈니스 엔티티
 shared   → 재사용 유틸·UI (최하위, 아무것도 의존하지 않는다)
 ```
 
-`@devbak/eslint-plugin-fsd`가 이 경계를 강제한다.
+`@cheolubak/eslint-plugin-fsd`가 이 경계를 강제한다.
 
 - 하위 레이어가 상위를 import하면 에러다.
 - 같은 레이어의 다른 슬라이스를 직접 import하면 에러다.
@@ -35,7 +35,7 @@ shared   → 재사용 유틸·UI (최하위, 아무것도 의존하지 않는�
 - Server Component가 기본이다. `'use client'`는 필요한 곳에만 좁게 붙인다.
 - mutation은 Server Actions로 처리한다.
 
-## @devbak 의존
+## devkit 의존
 
-`package.json`의 `@devbak/*`는 `link:` 상대경로로 `~/Documents/develop/eslint`를
+`package.json`의 `@cheolubak/*`는 `link:` 상대경로로 `~/Documents/develop/eslint`를
 가리킨다. 이 프로젝트를 다른 위치로 옮기면 경로가 깨진다.

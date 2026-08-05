@@ -1,12 +1,12 @@
-# devkit — `@devbak` 개발 표준 툴킷
+# devkit — 개발 표준 툴킷
 
 개인 프로젝트의 린트·포맷·타입·테스트 설정을 한 곳에 모아두고, 그 표준이 적용된
 새 프로젝트를 명령 하나로 만들어내는 pnpm 모노레포다.
 
 두 갈래로 쓴다.
 
-1. **설정 패키지를 직접 소비한다** — 기존 프로젝트에서 `@devbak/eslint-config-nest`,
-   `@devbak/tsconfig` 같은 패키지를 `link:`로 붙여 쓴다.
+1. **설정 패키지를 직접 소비한다** — 기존 프로젝트에서 `@cheolubak/eslint-config-nest`,
+   `@cheolubak/tsconfig` 같은 패키지를 `link:`로 붙여 쓴다.
 2. **새 프로젝트를 생성한다** — `devbak create`가 공식 CLI로 뼈대를 만든 뒤 위
    패키지들로 설정을 교체한다.
 
@@ -19,13 +19,13 @@
 
 | 패키지 | 역할 | 빌드 |
 | --- | --- | --- |
-| [`@devbak/devkit-cli`](packages/devkit-cli) | `devbak create`로 nest·next·monorepo 프로젝트 생성 | tsup |
-| [`@devbak/eslint-plugin-fsd`](packages/eslint-plugin-fsd) | Feature-Sliced Design 강제 ESLint 플러그인 (+ React/Next 프리셋) | tsup |
-| [`@devbak/eslint-config-nest`](packages/eslint-config-nest) | NestJS용 타입 인식 ESLint 설정 (zod DTO 검증 포함) | tsup |
-| [`@devbak/tsconfig`](packages/tsconfig) | tsconfig 프리셋 4종 (`base`·`nest`·`next`·`lib`) | 없음 (JSON) |
-| [`@devbak/prettier-config`](packages/prettier-config) | 공용 Prettier 설정 | 없음 (JSON) |
-| [`@devbak/jest-config`](packages/jest-config) | NestJS용 Jest 설정 (`nest`·`nest-e2e`) | 없음 (CJS) |
-| [`@devbak/vitest-config`](packages/vitest-config) | Vitest 설정 (`next`·`node`) | 없음 (ESM) |
+| [`@cheolubak/devkit-cli`](packages/devkit-cli) | `devbak create`로 nest·next·monorepo 프로젝트 생성 | tsup |
+| [`@cheolubak/eslint-plugin-fsd`](packages/eslint-plugin-fsd) | Feature-Sliced Design 강제 ESLint 플러그인 (+ React/Next 프리셋) | tsup |
+| [`@cheolubak/eslint-config-nest`](packages/eslint-config-nest) | NestJS용 타입 인식 ESLint 설정 (zod DTO 검증 포함) | tsup |
+| [`@cheolubak/tsconfig`](packages/tsconfig) | tsconfig 프리셋 4종 (`base`·`nest`·`next`·`lib`) | 없음 (JSON) |
+| [`@cheolubak/prettier-config`](packages/prettier-config) | 공용 Prettier 설정 | 없음 (JSON) |
+| [`@cheolubak/jest-config`](packages/jest-config) | NestJS용 Jest 설정 (`nest`·`nest-e2e`) | 없음 (CJS) |
+| [`@cheolubak/vitest-config`](packages/vitest-config) | Vitest 설정 (`next`·`node`) | 없음 (ESM) |
 
 **빌드가 없는 쪽이 기본이고, 있는 쪽이 예외다.** `link:` 의존은 어떤 라이프사이클
 스크립트도 실행하지 않는다. 그래서 빌드가 필요한 패키지는 `dist`가 낡으면 소비자가
@@ -37,12 +37,12 @@
 ## 의존 방향
 
 ```
-@devbak/tsconfig ─┐
-@devbak/prettier-config ─┤
-@devbak/jest-config ─┼─→ devkit-cli 템플릿 ─→ 생성된 프로젝트
-@devbak/vitest-config ─┤        (link: 상대경로로 선언)
-@devbak/eslint-config-nest ─┤
-@devbak/eslint-plugin-fsd ─┘
+@cheolubak/tsconfig ─┐
+@cheolubak/prettier-config ─┤
+@cheolubak/jest-config ─┼─→ devkit-cli 템플릿 ─→ 생성된 프로젝트
+@cheolubak/vitest-config ─┤        (link: 상대경로로 선언)
+@cheolubak/eslint-config-nest ─┤
+@cheolubak/eslint-plugin-fsd ─┘
 ```
 
 설정 패키지들은 서로를 import하지 않는다. `devkit-cli`가 이들을 조립해 생성물의
@@ -66,7 +66,7 @@ pnpm devbak create my-api --type nest             # 또는 --type next | monorep
 
 ### 위치 제약 — 반드시 이 저장소의 형제 디렉토리로 생성된다
 
-생성물은 `@devbak/*`를 `link:../eslint/packages/...` 같은 **상대경로**로 선언한다.
+생성물은 `@cheolubak/*`를 `link:../eslint/packages/...` 같은 **상대경로**로 선언한다.
 따라서 `devbak create`는 항상 이 저장소의 부모 디렉토리(`~/Documents/develop/`)
 아래에 프로젝트를 만든다. 생성 후 다른 위치로 옮기면 `link:` 경로가 깨져
 `pnpm install`부터 실패한다.
@@ -116,16 +116,16 @@ JSON이 아닌 파일은 **통째로 덮인다** — `--only`로 그 카테고�
 ```jsonc
 {
   "devDependencies": {
-    "@devbak/eslint-config-nest": "link:../eslint/packages/eslint-config-nest",
-    "@devbak/tsconfig": "link:../eslint/packages/tsconfig",
+    "@cheolubak/eslint-config-nest": "link:../eslint/packages/eslint-config-nest",
+    "@cheolubak/tsconfig": "link:../eslint/packages/tsconfig",
     "eslint": "^10.0.0",
     "typescript-eslint": "^8.0.0"
   }
 }
 ```
 
-**ESLint 버전 요구가 패키지마다 다르다.** `@devbak/eslint-config-nest`는 ESLint 10
-전용이고, `@devbak/eslint-plugin-fsd`는 9 또는 10을 받는다.
+**ESLint 버전 요구가 패키지마다 다르다.** `@cheolubak/eslint-config-nest`는 ESLint 10
+전용이고, `@cheolubak/eslint-plugin-fsd`는 9 또는 10을 받는다.
 
 ---
 
@@ -153,7 +153,7 @@ pnpm lint:fix
 무효화되지 않는다). 한 패키지만 골라 돌리려면:
 
 ```bash
-pnpm exec turbo run test --filter=@devbak/tsconfig
+pnpm exec turbo run test --filter=@cheolubak/tsconfig
 ```
 
 `pnpm test:e2e`는 캐시하지 않는다. 네트워크로 `create-next-app`·`@nestjs/cli`를

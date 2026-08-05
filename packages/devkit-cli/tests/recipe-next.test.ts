@@ -3,7 +3,7 @@ import { devkitVersion } from '../src/lib/version.js';
 import { nextRecipe } from '../src/recipes/next.js';
 
 // 라벨 부분일치(includes)는 쓰지 않는다 — linkDeps가 링크하는
-// '@devbak/eslint-plugin-fsd'라는 문자열 자체가 'lint'를 부분 문자열로
+// '@cheolubak/eslint-plugin-fsd'라는 문자열 자체가 'lint'를 부분 문자열로
 // 포함해(esLINT) skipInstall이어도 거짓양성이 난다. recipe-nest.test.ts와
 // 같은 이유로 정확 일치를 쓴다.
 const isInstallStep = (s: { label: string }): boolean => s.label === 'pnpm install';
@@ -66,8 +66,8 @@ describe('next 레시피', () => {
   it('package.json에 "type": "module"을 심는다', () => {
     // create-next-app 산출물은 "type"이 없어 CJS로 취급된다. Vite가
     // vitest.config.ts를 CJS로 번들링하면 externalize-deps가 ESM 전용인
-    // @devbak/vitest-config를 require()로 로드하려다 실패한다(2026-08-01 실측,
-    // "@devbak/vitest-config/next" resolved to an ESM file). create-next-app
+    // @cheolubak/vitest-config를 require()로 로드하려다 실패한다(2026-08-01 실측,
+    // "@cheolubak/vitest-config/next" resolved to an ESM file). create-next-app
     // 산출물엔 .js 파일이 없어(전부 .ts/.tsx/.mjs) 안전하다.
     const merge = nextRecipe().find((s) => s.kind === 'mergeJson');
     const detail = merge?.describe() as { patch: { type?: string } };

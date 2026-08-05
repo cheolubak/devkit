@@ -1,5 +1,5 @@
 {
-  "extends": "@devbak/tsconfig/nest",
+  "extends": "@cheolubak/tsconfig/nest",
   "compilerOptions": {
     "outDir": "./dist",
     "baseUrl": "./"

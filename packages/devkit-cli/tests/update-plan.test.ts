@@ -82,7 +82,7 @@ describe('buildPlan', () => {
     expect(parsed.name).toBe('demo');
     // 레시피의 devDependencies와 linkDeps의 link:가 함께 들어간다.
     expect(parsed.devDependencies['typescript-eslint']).toBe('^8.65.0');
-    expect(parsed.devDependencies['@devbak/tsconfig']).toMatch(/^link:/);
+    expect(parsed.devDependencies['@cheolubak/tsconfig']).toMatch(/^link:/);
   });
 
   it('마커를 주면 package.json에 얹힌다 — 쓰기 뒤가 아니라 계획 안이다', async () => {
@@ -124,7 +124,7 @@ describe('buildPlan', () => {
       compilerOptions: { paths: unknown; outDir: string };
     };
     expect(parsed.compilerOptions.paths).toEqual({ '@/*': ['./src/*'] });
-    expect(parsed.extends).toBe('@devbak/tsconfig/nest');
+    expect(parsed.extends).toBe('@cheolubak/tsconfig/nest');
     expect(parsed.compilerOptions.outDir).toBe('./dist');
   });
 

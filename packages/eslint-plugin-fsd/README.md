@@ -1,11 +1,11 @@
-# @devbak/eslint-plugin-fsd
+# @cheolubak/eslint-plugin-fsd
 
 Feature-Sliced Design 구조를 강제하는 ESLint 플러그인 (ESLint v9 / v10 flat config).
 
 ## 설치
 
 ```bash
-pnpm add -D @devbak/eslint-plugin-fsd
+pnpm add -D @cheolubak/eslint-plugin-fsd
 ```
 
 요구 사항: ESLint `^9.0.0 || ^10.0.0` (flat config 전용). 개발·테스트는 ESLint 10 기준으로 검증한다.
@@ -14,7 +14,7 @@ pnpm add -D @devbak/eslint-plugin-fsd
 
 ```js
 // eslint.config.js
-import fsd from '@devbak/eslint-plugin-fsd';
+import fsd from '@cheolubak/eslint-plugin-fsd';
 
 export default [
   fsd.configs.recommended,
@@ -27,14 +27,14 @@ FSD 규칙과 React 생태계 규칙을 함께 켜려면 서브패스를 쓴다.
 
 ```js
 // Next.js 앱
-import fsdNext from '@devbak/eslint-plugin-fsd/next';
+import fsdNext from '@cheolubak/eslint-plugin-fsd/next';
 
 export default [...fsdNext];
 ```
 
 ```js
 // 순수 React 앱
-import fsdReact from '@devbak/eslint-plugin-fsd/react';
+import fsdReact from '@cheolubak/eslint-plugin-fsd/react';
 
 export default [...fsdReact];
 ```
@@ -43,13 +43,13 @@ export default [...fsdReact];
 
 **JSX/TSX 파서는 이 패키지가 설계 차원에서 설정하지 않는다.** 프리셋 앞에 파서를 직접 지정하라.
 
-다만 서브패스별로 실제 동작은 다르다. `/next`는 `eslint-plugin-jsx-a11y`의 `flatConfigs.recommended`를 그대로 얹어 쓰는데, 그 config가 `**/*.{jsx,tsx}`에 대해 `languageOptions.parserOptions.ecmaFeatures.jsx: true`를 갖고 있어 **JSX 파싱이 부수적으로 켜진다.** 이건 `@devbak/eslint-plugin-fsd`가 설계한 동작이 아니라 jsx-a11y의 upstream config에 얹혀가는 부수 효과이므로, jsx-a11y가 그 필드를 바꾸면 예고 없이 사라질 수 있다 — 여기에 의존하지 말 것. `/react`는 jsx-a11y를 포함하지 않으므로 이 부수 효과가 없고, `.jsx` 파일을 린트하려면 파서 설정이 항상 필요하다. `/next`에서 `/react`로 옮길 때 이 차이 때문에 `.jsx` 파싱이 갑자기 깨질 수 있으니 유의하라.
+다만 서브패스별로 실제 동작은 다르다. `/next`는 `eslint-plugin-jsx-a11y`의 `flatConfigs.recommended`를 그대로 얹어 쓰는데, 그 config가 `**/*.{jsx,tsx}`에 대해 `languageOptions.parserOptions.ecmaFeatures.jsx: true`를 갖고 있어 **JSX 파싱이 부수적으로 켜진다.** 이건 `@cheolubak/eslint-plugin-fsd`가 설계한 동작이 아니라 jsx-a11y의 upstream config에 얹혀가는 부수 효과이므로, jsx-a11y가 그 필드를 바꾸면 예고 없이 사라질 수 있다 — 여기에 의존하지 말 것. `/react`는 jsx-a11y를 포함하지 않으므로 이 부수 효과가 없고, `.jsx` 파일을 린트하려면 파서 설정이 항상 필요하다. `/next`에서 `/react`로 옮길 때 이 차이 때문에 `.jsx` 파싱이 갑자기 깨질 수 있으니 유의하라.
 
 아래 예시의 `typescript-eslint`는 이 패키지의 peer가 아니라 **consumer가 직접 고르는 파서**다. TypeScript 프로젝트라면 이미 설치돼 있을 것이고, 없으면 `pnpm add -D typescript-eslint`로 추가한다.
 
 ```js
 import tseslint from 'typescript-eslint';
-import fsdNext from '@devbak/eslint-plugin-fsd/next';
+import fsdNext from '@cheolubak/eslint-plugin-fsd/next';
 
 export default [
   { files: ['**/*.{ts,tsx}'], languageOptions: { parser: tseslint.parser } },
@@ -61,9 +61,9 @@ export default [
 
 | 서브패스 | 필요한 패키지 |
 |---|---|
-| `@devbak/eslint-plugin-fsd` | 없음 |
-| `@devbak/eslint-plugin-fsd/react` | `eslint-plugin-react-hooks` |
-| `@devbak/eslint-plugin-fsd/next` | 위 1개 + `eslint-plugin-jsx-a11y`, `@next/eslint-plugin-next` |
+| `@cheolubak/eslint-plugin-fsd` | 없음 |
+| `@cheolubak/eslint-plugin-fsd/react` | `eslint-plugin-react-hooks` |
+| `@cheolubak/eslint-plugin-fsd/next` | 위 1개 + `eslint-plugin-jsx-a11y`, `@next/eslint-plugin-next` |
 
 ```bash
 # Next.js 앱 기준
@@ -76,7 +76,7 @@ pnpm add -D eslint-plugin-react-hooks eslint-plugin-jsx-a11y @next/eslint-plugin
 - `react-hooks` 규칙을 `.ts`/`.js`까지 적용한다. 커스텀 훅은 JSX 없는 파일에도 있기 때문이다.
 - 상류 플러그인마다 다른 flat config 접근 경로(`configs.flat.*`, 최상위 `flatConfigs.*`, `configs['core-web-vitals']`)를 감춘다.
 
-> **`react-hooks` recommended가 켜는 규칙은 16개다** (13개 `error` + 3개 `warn`), 그리고 여기에는 React Compiler 규칙 계열(`immutability`, `purity`, `use-memo`, `set-state-in-render` 등)이 이미 포함돼 있다. `HOOK_FILES`로 `.js`/`.jsx`/`.ts`/`.tsx` 전체에 스코프되므로, 기존 코드베이스에 `/react`를 처음 적용하면 이 규칙들에서 대량의 에러가 쏟아질 수 있다 — `@devbak/eslint-plugin-fsd` 자체의 노이즈로 오인하지 말 것. 전체 규칙 목록은 [`eslint-plugin-react-hooks` 문서](https://www.npmjs.com/package/eslint-plugin-react-hooks)를 참고하고, 필요하면 프리셋 스프레드 **뒤에** config를 추가해 개별 규칙을 완화하라.
+> **`react-hooks` recommended가 켜는 규칙은 16개다** (13개 `error` + 3개 `warn`), 그리고 여기에는 React Compiler 규칙 계열(`immutability`, `purity`, `use-memo`, `set-state-in-render` 등)이 이미 포함돼 있다. `HOOK_FILES`로 `.js`/`.jsx`/`.ts`/`.tsx` 전체에 스코프되므로, 기존 코드베이스에 `/react`를 처음 적용하면 이 규칙들에서 대량의 에러가 쏟아질 수 있다 — `@cheolubak/eslint-plugin-fsd` 자체의 노이즈로 오인하지 말 것. 전체 규칙 목록은 [`eslint-plugin-react-hooks` 문서](https://www.npmjs.com/package/eslint-plugin-react-hooks)를 참고하고, 필요하면 프리셋 스프레드 **뒤에** config를 추가해 개별 규칙을 완화하라.
 >
 > ```js
 > export default [
@@ -99,7 +99,7 @@ pnpm add -D eslint-plugin-react-hooks eslint-plugin-jsx-a11y @next/eslint-plugin
 프리셋 대신 규칙을 하나씩 켜고 alias를 커스터마이즈할 수도 있다.
 
 ```js
-import fsd from '@devbak/eslint-plugin-fsd';
+import fsd from '@cheolubak/eslint-plugin-fsd';
 
 export default [
   {

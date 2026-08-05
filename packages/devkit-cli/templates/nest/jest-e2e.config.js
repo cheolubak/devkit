@@ -1,1 +1,1 @@
-module.exports = require('@devbak/jest-config/nest-e2e');
+module.exports = require('@cheolubak/jest-config/nest-e2e');
