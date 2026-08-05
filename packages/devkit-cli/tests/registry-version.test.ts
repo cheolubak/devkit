@@ -86,14 +86,26 @@ function declaredShortNames(): Set<string> {
 }
 
 describe('DEVKIT_VERSION_RANGE 와 실제 게시 버전', () => {
-  it('게시 대상 패키지의 version 이 전부 범위를 만족한다', async () => {
+  it('레시피가 선언하는 패키지의 version 이 전부 범위를 만족한다', async () => {
+    // 대상은 "게시되는 것 전부"가 아니라 "생성물이 ^0.1.0 으로 선언하는 것"이다.
+    // devkit-cli 는 아무 레시피도 선언하지 않는 도구라 여기 해당하지 않는다 —
+    // 예외 목록을 손으로 들지 않아도 자동으로 빠진다.
+    //
     // 어긋나면 devbak 이 심는 범위가 실제 게시본을 못 가리키고, 생성물은
-    // 에러 없이 옛 버전을 설치한다 — 조용한 실패다. 마이너를 올려 게시하면
-    // DEVKIT_VERSION_RANGE 도 함께 올려야 한다.
-    for (const pkg of await publishedPackages()) {
+    // 에러 없이 옛 버전을 설치한다 — 조용한 실패다.
+    const byName = new Map(
+      (await publishedPackages()).map((p) => [(p.name ?? '').replace('@cheolubak/', ''), p]),
+    );
+    const declared = declaredShortNames();
+    // 선언이 하나도 없으면 아래 루프가 0회 돌아 "검사할 것이 없으니 통과"가 된다.
+    expect(declared.size).toBeGreaterThan(0);
+
+    for (const name of declared) {
+      const pkg = byName.get(name);
+      expect(pkg, `레시피가 선언한 @cheolubak/${name} 가 워크스페이스에 없다`).toBeDefined();
       expect(
-        satisfiesCaretZero(pkg.version ?? '', DEVKIT_VERSION_RANGE),
-        `${pkg.name ?? '(이름 없음)'}@${pkg.version ?? '(버전 없음)'} 이 ${DEVKIT_VERSION_RANGE} 를 벗어난다`,
+        satisfiesCaretZero(pkg?.version ?? '', DEVKIT_VERSION_RANGE),
+        `${pkg?.name ?? name}@${pkg?.version ?? '(버전 없음)'} 이 ${DEVKIT_VERSION_RANGE} 를 벗어난다`,
       ).toBe(true);
     }
   });
