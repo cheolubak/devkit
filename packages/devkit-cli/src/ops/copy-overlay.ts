@@ -7,6 +7,7 @@ import { packageRoot } from '../lib/layout.js';
 import type { Ctx, PlannedChange, Step } from '../types.js';
 import { DEVKIT_BLOCK_END, DEVKIT_BLOCK_START, mergeIgnore } from './merge-ignore.js';
 import { pathExists } from './path-exists.js';
+import { readExistingOrEmpty } from './read-existing.js';
 
 /** '_' 접두어를 '.'으로 바꾼다. _gitignore → .gitignore */
 export function templateFileName(name: string): string {
@@ -158,10 +159,12 @@ export function copyOverlay(
       for (const change of changes) {
         if (change.kind === 'ignore') {
           const target = join(ctx.targetDir, ...change.file.split('/'));
-          // 기존 내용을 읽어야 병합할 수 있다 — 없으면(신규 프로젝트) 빈
-          // 문자열로 취급한다.
+          // 기존 내용을 읽어야 병합할 수 있다. readExistingOrEmpty 는 ENOENT
+          // (신규 프로젝트)만 빈 문자열로 취급하고 EACCES 같은 진짜 읽기
+          // 실패는 다시 던진다 — `.catch(() => '')`는 그것까지 "없음"으로
+          // 오인해 기존 .gitignore 를 조용히 덮어쓴다(리뷰 지적).
           // oxlint-disable-next-line no-await-in-loop -- 위와 같은 이유로 병렬화할 수 없다
-          const existing = await readFile(target, 'utf8').catch(() => '');
+          const existing = await readExistingOrEmpty(target);
           // oxlint-disable-next-line no-await-in-loop -- 위와 같은 이유
           await mkdir(dirname(target), { recursive: true });
           // oxlint-disable-next-line no-await-in-loop -- 위와 같은 이유

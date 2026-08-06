@@ -10,6 +10,7 @@ import type { PlannedFile } from '../lib/classify.js';
 import { markerPatch, type ProjectType } from '../lib/marker.js';
 import { mergeIgnore } from '../ops/merge-ignore.js';
 import { applyPatch, type JsonObject } from '../ops/merge-json.js';
+import { readExistingOrEmpty } from '../ops/read-existing.js';
 import { monorepoRecipe } from '../recipes/monorepo.js';
 import { nestRecipe } from '../recipes/nest.js';
 import { nextRecipe } from '../recipes/next.js';
@@ -116,8 +117,12 @@ export async function buildPlan({
         // 사라진다 — JSON 오버레이가 reduceJsonOverlay 로 피하는 것과 같은
         // 문제다(설계 1.2절).
         if (fileCategory !== null && categories.has(fileCategory)) {
+          // readExistingOrEmpty 는 ENOENT(대상에 아직 없음)만 빈 문자열로
+          // 취급하고 EACCES 같은 진짜 읽기 실패는 다시 던진다 —
+          // `.catch(() => '')`는 그것까지 "없음"으로 오인해 기존
+          // .gitignore 를 조용히 덮어쓴다(리뷰 지적).
           // oxlint-disable-next-line no-await-in-loop -- 위와 같은 이유
-          const existing = await readFile(join(ctx.targetDir, relPath), 'utf8').catch(() => '');
+          const existing = await readExistingOrEmpty(join(ctx.targetDir, relPath));
           files.set(relPath, mergeIgnore(existing, change.lines, change.block));
           fileCategories.set(relPath, fileCategory);
         }

@@ -6,6 +6,7 @@ import { assertInside, removeFiles } from '../src/ops/remove-files.js';
 import { templateFileName } from '../src/ops/copy-overlay.js';
 import { makeDirs } from '../src/ops/make-dirs.js';
 import { pathExists } from '../src/ops/path-exists.js';
+import { readExistingOrEmpty } from '../src/ops/read-existing.js';
 import type { Ctx } from '../src/types.js';
 
 const created: string[] = [];
@@ -44,6 +45,41 @@ describe('pathExists', () => {
     chmodSync(locked, 0o000);
     try {
       await expect(pathExists(join(locked, 'file.txt'))).rejects.toMatchObject({ code: 'EACCES' });
+    } finally {
+      chmodSync(locked, 0o755);
+    }
+  });
+});
+
+describe('readExistingOrEmpty', () => {
+  it('ENOENT(없음)는 빈 문자열 — 신규 프로젝트에 처음 놓는 정상 경로다', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'devbak-read-'));
+    created.push(dir);
+    expect(await readExistingOrEmpty(join(dir, 'nope'))).toBe('');
+  });
+
+  it('있으면 내용을 그대로 읽는다', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'devbak-read-'));
+    created.push(dir);
+    const file = join(dir, '.gitignore');
+    writeFileSync(file, '내-비밀-폴더/\n');
+    expect(await readExistingOrEmpty(file)).toBe('내-비밀-폴더/\n');
+  });
+
+  it('ENOENT 이외의 에러는 다시 던진다 — 권한 문제를 "빈 대상"으로 읽지 않는다', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'devbak-read-'));
+    created.push(dir);
+    const locked = join(dir, 'locked');
+    mkdirSync(locked);
+    writeFileSync(join(locked, '.gitignore'), '내-비밀-폴더/\n');
+    // 디렉토리의 실행(x) 권한을 빼면 그 안의 파일을 readFile할 때 EACCES가
+    // 난다. `.catch(() => '')` 관용구라면 이것도 "없음"으로 읽어 기존
+    // .gitignore 를 조용히 덮어썼을 것이다.
+    chmodSync(locked, 0o000);
+    try {
+      await expect(readExistingOrEmpty(join(locked, '.gitignore'))).rejects.toMatchObject({
+        code: 'EACCES',
+      });
     } finally {
       chmodSync(locked, 0o755);
     }
