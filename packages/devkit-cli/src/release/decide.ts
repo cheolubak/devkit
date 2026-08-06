@@ -39,7 +39,15 @@ const IRRELEVANT = [
   /(^|\/)turbo\.json$/,
 ];
 
+/**
+ * `templates/` 안의 파일은 `IRRELEVANT`와 이름이 겹쳐도(예: `eslint.config.mjs`)
+ * 게시되는 산출물 그 자체다 — devkit-cli 의 `files`가 `["dist","templates"]`라
+ * 템플릿 전체가 tarball에 실린다. `IRRELEVANT`보다 먼저 걸러 통과시킨다.
+ */
+const TEMPLATE = /^packages\/devkit-cli\/templates\//;
+
 export function isReleasePath(relPath: string): boolean {
+  if (TEMPLATE.test(relPath)) return true;
   return !IRRELEVANT.some((pattern) => pattern.test(relPath));
 }
 

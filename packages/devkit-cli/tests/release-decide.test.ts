@@ -28,6 +28,15 @@ describe('isReleasePath', () => {
     expect(isReleasePath('packages/devkit-cli/tsconfig.json')).toBe(false);
     expect(isReleasePath('packages/devkit-cli/turbo.json')).toBe(false);
   });
+
+  it('templates/ 안은 IRRELEVANT와 이름이 겹쳐도 게시물이라 릴리스 대상이다', () => {
+    // devkit-cli 의 files 가 ["dist","templates"] 라 템플릿 전체가 tarball 에 실린다.
+    // eslint.config.mjs·tsconfig.json·vitest.config.ts 는 툴킷 저장소 설정으론 무관하지만
+    // 템플릿 안에서는 사용자에게 나가는 산출물 그 자체다.
+    expect(isReleasePath('packages/devkit-cli/templates/monorepo/eslint.config.mjs')).toBe(true);
+    expect(isReleasePath('packages/devkit-cli/templates/nest/tsconfig.json')).toBe(true);
+    expect(isReleasePath('packages/devkit-cli/templates/next/vitest.config.ts')).toBe(true);
+  });
 });
 
 describe('axisOf', () => {

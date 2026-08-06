@@ -18,6 +18,9 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # workflow_dispatch 는 push 와 달리 브랜치 제한이 없다 — 수동 실행을
+    # main 이 아닌 브랜치에서 하면 그 브랜치에서 버전을 올리고 게시해버린다.
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,16 +31,52 @@ jobs:
         with:
           node-version: 24 # .ts 를 네이티브로 실행한다(빌드 없이 릴리스 스크립트 호출)
           cache: pnpm
+          # 게시 인증에 필요하다 — 없으면 .npmrc 가 안 생겨 pnpm publish 가
+          # //npm.pkg.github.com/:_authToken 을 못 찾고 401 로 실패한다.
+          registry-url: https://npm.pkg.github.com
+          scope: '@cheolubak'
 
       - run: pnpm install --frozen-lockfile
 
       - name: 릴리스 대상 판정
         id: decide
         run: |
+          set -euo pipefail
           CONFIG_SINCE=$(git tag --list 'config-v*' --sort=-v:refname | head -1)
           CLI_SINCE=$(git tag --list 'cli-v*' --sort=-v:refname | head -1)
-          CONFIG=$(node packages/devkit-cli/src/release/decide.ts "$CONFIG_SINCE" | node -e "process.stdin.on('data',d=>process.stdout.write(JSON.parse(d).config??''))")
-          CLI=$(node packages/devkit-cli/src/release/decide.ts "$CLI_SINCE" | node -e "process.stdin.on('data',d=>process.stdout.write(JSON.parse(d).cli??''))")
+
+          # 태그가 없으면 decide.ts 는 전체 이력으로 조용히 후퇴한다(그런
+          # 용도의 인자 처리다) — 여기서는 "기준선을 못 찾았다"와 "기준선이
+          # 원래 없다"를 구분할 수 없으므로 던진다. 누군가 태그를 지워도
+          # 전체 이력을 읽어 전 패키지가 통째로 올라가는 사고를 막는다.
+          if [ -z "$CONFIG_SINCE" ]; then
+            echo "::error::config 기준 태그(config-v*)가 없다 — 부트스트랩 태그가 origin 에 있는지 확인하라"
+            exit 1
+          fi
+          if [ -z "$CLI_SINCE" ]; then
+            echo "::error::cli 기준 태그(cli-v*)가 없다 — 부트스트랩 태그가 origin 에 있는지 확인하라"
+            exit 1
+          fi
+
+          node packages/devkit-cli/src/release/decide.ts "$CONFIG_SINCE" > /tmp/config-decide.json
+          node packages/devkit-cli/src/release/decide.ts "$CLI_SINCE" > /tmp/cli-decide.json
+
+          # 파일을 거쳐 파싱한다 — stdout 을 파이프로 바로 넘기면 청크가
+          # 나뉠 때 부분 버퍼를 JSON.parse 할 수 있다. config/cli 필드가
+          # 없으면(decide.ts 출력이 깨진 것) 빈 문자열로 읽지 않고 던진다 —
+          # 그러지 않으면 "판정 실패"와 "릴리스 없음"이 구분 안 되는 채로
+          # 조용히 녹색으로 끝난다.
+          CONFIG=$(node -e '
+            const d = JSON.parse(require("node:fs").readFileSync("/tmp/config-decide.json", "utf8"));
+            if (!("config" in d)) throw new Error("decide.ts 출력에 config 필드가 없다");
+            process.stdout.write(d.config ?? "");
+          ')
+          CLI=$(node -e '
+            const d = JSON.parse(require("node:fs").readFileSync("/tmp/cli-decide.json", "utf8"));
+            if (!("cli" in d)) throw new Error("decide.ts 출력에 cli 필드가 없다");
+            process.stdout.write(d.cli ?? "");
+          ')
+
           echo "config=$CONFIG" >> "$GITHUB_OUTPUT"
           echo "cli=$CLI" >> "$GITHUB_OUTPUT"
           echo "판정 — config: '${CONFIG:-없음}', cli: '${CLI:-없음}'"
@@ -45,7 +84,7 @@ jobs:
       - name: 검증
         if: steps.decide.outputs.config != '' || steps.decide.outputs.cli != ''
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # e2e 가 생성물의 .npmrc 에 이 이름으로 심는다
         run: |
           pnpm build
           pnpm test
@@ -70,7 +109,10 @@ jobs:
       - name: 게시
         if: steps.decide.outputs.config != '' || steps.decide.outputs.cli != ''
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # pnpm/npm 은 인증에 //npm.pkg.github.com/:_authToken 설정만 본다 —
+          # GITHUB_TOKEN 환경변수는 참조하지 않는다. setup-node 의 registry-url
+          # 이 써 준 .npmrc 가 이 이름을 읽는다.
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm -r publish --no-git-checks --access public
 
       # 게시가 성공한 뒤에만 커밋한다 — 게시가 실패하면 저장소가
@@ -80,12 +122,21 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git add -A
+          # apply.ts 가 실제로 건드리는 파일만 스테이징한다 — git add -A 는
+          # pnpm build/test/test:e2e/publish 를 거친 워킹트리 전체를 쓸어
+          # 담아, gitignore 되지 않는 산출물이 하나만 생겨도 build: 접두
+          # 커밋으로 main 에 들어가고(그 접두는 patch 를 부른다) 다음 판정에
+          # 영향을 준다.
+          git add packages/*/package.json packages/devkit-cli/src/ops/registry-deps.ts
           git commit -m "build: 릴리스 버전을 올린다 [skip ci]"
+          # annotated 태그여야 한다 — git push --follow-tags 는 정의상
+          # annotated 태그만 민다. lightweight 로 만들면 로컬에서만 생기고
+          # origin 에는 영영 안 나가, 다음 판정이 태그를 못 찾아 전체 이력으로
+          # 후퇴한다(부트스트랩 태그가 이 문제로 origin 에 없었다).
           if [ -n "${{ steps.bump.outputs.config_version }}" ]; then
-            git tag "config-v${{ steps.bump.outputs.config_version }}"
+            git tag -a -m "release" "config-v${{ steps.bump.outputs.config_version }}"
           fi
           if [ -n "${{ steps.bump.outputs.cli_version }}" ]; then
-            git tag "cli-v${{ steps.bump.outputs.cli_version }}"
+            git tag -a -m "release" "cli-v${{ steps.bump.outputs.cli_version }}"
           fi
           git push --follow-tags

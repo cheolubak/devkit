@@ -346,6 +346,22 @@ tarball에 안 들어가거나 동작을 바꾸지 않기 때문이다.
 판정 로직은 `packages/devkit-cli/src/release/`에 있고 단위 테스트가 규칙을
 고정한다 — 워크플로 YAML 안의 bash로 두면 테스트할 수 없기 때문이다.
 
+**기준점 태그 둘(`config-v*`·`cli-v*`)이 `origin`에 있어야 한다 — 없으면
+전체 이력으로 후퇴해 첫 실행에서 전 패키지가 통째로 올라간다.** 워크플로는
+`git tag --list 'config-v*' --sort=-v:refname | head -1`로 가장 최근 태그를
+찾는데, `git push --follow-tags`는 **annotated 태그만** 민다(lightweight는
+로컬에만 남는다). 부트스트랩 태그를 새로 만들 때는 반드시:
+
+```bash
+git tag -a -m "release" config-v<버전> <커밋>
+git tag -a -m "release" cli-v<버전> <커밋>
+git push origin config-v<버전> cli-v<버전>
+```
+
+태그를 못 찾으면 워크플로가 `::error::`로 실패한다(조용히 전체 이력으로
+넘어가지 않는다) — 그래도 애초에 태그가 origin에 없으면 실행 자체가 안 되므로,
+새 기준점을 만들 때마다 이 절차를 빼먹지 않아야 한다.
+
 ### 새 패키지 체크리스트
 
 루트 `eslint.config.mjs`는 `packages/**`를 무시하고, 루트 `vitest.config.ts`·
