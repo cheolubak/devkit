@@ -136,8 +136,13 @@ describe('devkit create --type nest', () => {
     // 실제로 targetDir에 쓰는 경로는 여기 e2e가 처음 검증한다.
     expect(existsSync(join(dir, '_gitignore'))).toBe(false);
     expect(existsSync(join(dir, '.gitignore'))).toBe(true);
-    // 스캐폴딩 CLI 가 쓴 규칙 위에 얹혔는지 — 통째로 덮었다면 nest CLI 의
-    // 줄이 사라진다. 병합이 실제 파일에서 동작하는지는 e2e 만 밟는다.
+    // 아래는 병합이 "실행됐는지"만 본다 — "보존"은 이 케이스로 검증되지
+    // 않는다. `@nestjs/cli new --skip-git`(이 레시피가 쓰는 옵션)는
+    // .gitignore 자체를 만들지 않는다(실측 확인: 격리 환경에서 직접 실행해
+    // CREATE 로그에 .gitignore 가 없음을 확인했다) — 즉 이 케이스에선
+    // "지킬 기존 줄"이 애초에 없다. 스캐폴딩 CLI 가 쓴 줄을 병합이 실제로
+    // 지키는지는 create-next-app 이 확실히 .gitignore 를 만드는 아래 next
+    // 케이스가 담당한다.
     const gitignore = readFileSync(join(dir, '.gitignore'), 'utf8');
     expect(gitignore).toContain('# >>> devkit >>>');
     expect(gitignore).toContain('.claude/*');
@@ -196,7 +201,13 @@ describe('devkit create --type next', () => {
     expect(gitignore).toContain('# >>> devkit >>>');
     expect(gitignore).toContain('.claude/*');
     // create-next-app 이 쓴 줄이 남아 있어야 한다 — 병합이지 교체가 아니다.
+    // 이 저장소의 create 경로에서 "보존"을 검증하는 유일한 케이스라(nest는
+    // 위 케이스의 주석 참고) 하나만 보지 않는다 — devkit 템플릿에 전혀
+    // 없는 문자열만 골라 우연한 일치를 배제했다.
     expect(gitignore).toContain('.next');
+    expect(gitignore).toContain('.vercel');
+    expect(gitignore).toContain('*.tsbuildinfo');
+    expect(gitignore).toContain('next-env.d.ts');
 
     // 이월 (6): "type": "module"이 안전하다는 근거(.js/.cjs 파일 0개)의 기계적 확인.
     expect(collectStrayJs(dir)).toEqual([]);
