@@ -238,3 +238,55 @@ describe('buildPlan', () => {
     expect(parsed.devDependencies.turbo).toBe('^2.8.0');
   });
 });
+
+describe('.gitignore 병합', () => {
+  it('사용자가 추가한 규칙을 지우지 않는다', async () => {
+    const ctx = makeTarget();
+    writeFileSync(join(ctx.targetDir, '.gitignore'), '내-비밀-폴더/\nnode_modules/\n');
+
+    const plan = await buildPlan({
+      type: 'nest',
+      ctx,
+      categories: new Set<Category>(['repo']),
+      marker: null,
+    });
+
+    const gitignore = plan.find((f) => f.relPath === '.gitignore');
+    expect(gitignore).toBeDefined();
+    // 보존 — 이 테스트의 본질이다.
+    expect(gitignore!.content).toContain('내-비밀-폴더/');
+    // 템플릿 줄이 얹혔는가. "보존"만 보면 통째 교체가 아니라 통째 유지해도
+    // 통과하므로, 병합이 실제로 일어났음을 별도로 고정한다.
+    expect(gitignore!.content).toContain('coverage/');
+    // 블록 내용은 아직 비어 있다(템플릿에 블록을 넣는 것은 Task 4다).
+    // 구분자 쌍만 확인한다 — mergeIgnore는 block이 비어도 쌍을 남긴다.
+    // 블록 내용 검증은 템플릿에 블록이 들어간 뒤 e2e가 실제 생성물에서 한다.
+    expect(gitignore!.content).toContain('# >>> devkit >>>');
+    expect(gitignore!.content).toContain('# <<< devkit <<<');
+  });
+
+  it('두 번 돌려도 같은 내용이다 — 멱등이다', async () => {
+    const ctx = makeTarget();
+    writeFileSync(join(ctx.targetDir, '.gitignore'), 'node_modules/\n');
+
+    const first = await buildPlan({
+      type: 'nest',
+      ctx,
+      categories: new Set<Category>(['repo']),
+      marker: null,
+    });
+    const content = first.find((f) => f.relPath === '.gitignore')!.content;
+
+    // 첫 실행의 계획 결과를 그대로 대상에 써서, "update를 한 번 적용한
+    // 프로젝트에 다시 update를 돌리면" 상황을 재현한다.
+    writeFileSync(join(ctx.targetDir, '.gitignore'), content);
+    const second = await buildPlan({
+      type: 'nest',
+      ctx,
+      categories: new Set<Category>(['repo']),
+      marker: null,
+    });
+
+    expect(second.find((f) => f.relPath === '.gitignore')!.content).toBe(content);
+  });
+});
