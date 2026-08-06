@@ -307,6 +307,45 @@ ESLint 쪽에서 꺼 두므로, `no-unused-vars` 같은 규칙은 **oxlint에만
 --fix`로 `&&` 단락 평가다 — fix는 순서가 중요해(oxlint가 먼저 고치고 나서
 ESLint가 나머지를 보는 편이 재작업이 적다) 병렬화하지 않았다.
 
+### 릴리스는 자동이다
+
+`main`에 push되면 `.github/workflows/release.yml`이 검증하고, 버전을 올리고,
+게시한다. 손으로 `pnpm publish`를 칠 일이 없다.
+
+**무엇이 릴리스를 부르는가** — 경로가 대상을 정하고, 커밋 접두가 크기를 정한다.
+
+| 접두 | 올림 |
+| --- | --- |
+| `feat:` | minor |
+| `fix:` · `refactor:` · `perf:` · `build:` | patch |
+| `docs:` · `test:` · `chore:` | 없음 |
+| 본문에 `BREAKING CHANGE:` 또는 제목에 `!` | major |
+
+`tests/**`·`README.md`·설정 파일(`eslint.config.mjs`·`vitest.config.ts`·
+`tsconfig.json`·`tsup.config.ts`·`turbo.json`)만 바뀌면 릴리스되지 않는다 —
+tarball에 안 들어가거나 동작을 바꾸지 않기 때문이다.
+
+**두 축이 따로 움직인다.**
+
+- **설정 6개는 락스텝** — 하나만 바뀌어도 함께 올라간다. 생성물이 선언하는
+  `DEVKIT_VERSION_RANGE`가 상수 하나라서, 6개가 다른 마이너로 흩어지면
+  표현할 수 없다. 마이너 이상이면 그 상수도 자동으로 갱신된다.
+- **`devkit-cli`는 단독** — `templates/`가 이 패키지 안에 있으므로 템플릿만
+  바뀌어도 CLI가 새로 나간다.
+
+**검증이 먼저다.** `test`·`typecheck`·`lint:ox`·`lint:es`·`test:e2e`가 전부
+통과해야 게시한다. e2e가 일시적으로 실패하면 릴리스가 막히는데, 깨진 것을
+게시하는 쪽보다 낫다고 판단했다 — 되돌릴 수 없기 때문이다(GitHub Packages는
+같은 버전 재게시가 안 된다).
+
+**게시가 중간에 실패하면 사람이 개입한다.** 일부만 올라간 상태에서 커밋·태그를
+남기지 않고 워크플로가 실패한다. 자동 복구는 하지 않는다. `pnpm -r publish`는
+**이미 게시된 버전을 건너뛰므로**, 버전이 안 바뀐 패키지는 자동으로 제외돼
+재게시 충돌이 나지 않는다.
+
+판정 로직은 `packages/devkit-cli/src/release/`에 있고 단위 테스트가 규칙을
+고정한다 — 워크플로 YAML 안의 bash로 두면 테스트할 수 없기 때문이다.
+
 ### 새 패키지 체크리스트
 
 루트 `eslint.config.mjs`는 `packages/**`를 무시하고, 루트 `vitest.config.ts`·
