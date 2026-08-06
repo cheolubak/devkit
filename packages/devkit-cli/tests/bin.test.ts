@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -106,9 +106,15 @@ describe('assertDistFresh', () => {
     created.push(pkg);
     mkdirSync(join(pkg, 'dist'), { recursive: true });
     writeFileSync(join(pkg, 'dist', 'bin.js'), '');
-    // dist 를 먼저 쓰고 src 를 나중에 써서 src 가 더 새롭게 만든다.
     mkdirSync(join(pkg, 'src'), { recursive: true });
     writeFileSync(join(pkg, 'src', 'bin.ts'), '');
+    // dist 를 먼저 쓰는 것만으로는 dist 가 더 오래됐다고 보장되지 않는다 —
+    // 리눅스의 파일 mtime 은 커널의 coarse 시계(타이머 틱 1~4ms)에서 오므로
+    // 연속한 두 쓰기가 **같은 mtime** 을 받고, assertDistFresh 의 엄격 부등호가
+    // 거짓이 되어 던지지 않는다. macOS(APFS)는 서브밀리초라 이 결함을 가린다.
+    // 로컬 그린 / CI 레드로 첫 릴리스 실행이 여기서 죽었다. 명시적으로 벌린다.
+    const stale = new Date(Date.now() - 60_000);
+    utimesSync(join(pkg, 'dist', 'bin.js'), stale, stale);
 
     expect(() => assertDistFresh(pkg)).toThrow(/pnpm build/);
   });
