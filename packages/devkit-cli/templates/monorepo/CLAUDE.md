@@ -32,6 +32,17 @@ packages/       공유 패키지 (필요할 때 추가)
 `apps/web`은 Feature-Sliced Design을 따른다. 자세한 내용은
 `apps/web`의 레이어 구조와 `@cheolubak/eslint-plugin-fsd` 규칙을 참고하라.
 
+## 코드를 쓰기 전에
+
+`.claude/agents/devkit-implementer.md`를 먼저 읽는다. 어느 워크스페이스에 둘
+것인가, 앱 안 레이어 배치, Server/Client 경계, 실패 처리, 테스트 동반 기준이
+결정 절차의 형태로 거기에 있다.
+
+리뷰 기준은 같은 디렉토리의 `devkit-reviewer.md`다. 둘은 같은 관점을 작성
+시점과 리뷰 시점에서 각각 본 것이므로, 한쪽을 고치면 다른 쪽도 함께 본다.
+
+두 문서 모두 **저장소 루트에만** 있다. `apps/web` 하위에는 없는 것이 정상이다.
+
 ## 모듈 타입 — 루트는 CJS, apps/web은 ESM (의도된 비대칭)
 
 루트 `package.json`에는 `"type"`이 없고(CJS) `apps/web/package.json`에는

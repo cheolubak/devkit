@@ -59,11 +59,14 @@ describe('buildPlan', () => {
       marker: null,
     });
 
-    expect(plan.map((f) => f.relPath).sort()).toEqual([
-      '.claude/agents/devkit-reviewer.md',
-      '.claude/commands/review.md',
-      'CLAUDE.md',
-    ]);
+    expect(plan.map((f) => f.relPath).sort()).toEqual(
+      [
+        '.claude/agents/devkit-implementer.md',
+        '.claude/agents/devkit-reviewer.md',
+        '.claude/commands/review.md',
+        'CLAUDE.md',
+      ].sort(),
+    );
   });
 
   it('package.json은 패치가 합쳐진 한 파일로 나온다', async () => {
@@ -181,12 +184,18 @@ describe('buildPlan', () => {
       marker: null,
     });
 
-    expect(plan.map((f) => f.relPath).sort()).toEqual([
-      '.claude/agents/devkit-reviewer.md',
-      '.claude/commands/review.md',
-      'apps/web/CLAUDE.md',
-      'CLAUDE.md',
-    ].sort());
+    // apps/web 쪽 에이전트 문서는 목록에 없다 — monorepo 레시피가
+    // apps/web/.claude 를 통째로 지우고 루트 1벌만 남기기 때문이다.
+    // apps/web/CLAUDE.md 는 .claude 밖이라 그 제거에 걸리지 않는다.
+    expect(plan.map((f) => f.relPath).sort()).toEqual(
+      [
+        '.claude/agents/devkit-implementer.md',
+        '.claude/agents/devkit-reviewer.md',
+        '.claude/commands/review.md',
+        'apps/web/CLAUDE.md',
+        'CLAUDE.md',
+      ].sort(),
+    );
   });
 
   it('next는 CLAUDE.md를 정상적으로 놓는다 — 지운 뒤 놓는 순서다', async () => {

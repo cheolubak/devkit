@@ -35,6 +35,14 @@ shared   → 재사용 유틸·UI (최하위, 아무것도 의존하지 않는�
 - Server Component가 기본이다. `'use client'`는 필요한 곳에만 좁게 붙인다.
 - mutation은 Server Actions로 처리한다.
 
+## 코드를 쓰기 전에
+
+`.claude/agents/devkit-implementer.md`를 먼저 읽는다. 레이어 배치·Server/Client
+경계·실패 처리·테스트 동반 기준이 결정 절차의 형태로 거기에 있다.
+
+리뷰 기준은 같은 디렉토리의 `devkit-reviewer.md`다. 둘은 같은 관점을 작성
+시점과 리뷰 시점에서 각각 본 것이므로, 한쪽을 고치면 다른 쪽도 함께 본다.
+
 ## devkit 의존
 
 `package.json`의 `@cheolubak/*`는 GitHub Packages에서 설치된다(`"^0.1.0"`처럼

@@ -18,6 +18,14 @@ NestJS API. devkit 표준 툴킷으로 생성됨.
   `@typescript-eslint/no-floating-promises` 위반을 그냥 넘기지 않는다.
 - 포맷은 Prettier가 전담한다. ESLint에 포맷 규칙을 추가하지 않는다.
 
+## 코드를 쓰기 전에
+
+`.claude/agents/devkit-implementer.md`를 먼저 읽는다. 모듈·계층 배치, zod 검증과
+트랜잭션 경계, 실패 처리, 테스트 동반 기준이 결정 절차의 형태로 거기에 있다.
+
+리뷰 기준은 같은 디렉토리의 `devkit-reviewer.md`다. 둘은 같은 관점을 작성
+시점과 리뷰 시점에서 각각 본 것이므로, 한쪽을 고치면 다른 쪽도 함께 본다.
+
 ## devkit 의존
 
 `package.json`의 `@cheolubak/*`는 GitHub Packages에서 설치된다(`"^0.1.0"`처럼
