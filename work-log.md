@@ -1,5 +1,20 @@
 # Work Log
 
+## 2026-08-06
+
+### .gitignore 병합과 .claude 리뷰 자산 추적 (설계 → Task 1~5 구현·검증)
+- **변경 파일**: `packages/devkit-cli/src/ops/merge-ignore.ts`(신설, Task 1) · `tests/merge-ignore.test.ts`(신설, Task 1) · `src/types.ts`(`PlannedChange`에 `ignore` 추가, Task 2) · `src/ops/copy-overlay.ts`(`splitIgnoreTemplate`, `plan`·`run` 배선, Task 2) · `src/update/plan.ts`(`ignore` 분기 — 타입 확장이 강제해 Task 2에서 선반영, Task 3이 테스트로 고정) · `src/ops/read-existing.ts`(신설, ENOENT 외 오류를 삼키지 않는 공용 읽기 헬퍼, Task 2 수정 라운드) · `tests/plan-ops.test.ts`·`tests/update-plan.test.ts`·`tests/fs-ops.test.ts`(테스트 추가·대상 조정) · `templates/_shared/_gitignore`(신설, Task 4) · `templates/nest/_gitignore`·`templates/monorepo/_gitignore`(삭제, Task 4) · `tests/e2e/create.e2e.test.ts`(e2e 단언 추가, Task 5) · `packages/devkit-cli/README.md`(`--only` 카테고리 표 갱신, Task 5) · 이 항목(Task 5)
+- **내용**: 설계·계획 `.superpowers/sdd/2026-08-06-gitignore-merge`의 5태스크 전체. `devbak create`·`update`가 `.gitignore`를 통째로 덮어써 사용자가 추가한 무시 규칙을 지우고 있었다(설계 1.2절) — 이것을 줄 단위 병합으로 바꿨다. 이 작업이 고친 두 문제:
+  1. **`.claude` 리뷰 자산이 무시될 수 있었다.** 기존 프로젝트의 `.gitignore`가 `.claude/`를 통째로 무시하면, devkit이 나중에 `.claude/agents/`·`.claude/commands/`에 리뷰 자산을 놓아도 git이 추적하지 못한다 — git은 이미 무시된 디렉토리 안으로는 `!` 부정 패턴을 적용해도 하위를 되살리지 못하기 때문이다(디렉토리 자체가 아니라 `.claude/*`처럼 자식만 무시해야 `!.claude/agents/`가 먹힌다).
+  2. **`update`가 사용자의 `.gitignore` 규칙을 지우고 있었다.** 통째 덮어쓰기라 사용자가 손으로 추가한 줄이 매 `update` 실행마다 사라졌다.
+  - **Task 1** (`8b58376`, 멱등성 fix `2163fd7`): 부수효과 없는 순수 함수 `mergeIgnore(existing, lines, block)`을 만들었다. 규칙 셋 — 대상의 기존 내용 유지, 템플릿 줄 중 없는 것만 추가(빈 줄·주석은 중복 판정 제외), `# >>> devkit >>>`~`# <<< devkit <<<` 블록은 있으면 통째 교체·없으면 끝에 덧붙임. 여는 구분자만 있고 닫는 게 없으면 조용히 삼키지 않고 던진다. 리뷰에서 멱등성 Critical 버그 발견 — `significant()`가 빈 줄·주석에 `null`을 반환하는데 존재 판정 없이 매번 추가돼, 주석이 섞인 `lines`로 두 번 돌리면 계속 누적됐다(계획서 자체의 버그). 유의미 줄은 trim 키로, 빈 줄·주석은 원문 그대로 일치로 판정을 이원화해 고쳤다.
+  - **Task 2** (`dd4868d`, ENOENT fix `73fee7c`): `PlannedChange`에 `{ kind: 'ignore'; file; lines; block }`를 더하고 `copyOverlay`의 `plan()`이 `.gitignore`에 대해 `ignore` 변경을 내고 `run()`이 `mergeIgnore`로 실제로 쓰게 배선했다. 타입 확장이 `update/plan.ts`의 타입체크를 즉시 깨뜨려(그 파일이 `kind !== 'file'`인 것을 전부 JSON 패치로 취급하던 코드였다) update 경로의 진짜 구현도 이 태스크에서 함께 들어갔다 — 계획서의 태스크 분할이 두 경로를 분리할 수 없었다. 리뷰에서 `readFile(...).catch(() => '')`가 ENOENT 아닌 실패(EACCES 등)까지 "빈 대상"으로 오인해 기존 `.gitignore`를 덮어쓸 수 있다는 Important 지적을 받아, `pathExists`와 같은 관용의 `readExistingOrEmpty` 헬퍼로 두 호출부(`copy-overlay.ts`·`update/plan.ts`)를 통일했다.
+  - **Task 3** (`3ab4028`): update 경로 분기가 Task 2에서 이미 들어가 있어 이 태스크는 그 동작(사용자 규칙 보존, 멱등)을 고정하는 테스트만 추가했다. RED가 안 나오는 상황이라 분기를 잠시 지워 두 테스트가 실제로 크래시함을 확인하는 "회귀 실증"으로 대신했다. `isIgnoreOverlay`는 `change.kind === 'ignore'`로 이미 판별돼 소비처가 없어 만들지 않았다(소비처 없는 심볼을 남기지 않는 저장소 규율).
+  - **Task 4** (`21a73e4`): `_gitignore`가 `nest`·`monorepo`에만 있고 `next`에는 없어 유형별로 동작이 갈리던 것을 `templates/_shared/_gitignore`로 통합했다. 두 템플릿의 줄을 합집합으로 담고 devkit 블록(`.claude/*`·`!.claude/agents/`·`!.claude/commands/`)을 이 태스크에서 처음 채웠다 — 그전까지는 템플릿에 블록이 없어 구분자 쌍만 나왔다. `next`는 이번에 처음 `.gitignore` 오버레이를 받지만 병합이라 `create-next-app`의 규칙이 보존된다.
+  - **Task 5** (이 항목): e2e에 `nest`·`next` 두 케이스 모두 devkit 블록(`# >>> devkit >>>`·`.claude/*`·`!.claude/agents/`)과 스캐폴딩 CLI 규칙 보존(`node_modules`·`.next`)을 단언하는 줄을 추가했다 — 특히 `next`는 `create-next-app`이 쓴 `.gitignore` 위에 병합이 실제로 얹히는지가 핵심 검증이다. `packages/devkit-cli/README.md`의 `--only` 카테고리 표에서 `repo` 행에 `.gitignore`가 이 표의 유일한 병합 대상임을 각주로 표시하고, 표 아래 문단으로 병합 규칙을 설명했다 — 같은 문서 안에 `.gitignore`를 "통째로 덮는" 파일로 잘못 나열한 문장이 남아 있어(Task 2·3으로 이미 사실이 아니게 된 것) 그 목록에서도 뺐다.
+- **검증**: `pnpm test` 44파일/390개, `pnpm typecheck` 7/7, `pnpm lint:ox` 에러 0·warning 3, `pnpm lint:es` 8/8 — 각 태스크 마지막 단계에서 확인. `pnpm test:e2e` **13/13**(Task 5, `GITHUB_TOKEN=$(gh auth token) pnpm test:e2e`, 약 3분 소요). `git status`·`devkit-e2e-*` 잔재 없음 확인.
+- **커밋**: 설계 `df5ec1a`, 계획 `50f6eec` · `8b58376`+`2163fd7`(Task 1) · `dd4868d`+`73fee7c`(Task 2) · `3ab4028`(Task 3) · `21a73e4`(Task 4) · 이 항목(Task 5). 브랜치 `feature/gitignore-merge`, main 미머지.
+
 ## 2026-08-05
 
 ### devkit-cli 게시 가능화 — Task 1~7

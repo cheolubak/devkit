@@ -246,8 +246,13 @@ devkit update — demo-api (nest)
 | `ts` | `tsconfig.json`, `tsconfig.build.json` |
 | `test` | `jest.config.js`, `jest-e2e.config.js`, `test/jest-e2e.config.ts`, `vitest.config.ts`, `package.json`의 `jest` 키와 `scripts.test`·`test:watch`·`test:e2e` |
 | `deps` | `package.json`의 `dependencies`·`devDependencies`(`@cheolubak/*` 버전 범위 재선언 포함), `.npmrc`. **이 카테고리가 대상이고 `package.json`이 실제로 바뀌면 `pnpm install`이 돈다** |
-| `repo` | `.gitignore`, `pnpm-workspace.yaml`, `turbo.json`, `package.json`의 `packageManager`·`private`·`type`과 `scripts.build`·`dev`·`typecheck` |
+| `repo` | `.gitignore`\*, `pnpm-workspace.yaml`, `turbo.json`, `package.json`의 `packageManager`·`private`·`type`과 `scripts.build`·`dev`·`typecheck` |
 | `scaffold` | `src/**` — 프레임워크 뼈대. **기본 제외**이며 명시해야만 대상이 된다 |
+
+\* `.gitignore`는 이 표에서 유일하게 **통째로 덮이지 않고 병합된다.** 대상의
+기존 규칙을 유지한 채 devkit 규칙 중 없는 것만 더하고, `# >>> devkit >>>`
+블록만 통째로 갱신한다. 그 블록은 `.claude/` 안에서 devkit이 놓는 리뷰
+자산(`agents/`·`commands/`)만 추적하고 나머지 개인 스크래치는 무시한다.
 
 `link:`로 이 툴킷을 쓰던 프로젝트를 옮길 때는 한 가지를 손으로 해야 한다.
 `deps`는 `@cheolubak/*` 버전 범위와 `.npmrc`를 **얹기만** 하므로, 기존
@@ -296,7 +301,7 @@ devkit update — demo-api (nest)
 
 **JSON 파일은 통째로 덮지 않는다.** `package.json`·`tsconfig.json`은 키 단위로 병합되므로 직접 추가한 의존성과 `compilerOptions.paths`가 보존된다. 대가로 **키 삭제는 전파되지 않는다.**
 
-**JSON이 아닌 오버레이 파일은 반대로 통째로 덮는다.** 여기 해당하는 것: `CLAUDE.md`(`claude`), `eslint.config.mjs`·`.prettierignore`(`lint`), `.gitignore`(`repo`), `jest.config.js`·`jest-e2e.config.js`·`vitest.config.ts`(`test`), `pnpm-workspace.yaml`(`repo`, monorepo 전용), `.claude/agents/**`·`.claude/commands/**`(`claude`), `.github/workflows/**`(`ci`). 프로젝트 `CLAUDE.md`에 쌓아 온 규칙처럼 사용자가 직접 손댄 내용도 update 한 번에 템플릿판으로 되돌아간다. 데이터 손실은 아니다 — 변경 목록에 "덮어쓰기"로 뜨고, 워킹트리 dirty 게이트 덕에 `git checkout -- <path>`로 되돌릴 수 있다. 특정 파일군을 통째로 빼려면 `--only`에서 그 카테고리를 제외하면 된다 — 예: `CLAUDE.md`를 건드리지 않으려면 `--only ci,lint,ts,test,deps,repo`로 `claude`를 뺀다.
+**JSON이 아닌 오버레이 파일은 반대로 통째로 덮는다 — `.gitignore`만 예외다(위 참고).** 여기 해당하는 것: `CLAUDE.md`(`claude`), `eslint.config.mjs`·`.prettierignore`(`lint`), `jest.config.js`·`jest-e2e.config.js`·`vitest.config.ts`(`test`), `pnpm-workspace.yaml`(`repo`, monorepo 전용), `.claude/agents/**`·`.claude/commands/**`(`claude`), `.github/workflows/**`(`ci`). 프로젝트 `CLAUDE.md`에 쌓아 온 규칙처럼 사용자가 직접 손댄 내용도 update 한 번에 템플릿판으로 되돌아간다. 데이터 손실은 아니다 — 변경 목록에 "덮어쓰기"로 뜨고, 워킹트리 dirty 게이트 덕에 `git checkout -- <path>`로 되돌릴 수 있다. 특정 파일군을 통째로 빼려면 `--only`에서 그 카테고리를 제외하면 된다 — 예: `CLAUDE.md`를 건드리지 않으려면 `--only ci,lint,ts,test,deps,repo`로 `claude`를 뺀다.
 
 **워킹트리가 dirty하면 거부한다.** 되돌리는 수단이 git이기 때문이다. `--force`로 우회할 수 있지만, 그러면 update의 결과와 미커밋 작업이 같은 diff에 섞인다. **`--dry-run`은 이 게이트를 통과한다** — 아무것도 쓰지 않으므로 되돌림 안전망이 애초에 필요 없고, 여기서 막으면 git 저장소가 아닌 대상에서 "그래도 계속할까요?" 확인 프롬프트에 걸려 비대화형 실행(CI 등)이 멈춰 선다. 즉 **git 저장소가 아닌 대상도 `--dry-run`으로는 미리 볼 수 있다** — 다만 실제 실행(`--dry-run` 없이)은 되돌릴 수단이 없다는 경고를 한 번 더 받는다.
 

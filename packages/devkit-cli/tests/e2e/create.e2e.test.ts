@@ -136,6 +136,13 @@ describe('devkit create --type nest', () => {
     // 실제로 targetDir에 쓰는 경로는 여기 e2e가 처음 검증한다.
     expect(existsSync(join(dir, '_gitignore'))).toBe(false);
     expect(existsSync(join(dir, '.gitignore'))).toBe(true);
+    // 스캐폴딩 CLI 가 쓴 규칙 위에 얹혔는지 — 통째로 덮었다면 nest CLI 의
+    // 줄이 사라진다. 병합이 실제 파일에서 동작하는지는 e2e 만 밟는다.
+    const gitignore = readFileSync(join(dir, '.gitignore'), 'utf8');
+    expect(gitignore).toContain('# >>> devkit >>>');
+    expect(gitignore).toContain('.claude/*');
+    expect(gitignore).toContain('!.claude/agents/');
+    expect(gitignore).toContain('node_modules');
     const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
     expect(claude).toContain(`# ${basename(dir)}`);
     expect(claude).not.toContain('__NAME__');
@@ -181,6 +188,15 @@ describe('devkit create --type next', () => {
     const eslintConfig = readFileSync(join(dir, 'eslint.config.mjs'), 'utf8');
     expect(eslintConfig).toContain('@cheolubak/eslint-plugin-fsd/next');
     expect(existsSync(join(dir, 'vitest.config.ts'))).toBe(true);
+
+    // next 는 이번 작업에서 처음 .gitignore 오버레이를 받는다 — 병합이라
+    // create-next-app 의 줄이 보존되는지가 핵심이다(통째 덮어쓰기였다면
+    // 전부 날아갔을 것이다).
+    const gitignore = readFileSync(join(dir, '.gitignore'), 'utf8');
+    expect(gitignore).toContain('# >>> devkit >>>');
+    expect(gitignore).toContain('.claude/*');
+    // create-next-app 이 쓴 줄이 남아 있어야 한다 — 병합이지 교체가 아니다.
+    expect(gitignore).toContain('.next');
 
     // 이월 (6): "type": "module"이 안전하다는 근거(.js/.cjs 파일 0개)의 기계적 확인.
     expect(collectStrayJs(dir)).toEqual([]);
