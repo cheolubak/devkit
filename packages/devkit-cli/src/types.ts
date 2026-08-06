@@ -22,7 +22,13 @@ export type StepKind = 'delegate' | 'removeFiles' | 'copyOverlay' | 'mergeJson' 
  */
 export type PlannedChange =
   | { kind: 'file'; relPath: string; content: string }
-  | { kind: 'json'; file: string; patch: JsonObject };
+  | { kind: 'json'; file: string; patch: JsonObject }
+  /**
+   * 무시 파일(.gitignore). 통째로 덮으면 사용자가 추가한 규칙이 사라지므로
+   * 줄 단위로 병합한다(설계 2.1절). `lines` 는 없으면 더할 템플릿 줄,
+   * `block` 은 devkit 구분자 안에 들어갈 내용이다.
+   */
+  | { kind: 'ignore'; file: string; lines: string[]; block: string[] };
 
 export interface Step {
   kind: StepKind;

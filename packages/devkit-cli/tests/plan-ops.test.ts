@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -76,5 +76,35 @@ describe('mergeJson.plan', () => {
     const changes = await step.plan!(makeCtx());
 
     expect(changes[0]).toMatchObject({ kind: 'json', file: 'apps/web/package.json' });
+  });
+});
+
+describe('copyOverlay 의 .gitignore 처리', () => {
+  it('plan 이 ignore 변경으로 낸다 — 통짜 file 이 아니다', async () => {
+    const ctx = makeCtx();
+    const changes = await copyOverlay('nest').plan!(ctx);
+    const gitignore = changes.find(
+      (c) => (c.kind === 'ignore' ? c.file : c.kind === 'file' ? c.relPath : '') === '.gitignore',
+    );
+    expect(gitignore?.kind).toBe('ignore');
+  });
+
+  it('run 이 대상의 기존 내용을 보존한다', async () => {
+    const ctx = makeCtx();
+    writeFileSync(join(ctx.targetDir, '.gitignore'), '내-비밀-폴더/\n');
+
+    await copyOverlay('nest').run(ctx);
+
+    const written = readFileSync(join(ctx.targetDir, '.gitignore'), 'utf8');
+    // 사용자가 넣은 규칙이 보존되는가 — 이 테스트의 본질이다.
+    expect(written).toContain('내-비밀-폴더/');
+    // 템플릿 줄이 얹혔는가. "보존"만 보면 템플릿 줄이 아예 안 얹혀도
+    // 통과하므로, 보존과 추가를 각각 고정해야 배선 전체가 덮인다.
+    expect(written).toContain('node_modules/');
+    // 블록 내용은 아직 비어 있다(템플릿에 블록을 넣는 것은 뒤 태스크다).
+    // 구분자 쌍만 확인한다 — mergeIgnore 는 block 이 비어도 쌍을 남긴다.
+    // 블록 내용 검증은 템플릿에 블록이 들어간 뒤 e2e가 실제 생성물에서 한다.
+    expect(written).toContain('# >>> devkit >>>');
+    expect(written).toContain('# <<< devkit <<<');
   });
 });

@@ -8,6 +8,7 @@ import {
 } from '../lib/categories.js';
 import type { PlannedFile } from '../lib/classify.js';
 import { markerPatch, type ProjectType } from '../lib/marker.js';
+import { mergeIgnore } from '../ops/merge-ignore.js';
 import { applyPatch, type JsonObject } from '../ops/merge-json.js';
 import { monorepoRecipe } from '../recipes/monorepo.js';
 import { nestRecipe } from '../recipes/nest.js';
@@ -109,6 +110,19 @@ export async function buildPlan({
       );
       const relPath = joinRel(rel, stepRelPath);
       const fileCategory = categoryOf(stepRelPath);
+
+      if (change.kind === 'ignore') {
+        // 대상 내용을 읽어 병합한다. 통째로 덮으면 사용자가 추가한 규칙이
+        // 사라진다 — JSON 오버레이가 reduceJsonOverlay 로 피하는 것과 같은
+        // 문제다(설계 1.2절).
+        if (fileCategory !== null && categories.has(fileCategory)) {
+          // oxlint-disable-next-line no-await-in-loop -- 위와 같은 이유
+          const existing = await readFile(join(ctx.targetDir, relPath), 'utf8').catch(() => '');
+          files.set(relPath, mergeIgnore(existing, change.lines, change.block));
+          fileCategories.set(relPath, fileCategory);
+        }
+        continue;
+      }
 
       if (change.kind === 'file' && !isJsonOverlay(stepRelPath)) {
         // 파일 오버레이는 카테고리 하나로 전부 판단한다.

@@ -5,6 +5,7 @@ import { dirname, join, posix, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { packageRoot } from '../lib/layout.js';
 import type { Ctx, PlannedChange, Step } from '../types.js';
+import { DEVKIT_BLOCK_END, DEVKIT_BLOCK_START, mergeIgnore } from './merge-ignore.js';
 import { pathExists } from './path-exists.js';
 
 /** '_' 접두어를 '.'으로 바꾼다. _gitignore → .gitignore */
@@ -26,6 +27,28 @@ function templatesRoot(): string {
     throw new Error(`templates 디렉토리를 찾지 못했습니다 (확인한 경로: ${root}).`);
   }
   return root;
+}
+
+/**
+ * 템플릿 무시 파일을 "일반 줄"과 "devkit 블록"으로 가른다.
+ *
+ * 블록은 통째로 갈아끼워지고 일반 줄은 대상에 없을 때만 더해진다 —
+ * 다루는 방식이 다르므로 여기서 나눈다.
+ */
+function splitIgnoreTemplate(content: string): { lines: string[]; block: string[] } {
+  const all = content.replace(/\n$/, '').split('\n');
+  const startAt = all.indexOf(DEVKIT_BLOCK_START);
+  if (startAt === -1) return { lines: all, block: [] };
+  const endAt = all.indexOf(DEVKIT_BLOCK_END, startAt);
+  if (endAt === -1) {
+    throw new Error(
+      `템플릿 무시 파일에 ${DEVKIT_BLOCK_START} 는 있는데 ${DEVKIT_BLOCK_END} 가 없습니다.`,
+    );
+  }
+  return {
+    lines: [...all.slice(0, startAt), ...all.slice(endAt + 1)],
+    block: all.slice(startAt + 1, endAt),
+  };
 }
 
 /**
@@ -54,6 +77,13 @@ async function collectTree(
       let content = await readFile(join(from, entry.name), 'utf8');
       for (const [key, value] of Object.entries(vars)) {
         content = content.replaceAll(`__${key}__`, value);
+      }
+
+      // .gitignore 는 통째로 덮으면 사용자가 추가한 규칙이 사라진다(설계
+      // 2.1절). 다른 파일과 다르게 병합 대상으로 낸다 — run 이 mergeIgnore 로
+      // 처리한다.
+      if (name === '.gitignore') {
+        return [{ kind: 'ignore', file: rel, ...splitIgnoreTemplate(content) }];
       }
       return [{ kind: 'file', relPath: rel, content }];
     }),
@@ -126,6 +156,19 @@ export function copyOverlay(
 
       const changes = await plan(ctx);
       for (const change of changes) {
+        if (change.kind === 'ignore') {
+          const target = join(ctx.targetDir, ...change.file.split('/'));
+          // 기존 내용을 읽어야 병합할 수 있다 — 없으면(신규 프로젝트) 빈
+          // 문자열로 취급한다.
+          // oxlint-disable-next-line no-await-in-loop -- 위와 같은 이유로 병렬화할 수 없다
+          const existing = await readFile(target, 'utf8').catch(() => '');
+          // oxlint-disable-next-line no-await-in-loop -- 위와 같은 이유
+          await mkdir(dirname(target), { recursive: true });
+          // oxlint-disable-next-line no-await-in-loop -- 위와 같은 이유
+          await writeFile(target, mergeIgnore(existing, change.lines, change.block));
+          ctx.log(`  병합: ${change.file.split('/').join(sep)}`);
+          continue;
+        }
         if (change.kind !== 'file') continue;
         const target = join(ctx.targetDir, ...change.relPath.split('/'));
         // 부분 실패 시 어디까지 썼는지가 로그 순서로 드러나야 한다 — 파일마다
