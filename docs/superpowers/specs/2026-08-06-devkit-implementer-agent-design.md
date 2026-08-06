@@ -59,6 +59,25 @@ templates/{nest,next,monorepo}/CLAUDE.md                          유형별 3벌
 `apps/web/.claude` 를 `required: true` 로 제거한다. 즉 모노레포에서는
 **루트의 monorepo 판 1벌만** 남는다. 새 에이전트도 같은 규칙을 그대로 탄다.
 
+### 1.5 저장소 `.gitignore` 가 템플릿의 `.claude` 를 삼키고 있었다 (구현 중 발견)
+
+루트 `.gitignore` 의 `.claude/`(로컬 에이전트 스크래치용)가
+`packages/devkit-cli/templates/<type>/.claude/` 까지 함께 무시하고 있었다.
+기존 `devkit-reviewer.md` 들은 `-f` 로 강제 추가돼 추적 중이라 이 사실이
+드러나지 않았다.
+
+증상이 위험한 이유는 **아무것도 실패하지 않기** 때문이다. 테스트 스위트는
+디스크를 읽으므로 전부 통과하고, `git add -A` 는 조용히 건너뛰며, 커밋도
+성공한다. clone·CI·게시본에는 파일이 없는데 로컬 검증은 초록불이다.
+
+조치 2건:
+
+1. `.gitignore` 에 `!packages/devkit-cli/templates/*/.claude/` 를 더한다.
+   git 은 무시된 **디렉토리** 아래로 내려가지 않으므로 파일 하나만 되살릴 수
+   없다 — 디렉토리 자체를 되살려야 한다. 루트 `.claude/` 는 계속 무시된다.
+2. `tests/overlay-coverage.test.ts` 에 "템플릿의 모든 파일이 git 에 추적된다"
+   관문을 더한다. 이 사고의 재발을 잡는 유일한 자동 검증이다.
+
 ## 2. 범위 결정
 
 ### 2.1 확정된 결정 3건
@@ -179,6 +198,8 @@ follow-up 이다(7절).
 5. `pnpm --filter @cheolubak/devkit-cli test` 전체 그린.
 6. `pnpm lint` · `pnpm format:check` 그린.
 7. `src/` 아래 소스 변경이 0 이다 — 배선이 실제로 불필요했음을 증명한다.
+8. 세 에이전트 문서가 **git 에 추적된다**(1.5절). `git ls-files` 로 확인되며
+   `tests/overlay-coverage.test.ts` 가 자동으로 지킨다.
 
 ## 7. 미결 사항 / follow-up
 
