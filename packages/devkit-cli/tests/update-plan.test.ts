@@ -258,11 +258,37 @@ describe('.gitignore 병합', () => {
     // 템플릿 줄이 얹혔는가. "보존"만 보면 통째 교체가 아니라 통째 유지해도
     // 통과하므로, 병합이 실제로 일어났음을 별도로 고정한다.
     expect(gitignore!.content).toContain('coverage/');
-    // 블록 내용은 아직 비어 있다(템플릿에 블록을 넣는 것은 Task 4다).
-    // 구분자 쌍만 확인한다 — mergeIgnore는 block이 비어도 쌍을 남긴다.
-    // 블록 내용 검증은 템플릿에 블록이 들어간 뒤 e2e가 실제 생성물에서 한다.
+    // 구분자 쌍과 블록 내용 — Task 4가 템플릿에 devkit 블록을 채운 뒤로는
+    // update 경로에서도 블록 내용을 직접 검증할 수 있다(예전엔 템플릿에
+    // 블록이 없어 구분자 쌍만 봤다).
     expect(gitignore!.content).toContain('# >>> devkit >>>');
     expect(gitignore!.content).toContain('# <<< devkit <<<');
+    expect(gitignore!.content).toContain('.claude/*');
+  });
+
+  it('.claude/ 를 통째로 무시하던 대상은 update 뒤 그 줄이 사라져 리뷰 자산이 추적된다', async () => {
+    // 최종 리뷰 Critical 1 회귀: "기존 내용 유지" 원칙만 따르면 이 줄이
+    // 살아남는데, git은 이미 무시된 디렉토리 안으로 안 내려가 block의
+    // `!.claude/agents/`가 무력해진다 — mergeIgnore의 조상 제외 예외가
+    // update 경로에서도 실제로 적용되는지 여기서 고정한다.
+    const ctx = makeTarget();
+    writeFileSync(join(ctx.targetDir, '.gitignore'), '.claude/\n내-비밀-폴더/\n');
+
+    const plan = await buildPlan({
+      type: 'nest',
+      ctx,
+      categories: new Set<Category>(['repo']),
+      marker: null,
+    });
+
+    const gitignore = plan.find((f) => f.relPath === '.gitignore');
+    expect(gitignore).toBeDefined();
+    // 조상 제외 줄만 정확히 지워졌고
+    expect(gitignore!.content.split('\n')).not.toContain('.claude/');
+    // 무관한 사용자 줄은 그대로 남는다
+    expect(gitignore!.content).toContain('내-비밀-폴더/');
+    // block의 부정 패턴이 실제로 살아 있다
+    expect(gitignore!.content).toContain('!.claude/agents/');
   });
 
   it('두 번 돌려도 같은 내용이다 — 멱등이다', async () => {

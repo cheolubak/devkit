@@ -65,4 +65,44 @@ describe('mergeIgnore', () => {
     const broken = `node_modules/\n${DEVKIT_BLOCK_START}\n.claude/*\n`;
     expect(() => mergeIgnore(broken, [], BLOCK)).toThrow(/구분자/);
   });
+
+  describe('block 의 부정 패턴을 무력화하는 조상 제외 줄', () => {
+    // 회귀 재현(최종 리뷰 Critical 1): 대상에 `.claude/` 가 이미 있으면
+    // "기존 내용 유지" 원칙에 따라 그 줄이 살아남는데, git 은 제외된
+    // 디렉토리 안으로 내려가지 않아 block 의 `!.claude/agents/` 가 아무
+    // 효력이 없다 — 리뷰가 `git check-ignore` 로 직접 재현했다.
+
+    it('대상의 .claude/ 줄을 지워 block 의 부정 패턴이 실제로 살게 한다', () => {
+      const result = mergeIgnore('.claude/\n', ['node_modules/'], BLOCK);
+      // .claude/ 단독 줄(조상 제외)은 사라졌고
+      expect(result.split('\n')).not.toContain('.claude/');
+      // block 자체와 그 안의 부정 패턴은 그대로 남는다
+      expect(result).toContain('.claude/*');
+      expect(result).toContain('!.claude/agents/');
+      // 무관한 기존 내용은 그대로 유지된다 — 조상 줄만 골라 지운다
+      expect(result).toContain('node_modules/');
+    });
+
+    it('트레일링 슬래시가 없는 .claude 도 같은 조상으로 취급한다', () => {
+      const result = mergeIgnore('.claude\n', [], BLOCK);
+      expect(result.split('\n')).not.toContain('.claude');
+      expect(result).toContain('!.claude/agents/');
+    });
+
+    it('.claude/foo 처럼 자식을 가리키는 줄은 건드리지 않는다 — 정확히 일치할 때만 지운다', () => {
+      const result = mergeIgnore('.claude/foo\n', [], BLOCK);
+      expect(result).toContain('.claude/foo');
+      expect(result).toContain('!.claude/agents/');
+    });
+
+    it('block 에 부정 패턴이 없으면 아무 조상 줄도 지우지 않는다', () => {
+      const result = mergeIgnore('.claude/\n', [], ['.claude/*']);
+      expect(result).toContain('.claude/');
+    });
+
+    it('조상 제외 줄을 지운 뒤에도 두 번 돌리면 커지지 않는다 — 멱등이다', () => {
+      const once = mergeIgnore('.claude/\nnode_modules/\n', [], BLOCK);
+      expect(mergeIgnore(once, [], BLOCK)).toBe(once);
+    });
+  });
 });

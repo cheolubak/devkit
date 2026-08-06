@@ -16,6 +16,38 @@ function significant(line: string): string | null {
 }
 
 /**
+ * block 안의 `!X/Y/` 부정 패턴에서, 그 패턴을 무력화하는 조상 디렉토리
+ * 경로(`X`, 깊으면 `X/Y` 도)를 전부 뽑는다. 부정 패턴이 없으면 빈 Set.
+ */
+function ancestorPathsToStrip(block: readonly string[]): Set<string> {
+  const ancestors = new Set<string>();
+  for (const line of block) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('!')) continue;
+    const segments = trimmed
+      .slice(1)
+      .split('/')
+      .filter((segment) => segment.length > 0);
+    // 마지막 세그먼트가 부정 패턴 자신이다 — 그 앞의 모든 접두가 조상이다.
+    for (let i = 1; i < segments.length; i += 1) {
+      ancestors.add(segments.slice(0, i).join('/'));
+    }
+  }
+  return ancestors;
+}
+
+/**
+ * line 이 ancestors 안의 어떤 경로와 "정확히" 같은 디렉토리 제외 줄인지
+ * 본다. 트레일링 슬래시 유무만 다른 것도 같은 줄로 취급한다(`.claude` ==
+ * `.claude/`). `.claude/foo` 처럼 자식을 가리키는 줄은 걸리지 않는다 —
+ * exact match 만 본다.
+ */
+function isAncestorExclusion(line: string, ancestors: ReadonlySet<string>): boolean {
+  const trimmed = line.trim().replace(/\/$/, '');
+  return ancestors.has(trimmed);
+}
+
+/**
  * 무시 파일을 병합한다. 대상의 기존 내용을 유지하고, 없는 템플릿 줄만
  * 더하고, devkit 블록은 통째로 갈아끼운다.
  *
@@ -47,6 +79,19 @@ export function mergeIgnore(existing: string, lines: string[], block: string[]):
     head = existingLines.slice(0, startAt);
     tail = existingLines.slice(endAt + 1);
   }
+
+  // "줄을 지우지 않는다"는 원칙의 유일한 예외다. block 이 `!.claude/agents/`
+  // 처럼 특정 하위 경로를 되살리려 하는데, 대상에 그 조상을 통째로 무시하는
+  // 줄(`.claude/`·`.claude`)이 이미 있으면 git 은 애초에 그 디렉토리 안으로
+  // 내려가지 않아 부정 패턴이 물리적으로 아무 효력이 없다(git-ignore(5)).
+  // 즉 이 줄을 "유지"하면 블록 자체가 죽은 코드가 된다 — 남기는 쪽이 항상
+  // 안전하다는 일반 원칙이 여기서는 거꾸로 뒤집힌다. 정확히 일치하는 조상
+  // 줄만 지운다 — `.claude/foo` 처럼 자식을 가리키는 줄은 건드리지 않는다.
+  const ancestorsToStrip = ancestorPathsToStrip(block);
+  const stripAncestors = (arr: readonly string[]): string[] =>
+    arr.filter((line) => !isAncestorExclusion(line, ancestorsToStrip));
+  head = stripAncestors(head);
+  tail = stripAncestors(tail);
 
   // 존재 판정을 이원화한다. 유의미 줄은 trim 키로, 빈 줄·주석은 원문 그대로
   // 비교한다. 하나의 Set 으로 합치면 안 되는 이유: significant() 가 빈 줄·

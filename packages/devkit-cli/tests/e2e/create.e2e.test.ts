@@ -203,8 +203,9 @@ describe('devkit create --type next', () => {
     // create-next-app 이 쓴 줄이 남아 있어야 한다 — 병합이지 교체가 아니다.
     // 이 저장소의 create 경로에서 "보존"을 검증하는 유일한 케이스라(nest는
     // 위 케이스의 주석 참고) 하나만 보지 않는다 — devkit 템플릿에 전혀
-    // 없는 문자열만 골라 우연한 일치를 배제했다.
-    expect(gitignore).toContain('.next');
+    // 없는 문자열만 골랐다(`.next`는 뺐다 — 템플릿에도 `.next/`가 있어
+    // `toContain('.next')`가 부분 문자열로 걸려 이 줄이 전부 사라져도
+    // 통과했을 것이다 — 최종 리뷰 Minor 1).
     expect(gitignore).toContain('.vercel');
     expect(gitignore).toContain('*.tsbuildinfo');
     expect(gitignore).toContain('next-env.d.ts');
@@ -237,6 +238,13 @@ describe('devkit create --type monorepo', () => {
     // 이월 (1): 루트 오버레이 배선 검증(templates/monorepo).
     expect(existsSync(join(dir, '_gitignore'))).toBe(false);
     expect(existsSync(join(dir, '.gitignore'))).toBe(true);
+    // nest·next 케이스와 대칭 — monorepo도 루트에서 copyOverlay('_shared')를
+    // 부르므로 같은 코드 경로다(최종 리뷰 Minor 3, 완료 기준 1의 "세 유형
+    // 전부"에 monorepo도 포함된다).
+    const monoGitignore = readFileSync(join(dir, '.gitignore'), 'utf8');
+    expect(monoGitignore).toContain('# >>> devkit >>>');
+    expect(monoGitignore).toContain('.claude/*');
+    expect(monoGitignore).toContain('!.claude/agents/');
     const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
     expect(claude).toContain(`# ${basename(dir)}`);
     expect(claude).not.toContain('__NAME__');
