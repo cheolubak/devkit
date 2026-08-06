@@ -1,0 +1,91 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# contents: 버전 커밋·태그 push 용, packages: 게시용.
+# GitHub Actions 의 기본 GITHUB_TOKEN 에 둘 다 줄 수 있어 PAT 이 필요 없다.
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 지난 릴리스 태그 이후를 읽어야 한다
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24 # .ts 를 네이티브로 실행한다(빌드 없이 릴리스 스크립트 호출)
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: 릴리스 대상 판정
+        id: decide
+        run: |
+          CONFIG_SINCE=$(git tag --list 'config-v*' --sort=-v:refname | head -1)
+          CLI_SINCE=$(git tag --list 'cli-v*' --sort=-v:refname | head -1)
+          CONFIG=$(node packages/devkit-cli/src/release/decide.ts "$CONFIG_SINCE" | node -e "process.stdin.on('data',d=>process.stdout.write(JSON.parse(d).config??''))")
+          CLI=$(node packages/devkit-cli/src/release/decide.ts "$CLI_SINCE" | node -e "process.stdin.on('data',d=>process.stdout.write(JSON.parse(d).cli??''))")
+          echo "config=$CONFIG" >> "$GITHUB_OUTPUT"
+          echo "cli=$CLI" >> "$GITHUB_OUTPUT"
+          echo "판정 — config: '${CONFIG:-없음}', cli: '${CLI:-없음}'"
+
+      - name: 검증
+        if: steps.decide.outputs.config != '' || steps.decide.outputs.cli != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pnpm build
+          pnpm test
+          pnpm typecheck
+          pnpm lint:ox
+          pnpm lint:es
+          pnpm test:e2e
+
+      - name: 버전 갱신
+        if: steps.decide.outputs.config != '' || steps.decide.outputs.cli != ''
+        id: bump
+        run: |
+          if [ -n "${{ steps.decide.outputs.config }}" ]; then
+            V=$(node packages/devkit-cli/src/release/apply.ts config "${{ steps.decide.outputs.config }}")
+            echo "config_version=$V" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "${{ steps.decide.outputs.cli }}" ]; then
+            V=$(node packages/devkit-cli/src/release/apply.ts cli "${{ steps.decide.outputs.cli }}")
+            echo "cli_version=$V" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 게시
+        if: steps.decide.outputs.config != '' || steps.decide.outputs.cli != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm -r publish --no-git-checks --access public
+
+      # 게시가 성공한 뒤에만 커밋한다 — 게시가 실패하면 저장소가
+      # "올렸다고 하는데 레지스트리엔 없는" 상태로 남지 않는다.
+      - name: 커밋과 태그
+        if: steps.decide.outputs.config != '' || steps.decide.outputs.cli != ''
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m "build: 릴리스 버전을 올린다 [skip ci]"
+          if [ -n "${{ steps.bump.outputs.config_version }}" ]; then
+            git tag "config-v${{ steps.bump.outputs.config_version }}"
+          fi
+          if [ -n "${{ steps.bump.outputs.cli_version }}" ]; then
+            git tag "cli-v${{ steps.bump.outputs.cli_version }}"
+          fi
+          git push --follow-tags
