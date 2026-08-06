@@ -57,6 +57,17 @@ function writeVersion(pkgPath: string, version: string): void {
   writeFileSync(pkgPath, replaced);
 }
 
+/**
+ * 락스텝 기준 버전 선정용 정렬 키. 문자열 비교는 `0.10.0 < 0.9.0` 으로
+ * 뒤집힌다 — 자리별 숫자로 고른다. 바깥 스코프를 캡처하지 않으므로
+ * 모듈 스코프에 둔다(호출부 안에 두면 호출마다 새로 만들어진다).
+ */
+function rank(v: string): number {
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(v);
+  if (m === null) throw new Error(`버전이 X.Y.Z 형식이 아닙니다: ${v}`);
+  return Number(m[1]) * 1e12 + Number(m[2]) * 1e6 + Number(m[3]);
+}
+
 // 워크플로가 `node src/release/apply.ts <axis> <bump>` 로 부르고 새 버전을 읽는다.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const axis = process.argv[2];
@@ -71,12 +82,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   } else if (axis === 'config') {
     // 락스텝 — 6개가 같은 버전을 쓴다. 기준은 가장 높은 것이다.
     const paths = CONFIG_PACKAGES.map((name) => join(root, 'packages', name, 'package.json'));
-    // 문자열 비교는 0.10.0 < 0.9.0 으로 뒤집힌다 — 자리별 숫자로 고른다.
-    const rank = (v: string): number => {
-      const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(v);
-      if (m === null) throw new Error(`버전이 X.Y.Z 형식이 아닙니다: ${v}`);
-      return Number(m[1]) * 1e12 + Number(m[2]) * 1e6 + Number(m[3]);
-    };
     const versions = paths.map(readVersion);
     const highest = versions.reduce((a, b) => (rank(a) >= rank(b) ? a : b));
     const version = nextVersion(highest, bump);
