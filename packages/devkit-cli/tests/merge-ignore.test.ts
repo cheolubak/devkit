@@ -27,6 +27,14 @@ describe('mergeIgnore', () => {
     expect(mergeIgnore(once, ['dist/'], BLOCK)).toBe(once);
   });
 
+  it('lines에 주석·빈 줄이 섞여도 두 번 돌리면 커지지 않는다 — 멱등이다', () => {
+    // 회귀 재현: significant() 가 주석·빈 줄에 null 을 반환하는데 존재 판정 없이
+    // 무조건 추가되면, 같은 lines 로 두 번 돌릴 때마다 주석이 계속 쌓인다.
+    const linesWithComment = ['# devkit 안내', '', 'node_modules/'];
+    const once = mergeIgnore('', linesWithComment, BLOCK);
+    expect(mergeIgnore(once, linesWithComment, BLOCK)).toBe(once);
+  });
+
   it('블록이 이미 있으면 안쪽만 갈아끼운다', () => {
     const before = mergeIgnore('node_modules/\n', [], ['.claude/*']);
     const after = mergeIgnore(before, [], ['.claude/*', '!.claude/commands/']);
@@ -43,8 +51,11 @@ describe('mergeIgnore', () => {
     expect(after).toContain('c/');
   });
 
-  it('빈 줄과 주석은 중복 판정에서 무시한다 — 그대로 더한다', () => {
-    // 빈 줄을 "이미 있다"로 보면 템플릿의 구획 빈 줄이 영영 안 들어간다.
+  it('서로 다른 빈 줄·주석은 유의미 중복 판정을 타지 않는다 — 그대로 더한다', () => {
+    // significant() 는 빈 줄·주석에 null 을 반환해 trim 키 기반 중복 판정
+    // 대상에서 빠진다. 하지만 원문이 다르면(내 주석 ≠ devkit 구획) 원문 일치
+    // 판정도 걸리지 않으므로 둘 다 남는다. 완전히 같은 문구가 이미 있을 때만
+    // 생략된다(멱등성 테스트가 그 경로를 덮는다).
     const result = mergeIgnore('\n# 내 주석\n', ['# devkit 구획', 'dist/'], BLOCK);
     expect(result).toContain('# 내 주석');
     expect(result).toContain('# devkit 구획');

@@ -48,17 +48,34 @@ export function mergeIgnore(existing: string, lines: string[], block: string[]):
     tail = existingLines.slice(endAt + 1);
   }
 
-  const present = new Set<string>();
+  // 존재 판정을 이원화한다. 유의미 줄은 trim 키로, 빈 줄·주석은 원문 그대로
+  // 비교한다. 하나의 Set 으로 합치면 안 되는 이유: significant() 가 빈 줄·
+  // 주석에 null 을 반환하는데 그걸 존재 판정 없이 매번 추가하면 같은 lines
+  // 로 두 번 돌릴 때마다 주석이 계속 쌓여 멱등성이 깨진다(리뷰 회귀 재현).
+  //
+  // 트레이드오프: 원문 일치는 위치를 구분 못 한다 — 대상에 빈 줄이 이미
+  // 하나라도 있으면 템플릿이 구획용으로 넣으려는 빈 줄도 "이미 있음"으로
+  // 판정돼 생략된다. 빈 줄 자체는 무해하므로(gitignore 의미에 영향 없음)
+  // 멱등성을 얻는 대가로 받아들인다. 주석은 텍스트가 정확히 같을 때만
+  // 생략되므로 사용자가 쓴 다른 주석은 그대로 남는다(테스트 7).
+  const significantPresent = new Set<string>();
+  const verbatimPresent = new Set<string>();
   for (const line of [...head, ...tail]) {
     const key = significant(line);
-    if (key !== null) present.add(key);
+    if (key !== null) significantPresent.add(key);
+    else verbatimPresent.add(line);
   }
 
   const added: string[] = [];
   for (const line of lines) {
     const key = significant(line);
-    if (key !== null && present.has(key)) continue;
-    if (key !== null) present.add(key);
+    if (key !== null) {
+      if (significantPresent.has(key)) continue;
+      significantPresent.add(key);
+    } else {
+      if (verbatimPresent.has(line)) continue;
+      verbatimPresent.add(line);
+    }
     added.push(line);
   }
 
