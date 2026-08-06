@@ -1,5 +1,15 @@
 # Work Log
 
+## 2026-08-07
+
+### 릴리스 워크플로 첫 실행 진단과 `assertDistFresh` 테스트의 CI 전용 실패 수정
+- **변경 파일**: `packages/devkit-cli/tests/bin.test.ts` · `work-log.md`
+- **내용**: "main 에 푸시했는데 워크플로가 안 돌았다"에서 출발해 두 가지가 나왔다.
+  1. **워크플로는 안 돈 게 아니라 19분 늦게 돌았다.** 푸시 `045113d`(22:53:49Z)에 대한 run 이 **23:13:03Z** 에 생성됐다. 그 사이 설정은 전부 정상이었다 — 워크플로 `state: active`, repo `actions/permissions.enabled: true`, `[skip ci]` 없음, 파일은 `100644` 정규 파일, 계정의 다른 저장소는 3일 전 정상 실행. 진단을 가른 지표는 **워크플로 레코드의 `created_at` 이 푸시 시각과 초 단위로 일치**한다는 것이었다(= Actions 인덱서가 그 푸시를 이미 읽었다는 증거이므로 설정 오류 가설이 전부 배제된다). 유일한 증상은 HEAD 의 check-suites 에 github-actions 만 없는 것이었다. 결론: 설정 변경 불필요, 앞으로 같은 증상은 20분 기다린 뒤 판단할 것.
+  2. **그 run 은 검증 스텝에서 실패했고, 이건 진짜 결함이었다.** `tests/bin.test.ts` 의 `assertDistFresh` 테스트가 `dist/bin.js` → `src/bin.ts` 를 연속으로 써서 src 가 더 새롭다고 가정하는데, **리눅스의 파일 mtime 은 커널의 coarse 시계(타이머 틱 1~4ms)에서 온다** — 두 쓰기가 같은 mtime 을 받아 `newestMtime(src) > distBin.mtimeMs` 의 엄격 부등호가 거짓이 되고 예외가 안 난다. macOS(APFS)는 서브밀리초라 로컬에선 0.14ms 차이로 항상 통과했다(실측). 쓰기 순서 대신 `utimesSync` 로 dist 를 60초 과거로 명시적으로 밀어 해상도 의존을 없앴다.
+- **검증**: `pnpm build` 3/3 · `pnpm test` **364개/31파일** · `pnpm typecheck` 7/7 · `pnpm lint:ox` 에러 0·warning 3 · `pnpm lint:es` 8/8 · `pnpm test:e2e` **13/13**(179s). `git status` 잔재 없음. 첫 실행 때 `main()` 테스트 2건이 함께 빨갛게 나왔는데 이는 로컬 `dist` 가 낡아 가드에 걸린 것으로, `pnpm build` 선행 후 사라졌다 — CI 검증 스텝이 build 를 test 보다 앞에 두는 이유다.
+- **커밋**: `843b2c3`(트리거 확인용 빈 커밋), 이 항목
+
 ## 2026-08-06
 
 ### .gitignore 병합과 .claude 리뷰 자산 추적 (설계 → Task 1~5 구현·검증)
