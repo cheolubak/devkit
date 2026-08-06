@@ -1,0 +1,19 @@
+node_modules/
+dist/
+coverage/
+.turbo/
+.next/
+out/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# >>> devkit >>>
+# Claude 로컬 스크래치는 무시하되 devkit 이 놓는 리뷰 자산은 추적한다 —
+# 팀원과 CI 가 같은 리뷰 기준을 쓰려면 커밋돼야 한다.
+.claude/*
+!.claude/agents/
+!.claude/commands/
+# <<< devkit <<<

@@ -22,13 +22,17 @@ describe('copyOverlay.plan', () => {
     const step = copyOverlay('_shared');
     const changes = await step.plan!(makeCtx());
 
+    // _gitignore 는 Task 4부터 _shared 에 있다 — 세 유형이 같은 처리를 받는다.
     const paths = changes.map((c) => (c.kind === 'file' ? c.relPath : c.file)).sort();
     expect(paths).toEqual([
       '.claude/commands/review.md',
       '.github/workflows/claude-review.yml',
+      '.gitignore',
       '.npmrc',
     ]);
-    expect(changes.every((c) => c.kind === 'file')).toBe(true);
+    // .gitignore 는 병합 대상이라 kind 가 다르다 — 나머지 셋은 그대로 file 이다.
+    expect(changes.filter((c) => c.kind === 'file')).toHaveLength(3);
+    expect(changes.find((c) => c.kind === 'ignore')?.file).toBe('.gitignore');
   });
 
   it('언더스코어 접두를 점 이름으로 되돌린다', async () => {
@@ -36,9 +40,10 @@ describe('copyOverlay.plan', () => {
     const changes = await step.plan!(makeCtx());
     const paths = changes.map((c) => (c.kind === 'file' ? c.relPath : c.file));
 
-    expect(paths).toContain('.gitignore');
+    // _gitignore 는 Task 4부터 nest 에 없다(_shared 로 옮겨졌다) — 여전히
+    // 남아 있는 _prettierignore 로 언더스코어 변환을 확인한다.
     expect(paths).toContain('.prettierignore');
-    expect(paths).not.toContain('_gitignore');
+    expect(paths).not.toContain('_prettierignore');
   });
 
   it('__NAME__을 치환한 내용을 낸다 — 계획과 실제 쓰기가 같은 바이트여야 한다', async () => {
@@ -82,7 +87,8 @@ describe('mergeJson.plan', () => {
 describe('copyOverlay 의 .gitignore 처리', () => {
   it('plan 이 ignore 변경으로 낸다 — 통짜 file 이 아니다', async () => {
     const ctx = makeCtx();
-    const changes = await copyOverlay('nest').plan!(ctx);
+    // _gitignore 는 Task 4부터 _shared 에 있다(세 유형이 같은 처리를 받는다).
+    const changes = await copyOverlay('_shared').plan!(ctx);
     const gitignore = changes.find(
       (c) => (c.kind === 'ignore' ? c.file : c.kind === 'file' ? c.relPath : '') === '.gitignore',
     );
@@ -93,7 +99,8 @@ describe('copyOverlay 의 .gitignore 처리', () => {
     const ctx = makeCtx();
     writeFileSync(join(ctx.targetDir, '.gitignore'), '내-비밀-폴더/\n');
 
-    await copyOverlay('nest').run(ctx);
+    // _gitignore 는 Task 4부터 _shared 에 있다(세 유형이 같은 처리를 받는다).
+    await copyOverlay('_shared').run(ctx);
 
     const written = readFileSync(join(ctx.targetDir, '.gitignore'), 'utf8');
     // 사용자가 넣은 규칙이 보존되는가 — 이 테스트의 본질이다.
@@ -101,10 +108,12 @@ describe('copyOverlay 의 .gitignore 처리', () => {
     // 템플릿 줄이 얹혔는가. "보존"만 보면 템플릿 줄이 아예 안 얹혀도
     // 통과하므로, 보존과 추가를 각각 고정해야 배선 전체가 덮인다.
     expect(written).toContain('node_modules/');
-    // 블록 내용은 아직 비어 있다(템플릿에 블록을 넣는 것은 뒤 태스크다).
-    // 구분자 쌍만 확인한다 — mergeIgnore 는 block 이 비어도 쌍을 남긴다.
-    // 블록 내용 검증은 템플릿에 블록이 들어간 뒤 e2e가 실제 생성물에서 한다.
+    // 구분자 쌍 — mergeIgnore 는 block 이 비어도 쌍을 남긴다.
     expect(written).toContain('# >>> devkit >>>');
     expect(written).toContain('# <<< devkit <<<');
+    // Task 4부터 템플릿에 devkit 블록이 실제로 들어 있다 — 블록 내용도
+    // 확인할 수 있다(전엔 템플릿에 블록이 없어 구분자 쌍만 봤다).
+    expect(written).toContain('.claude/*');
+    expect(written).toContain('!.claude/agents/');
   });
 });
