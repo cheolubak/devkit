@@ -12,5 +12,12 @@ dist/
 .idea/
 .superpowers/
 
+# 단, devkit-cli 템플릿의 .claude 는 스크래치가 아니라 **배포되는 산출물**이다.
+# 위 `.claude/` 가 이것까지 삼켜서 `git add` 가 조용히 건너뛰고 있었다 —
+# 기존 devkit-reviewer.md 들은 `-f` 로 강제 추가돼 추적 중이라 문제가 드러나지
+# 않았다. 디렉토리를 무시하면 git 이 그 아래로 내려가지 않으므로 파일 하나만
+# 되살릴 수는 없다. **디렉토리 자체를** 되살려야 한다.
+!packages/devkit-cli/templates/*/.claude/
+
 # 게시용 토큰이 들어간다. 절대 커밋되면 안 된다.
 .npmrc

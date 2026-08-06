@@ -1,7 +1,11 @@
+import { execFile } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { categoryOf } from '../src/lib/categories.js';
+
+const execFileAsync = promisify(execFile);
 
 const TEMPLATES_DIR = fileURLToPath(new URL('../templates', import.meta.url));
 
@@ -87,5 +91,29 @@ describe('오버레이 카테고리 커버리지', () => {
     }
 
     expect(nonCanonical).toEqual([]);
+  });
+
+  it('템플릿의 모든 파일이 git에 추적된다', async () => {
+    // 저장소 루트 .gitignore 는 `.claude/`(로컬 에이전트 스크래치)를 무시한다.
+    // 그 규칙이 templates/<type>/.claude/ 까지 삼켜서, 새 템플릿 자산을 만들면
+    // `git add` 가 조용히 건너뛴다 — 그런데 이 테스트 스위트는 디스크를 읽으므로
+    // 전부 통과한다. 즉 clone·CI·게시본에는 파일이 없는데 검증은 초록불인 상태가
+    // 된다. 2026-08-06 devkit-implementer 추가 때 실제로 그렇게 됐다.
+    const files = await collectOverlayFiles();
+    const { stdout } = await execFileAsync('git', ['ls-files', '-z', '--', '.'], {
+      cwd: fileURLToPath(new URL('..', import.meta.url)),
+    });
+    const tracked = new Set(
+      stdout
+        .split('\0')
+        .filter((p) => p.length > 0)
+        .map((p) => p.replace(/^templates\//, '')),
+    );
+
+    const untracked = files
+      .map(({ type, relPath }) => `${type}/${relPath}`)
+      .filter((p) => !tracked.has(p));
+
+    expect(untracked).toEqual([]);
   });
 });
