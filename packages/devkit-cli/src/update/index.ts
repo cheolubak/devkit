@@ -8,6 +8,7 @@ import { devkitVersion } from '../lib/version.js';
 import { delegate } from '../ops/delegate.js';
 import { pathExists } from '../ops/path-exists.js';
 import type { Ctx } from '../types.js';
+import { findCommonJsFiles } from './cjs-scan.js';
 import { buildPlan, effectiveCategories } from './plan.js';
 import { resolveType } from './resolve-type.js';
 
@@ -75,6 +76,8 @@ export async function runUpdate(options: UpdateOptions): Promise<void> {
 
   const classified = await classifyFiles(targetDir, planned);
   log(formatChangeList(classified, basename(targetDir), type));
+  warnClobbered(classified, planned, hadMarker, log);
+  await warnTypeModule(targetDir, packageJson, planned, log);
 
   const writes = classified.filter((item) => item.kind !== 'unchanged');
 
@@ -118,6 +121,95 @@ export async function runUpdate(options: UpdateOptions): Promise<void> {
   if (!hadMarker && only !== undefined) {
     log('마커가 없어 다음에도 --type 이 필요합니다. 전체 update 가 마커를 심습니다.');
   }
+}
+
+/**
+ * 사용자가 직접 쓴 파일이 통째로 교체되는 것을 이름 붙여 알린다.
+ *
+ * 변경 목록의 "덮어쓰기"는 두 가지를 한 단어로 뭉뚱그린다 — `package.json`
+ * 처럼 기존 위에 패치가 얹히는 것과, `eslint.config.mjs` 처럼 통째로
+ * 교체되는 것. 뒤쪽은 사용자가 써 둔 내용이 사라지는데도 목록에서는 똑같이
+ * 보인다. 실제로 기존 프로젝트에 devkit 을 처음 붙였을 때 `eslint.config.mjs`
+ * 의 `ignores` 가 이렇게 증발했고, 저장소 안의 라이브 worktree 를 린트하다
+ * 린트가 결과가 아니라 크래시로 끝났다(2026-08-07 소비자 실측).
+ *
+ * `.gitignore` 처럼 병합기를 만들 수 있는 파일은 이미 병합한다. JS 설정은
+ * 파싱해서 합칠 수 없으므로 devkit 이 할 수 있는 최선은 무엇이 사라지는지
+ * 미리 말하는 것이다 — 조용히 지우지 않는 것이 요점이다.
+ *
+ * **마커가 있으면 알리지 않는다.** 그때 "덮어쓰기"는 devkit 자신의 이전
+ * 산출물을 갱신하는 것이고, 그건 update 가 하기로 한 바로 그 일이라
+ * 경고하면 매번 뜨는 노이즈가 된다. 마커가 없다는 것은 devkit 이 이
+ * 프로젝트를 관리한 적이 없다는 뜻이고, 그러면 덮이는 것은 전부 사람의 것이다.
+ */
+function warnClobbered(
+  classified: readonly { kind: string; relPath: string }[],
+  planned: readonly { relPath: string; preservesExisting: boolean }[],
+  hadMarker: boolean,
+  log: (message: string) => void,
+): void {
+  if (hadMarker) return;
+
+  const preserved = new Set(
+    planned.filter((file) => file.preservesExisting).map((file) => file.relPath),
+  );
+  const clobbered = classified
+    .filter((item) => item.kind === 'overwritten' && !preserved.has(item.relPath))
+    .map((item) => item.relPath);
+
+  if (clobbered.length === 0) return;
+
+  log(
+    `\n경고: devkit 이 관리한 적 없는 프로젝트입니다(마커 없음). 아래 ${clobbered.length}개 파일은 ` +
+      '기존 내용을 반영하지 않고 통째로 교체됩니다:',
+  );
+  for (const relPath of clobbered) log(`    ${relPath}`);
+  log(
+    'devkit 이 알 수 없는 설정(예: eslint.config.mjs 의 ignores)은 복원되지 않습니다. ' +
+      '필요하면 지금 따로 보관하세요.',
+  );
+}
+
+/** 파싱된 package.json 에서 `type` 값을 안전하게 꺼낸다. */
+function readType(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const type = (value as { type?: unknown }).type;
+  return typeof type === 'string' ? type : undefined;
+}
+
+/**
+ * `"type": "module"` 이 새로 얹히면서 기존 CommonJS `.js` 가 깨지는 것을 알린다.
+ *
+ * 실측 회귀(2026-08-07 소비자): update 가 `type: module` 을 심자
+ * `cache-handlers/logging-handler.js` 의 `require`/`module.exports` 가 ESM 으로
+ * 재해석돼 죽었고, 그 파일을 `require.resolve` 로 가리키던 `next.config.ts` 도
+ * 함께 무너졌다. 해법은 `.cjs` 로 개명하는 것인데, devkit 이 남의 파일을
+ * 개명해 줄 수는 없으므로 **무엇이 깨질지 이름 붙여 알리는 데까지** 한다.
+ *
+ * 이미 `"type": "module"` 인 프로젝트에서는 바뀌는 것이 없으므로 조용하다.
+ */
+async function warnTypeModule(
+  targetDir: string,
+  currentPackageJson: unknown,
+  planned: readonly { relPath: string; content: string }[],
+  log: (message: string) => void,
+): Promise<void> {
+  if (readType(currentPackageJson) === 'module') return;
+
+  const plannedPkg = planned.find((file) => file.relPath === 'package.json');
+  if (plannedPkg === undefined) return;
+  const parsed: unknown = JSON.parse(plannedPkg.content);
+  if (readType(parsed) !== 'module') return;
+
+  const cjsFiles = await findCommonJsFiles(targetDir);
+  if (cjsFiles.length === 0) return;
+
+  log(
+    `\n경고: package.json 에 "type": "module" 이 새로 얹힙니다. 아래 CommonJS ` +
+      `.js 파일이 ESM 으로 재해석되어 깨집니다(${cjsFiles.length}건):`,
+  );
+  for (const relPath of cjsFiles) log(`    ${relPath}`);
+  log('확장자를 .cjs 로 바꾸고, 그 파일을 가리키는 참조도 함께 고치세요.');
 }
 
 /**

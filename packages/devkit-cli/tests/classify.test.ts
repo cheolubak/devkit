@@ -15,10 +15,13 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
+// classifyFiles 는 preservesExisting 을 보지 않는다(그 판정은 buildPlan 의
+// 몫이다). 여기서는 타입을 만족시키기 위한 값이라 통째 교체 쪽으로 둔다.
 const planned = (relPath: string, content: string): PlannedFile => ({
   relPath,
   content,
   category: 'claude',
+  preservesExisting: false,
 });
 
 describe('classifyFiles', () => {

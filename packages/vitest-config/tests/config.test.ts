@@ -71,4 +71,44 @@ describe('실제 vitest 실행', () => {
     const output = execFileSync(bin, ['run', '--root', dir], { encoding: 'utf8', stdio: 'pipe' });
     expect(output).toContain('1 passed');
   });
+
+  // include 를 넓힌 대가로 반드시 지켜야 하는 두 가지를 한 번에 본다.
+  //
+  // (1) src/ 밖의 테스트도 수집된다 — 좁은 include 가 테스트를 통째로
+  //     빠뜨리면서 passWithNoTests 가 그걸 초록불로 보고하던 침묵을 막는다.
+  // (2) node_modules 는 여전히 제외된다 — vitest 의 exclude 는 기본값을
+  //     병합이 아니라 **대체**하므로, configDefaults.exclude 를 펴지 않고
+  //     손으로 적는 순간 의존성 안의 테스트까지 긁어온다. 그 회귀는
+  //     "테스트가 갑자기 수천 개" 형태로만 드러나므로 여기서 고정한다.
+  it('src 밖 테스트는 수집하고 node_modules 는 제외한다', () => {
+    const dir = mkdtempSync(join(FIXTURES_ROOT, 'devbak-vitest-scope-'));
+    created.push(dir);
+    const pass = "import { it, expect } from 'vitest';\nit('%NAME%', () => { expect(1).toBe(1); });\n";
+
+    for (const [sub, name] of [
+      ['src', 'in-src'],
+      ['components', 'outside-src'],
+      ['node_modules/some-dep', 'in-node-modules'],
+    ] as const) {
+      mkdirSync(join(dir, sub), { recursive: true });
+      writeFileSync(join(dir, sub, 'sample.test.ts'), pass.replace('%NAME%', name));
+    }
+
+    writeFileSync(
+      join(dir, 'vitest.config.mjs'),
+      `import config from ${JSON.stringify(join(PKG_DIR, 'node.js'))};\nexport default config;\n`,
+    );
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'fx', private: true, type: 'module' }));
+
+    const bin = resolve(import.meta.dirname, '../../../node_modules/.bin/vitest');
+    const output = execFileSync(bin, ['run', '--root', dir, '--reporter', 'verbose'], {
+      encoding: 'utf8',
+      stdio: 'pipe',
+    });
+
+    expect(output).toContain('in-src');
+    expect(output).toContain('outside-src');
+    expect(output).not.toContain('in-node-modules');
+    expect(output).toContain('2 passed');
+  });
 });

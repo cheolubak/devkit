@@ -1,7 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { assertOutsideWorkspace } from './workspace-root.js';
 
 // e2e 는 생성물에서 pnpm install 을 돌리고, 그 설치가 GitHub Packages 를
 // 탄다. GitHub Packages 는 **공개 패키지도** 토큰을 요구하므로(설계 0.2절)
@@ -17,7 +19,10 @@ if (process.env.GITHUB_TOKEN === undefined || process.env.GITHUB_TOKEN === '') {
 }
 
 const TOOLKIT = resolve(import.meta.dirname, '../../../..');
-const PARENT = resolve(TOOLKIT, '..');
+// 생성물은 워크스페이스와 무관한 임시 디렉토리에 만든다. 이유와 예전에
+// 무엇이 깨졌는지는 workspace-root.ts 의 assertOutsideWorkspace 주석 참고.
+const WORKDIR = tmpdir();
+assertOutsideWorkspace(WORKDIR);
 // bin.js는 절대경로로 부른다 — cwd가 TOOLKIT이 아니게 되므로(아래 참고)
 // 상대경로 'packages/devkit-cli/dist/bin.js'는 더 이상 안전하지 않다.
 const BIN = join(TOOLKIT, 'packages/devkit-cli/dist/bin.js');
@@ -33,15 +38,14 @@ const created: string[] = [];
 const RUN_ID = process.pid;
 
 function create(name: string, type: string): string {
-  const dir = join(PARENT, `${name}-${RUN_ID}`);
+  const dir = join(WORKDIR, `${name}-${RUN_ID}`);
   created.push(dir);
   // create는 위치 제약이 없다 — 실행한 cwd 기준으로 <name>을 만든다(Task 6).
-  // 그래서 여기서도 cwd를 명시적으로 PARENT로 세운다 — TOOLKIT을 cwd로
-  // 넘기면 생성물이 툴킷 저장소 "안"에 만들어져(예: eslint/devkit-e2e-*)
-  // pnpm-workspace.yaml 범위 밖 취급을 받고, @cheolubak/* 설치가 조용히
-  // 실패한다(node_modules/@cheolubak 자체가 안 생김). TOOLKIT으로 되돌리지 말 것.
+  // 그래서 여기서도 cwd를 명시적으로 WORKDIR로 세운다. 툴킷 저장소 안이나
+  // 그 부모를 cwd로 쓰지 말 것 — 워크스페이스 안이면 @cheolubak/* 설치가
+  // 조용히 건너뛰어진다(workspace-root.ts 주석).
   execFileSync('node', [BIN, 'create', basename(dir), '--type', type], {
-    cwd: PARENT,
+    cwd: WORKDIR,
     stdio: 'pipe',
     encoding: 'utf8',
   });

@@ -8,6 +8,16 @@ export interface PlannedFile {
   relPath: string;
   content: string;
   category: Category;
+  /**
+   * 이 내용이 대상의 **기존 내용 위에** 만들어졌는가.
+   *
+   * JSON 패치와 `.gitignore` 병합은 `true` — 사용자가 써 둔 것이 살아남는다.
+   * 평범한 파일 오버레이는 `false` — 통째로 교체하므로 사용자가 직접 쓴
+   * 내용이 사라진다. 이 구분이 "덮어쓰기"라는 한 단어 뒤에 숨어 있어서,
+   * 기존 프로젝트에 devkit 을 처음 붙일 때 eslint.config.mjs 의 ignores 가
+   * 조용히 증발했다. 계획에 실어 update 가 사람에게 알릴 수 있게 한다.
+   */
+  preservesExisting: boolean;
 }
 
 export interface ClassifiedFile {

@@ -79,7 +79,7 @@ exports[`monorepo 레시피 > 단계 목록이 스냅샷과 일치한다 1`] = `
               "jsdom": "^25.0.0",
               "prettier": "^3.4.2",
               "typescript-eslint": "^8.65.0",
-              "vitest": "^2.1.0",
+              "vitest": "^4.0.0",
             },
             "devkit": {
               "type": "next",

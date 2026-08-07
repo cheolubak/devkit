@@ -72,7 +72,7 @@ export const nextRecipe: Recipe = (options = {}) => {
         devDependencies: {
           eslint: '^10.8.0',
           'typescript-eslint': '^8.65.0',
-          vitest: '^2.1.0',
+          vitest: '^4.0.0',
           jsdom: '^25.0.0',
           prettier: '^3.4.2',
           '@next/eslint-plugin-next': '^16.0.0',

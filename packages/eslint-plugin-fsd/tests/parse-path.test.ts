@@ -25,12 +25,21 @@ describe('parsePath', () => {
   it('sliced 레이어를 layer/slice/segment로 파싱', () => {
     expect(parsePath('/proj/src/features/auth/ui/Form.tsx')).toMatchObject({
       layer: 'features', rank: 3, sliced: true, slice: 'auth', segment: 'ui', depth: 4,
+      unit: 'auth',
     });
   });
   it('shared는 slice=null, segment=첫 단계', () => {
     expect(parsePath('/proj/src/shared/ui/Button.tsx')).toMatchObject({
       layer: 'shared', sliced: false, slice: null, segment: 'ui', depth: 3,
+      // 슬라이스가 없으므로 세그먼트가 Public API 단위다.
+      unit: 'ui',
     });
+  });
+  it('app은 레이어 전체가 하나의 Public API 단위다', () => {
+    expect(parsePath('/proj/src/app/providers/Theme.tsx')).toMatchObject({
+      layer: 'app', sliced: false, slice: null, segment: 'providers', unit: 'app',
+    });
+    expect(parsePath('/proj/src/app/layout.tsx')?.unit).toBe('app');
   });
   it('별칭 views/screens를 pages로 인식', () => {
     expect(parsePath('/proj/src/views/home/index.ts')?.layer).toBe('pages');

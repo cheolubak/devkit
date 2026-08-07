@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { lookupLayer, LAYERS } from '../src/lib/layers';
+import { lookupLayer, publicApiDepth, LAYERS } from '../src/lib/layers';
 
 describe('lookupLayer', () => {
   it('정규 레이어명을 조회한다', () => {
@@ -18,6 +18,28 @@ describe('lookupLayer', () => {
   it('알 수 없는 폴더명은 null', () => {
     expect(lookupLayer('utils')).toBeNull();
     expect(lookupLayer('src')).toBeNull();
+  });
+
+  it('Public API 단위는 레이어마다 다르다', () => {
+    expect(lookupLayer('features')?.publicApi).toBe('slice');
+    expect(lookupLayer('views')?.publicApi).toBe('slice');
+    // shared는 슬라이스가 없어 세그먼트가 진입점을 소유한다.
+    expect(lookupLayer('shared')?.publicApi).toBe('segment');
+    // app은 아무도 import할 수 없어 넘을 경계가 없다.
+    expect(lookupLayer('app')?.publicApi).toBe('layer');
+  });
+
+  it('sliced와 publicApi는 어긋나지 않는다', () => {
+    for (const layer of LAYERS) {
+      expect(layer.sliced).toBe(layer.publicApi === 'slice');
+    }
+  });
+
+  it('슬라이스 레이어만 세그먼트 배럴까지 진입점으로 인정한다', () => {
+    expect(publicApiDepth('slice')).toBe(3);
+    expect(publicApiDepth('segment')).toBe(2);
+    // layer 단위는 레이어 폴더 자체가 유일한 진입점이라 1이다.
+    expect(publicApiDepth('layer')).toBe(1);
   });
 
   it('LAYERS는 rank 오름차순', () => {
