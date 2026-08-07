@@ -1,6 +1,6 @@
 {
   "name": "@cheolubak/devkit-cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "devkit 표준이 적용된 프로젝트를 생성하는 CLI",
   "license": "MIT",
   "keywords": ["scaffold", "template", "cli", "nestjs", "nextjs"],
