@@ -1,5 +1,5 @@
 import { readdir, readFile } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -55,15 +55,27 @@ const EXPECT_CALL = 'expect(';
  */
 const OPT_OUT = 'version-literal-ok';
 
-async function testSourceFiles(): Promise<string[]> {
+/**
+ * 읽을 절대경로와, 판정·표시에 쓸 **POSIX 로 통일된** 상대경로를 함께 낸다.
+ *
+ * 절대경로를 문자열로 이으면 안 된다 — 최상위 항목의 `parentPath` 는 readdir
+ * 에 넘긴 값 그대로라 끝에 구분자가 붙어 있고(`.../tests/`), 하위 디렉토리
+ * 항목은 Node 가 만들어 붙지 않는다(`.../tests/e2e`). 그대로 이으면 최상위만
+ * 슬래시가 겹친다. 그래서 `join` 을 쓴다.
+ *
+ * 그런데 `join` 은 Windows 에서 `\` 를 쓴다. 경로를 그대로 두면 아래 e2e
+ * 커버리지 판정(`'e2e'` 세그먼트 찾기)이 Windows 에서 **정상 체크아웃인데도
+ * 실패하고**, 위반 메시지의 경로 모양도 플랫폼마다 갈린다. 여기서 한 번
+ * POSIX 로 통일해 두 곳 모두 플랫폼과 무관하게 만든다.
+ */
+async function testSourceFiles(): Promise<{ abs: string; rel: string }[]> {
   const entries = await readdir(TESTS_DIR, { recursive: true, withFileTypes: true });
   return entries
     .filter((e) => e.isFile() && e.name.endsWith('.ts') && e.name !== SELF)
-    // 문자열로 이으면 안 된다 — 최상위 항목의 parentPath 는 readdir 에 넘긴
-    // 값 그대로라 끝에 구분자가 붙어 있고(`.../tests/`), 하위 디렉토리 항목은
-    // Node 가 만들어 붙지 않는다(`.../tests/e2e`). 그대로 이으면 최상위만
-    // 슬래시가 겹쳐 위반 메시지의 경로가 서로 다른 모양으로 나온다.
-    .map((e) => join(e.parentPath, e.name));
+    .map((e) => {
+      const abs = join(e.parentPath, e.name);
+      return { abs, rel: relative(TESTS_DIR, abs).split(sep).join('/') };
+    });
 }
 
 describe('테스트가 릴리스 관리 버전을 하드코딩하지 않는다', () => {
@@ -78,20 +90,23 @@ describe('테스트가 릴리스 관리 버전을 하드코딩하지 않는다',
     // e2e 를 실제로 훑고 있는지까지 확인한다 — include 나 디렉토리 구조가
     // 바뀌어 e2e 가 스캔에서 빠지면, 정확히 이 가드가 막으려던 사각지대가
     // 소리 없이 돌아온다(create.e2e.test.ts 가 그렇게 살아남았다).
-    expect(files.some((f) => f.includes('/e2e/'))).toBe(true);
+    // 세그먼트로 쪼개 본다 — `'/e2e/'` 부분 문자열로 찾으면 Windows 의 `\`
+    // 경로에서 늘 false 가 되어, 아무 문제 없는 체크아웃에서 가드가 헛되이
+    // 빨개진다(CodeRabbit 지적).
+    expect(files.some((f) => f.rel.split('/').includes('e2e'))).toBe(true);
 
     const sources = await Promise.all(
-      files.map(async (file) => ({ file, lines: (await readFile(file, 'utf8')).split('\n') })),
+      files.map(async (f) => ({ rel: f.rel, lines: (await readFile(f.abs, 'utf8')).split('\n') })),
     );
 
     const violations: string[] = [];
-    for (const { file, lines } of sources) {
+    for (const { rel, lines } of sources) {
       lines.forEach((line, i) => {
         if (!line.includes(PKG)) return;
         if (!line.includes(EXPECT_CALL)) return;
         if (!VERSION_LITERAL.test(line)) return;
         if (line.includes(OPT_OUT) || (lines[i - 1]?.includes(OPT_OUT) ?? false)) return;
-        violations.push(`${relative(TESTS_DIR, file)}:${i + 1} — ${line.trim()}`);
+        violations.push(`${rel}:${i + 1} — ${line.trim()}`);
       });
     }
 
