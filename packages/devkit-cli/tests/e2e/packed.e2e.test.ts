@@ -3,6 +3,10 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
+// 검증 '대상'은 풀린 dist/bin.js 다 — 저장소 없이 도는지가 이 파일의 주제다.
+// 검증 '주체'인 테스트가 소스의 상수를 읽는 것은 그 격리와 무관하며,
+// registry-version.test.ts 도 같은 방식으로 이 상수를 참조한다.
+import { DEVKIT_VERSION_RANGE } from '../../src/ops/registry-deps.js';
 
 // 다른 e2e 파일과 같은 가드다. 생성물의 pnpm install 이 GitHub Packages 를
 // 타므로 토큰이 없으면 401 로 죽는다 — 조용히 건너뛰지 않고 알아볼 수 있는
@@ -76,7 +80,10 @@ describe('게시본(tarball) 으로 실행하기', () => {
 
     const project = join(work, 'packed-api');
     const pkg = readFileSync(join(project, 'package.json'), 'utf8');
-    expect(pkg).toContain('"@cheolubak/tsconfig": "^0.1.0"');
+    // 리터럴로 박으면 릴리스가 DEVKIT_VERSION_RANGE 를 올릴 때마다 이 단언만
+    // 뒤처져 다음 릴리스의 검증 스텝을 막는다(update-plan.test.ts 와 같은 함정).
+    // 보려는 것은 "레지스트리 범위가 생성물에 실제로 심겼는가"이지 그 값이 아니다.
+    expect(pkg).toContain(`"@cheolubak/tsconfig": "${DEVKIT_VERSION_RANGE}"`);
     expect(pkg).not.toContain('link:');
     expect(existsSync(join(project, '.npmrc'))).toBe(true);
     expect(existsSync(join(project, 'eslint.config.mjs'))).toBe(true);

@@ -4,6 +4,9 @@ import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { assertOutsideWorkspace } from './workspace-root.js';
+// 생성물이 선언하는 범위는 이 상수에서 나온다. 리터럴로 박으면 릴리스가
+// 상수를 올릴 때마다 단언만 뒤처져 다음 릴리스의 검증 스텝을 막는다.
+import { DEVKIT_VERSION_RANGE } from '../../src/ops/registry-deps.js';
 
 // e2e 는 생성물에서 pnpm install 을 돌리고, 그 설치가 GitHub Packages 를
 // 탄다. GitHub Packages 는 **공개 패키지도** 토큰을 요구하므로(설계 0.2절)
@@ -230,7 +233,7 @@ describe('devkit create --type monorepo', () => {
     // 확인했다. 레지스트리 설치로 바꾼 뒤로는 깊이가 무의미하다 — 루트든
     // apps/web이든 같은 버전 범위를 선언한다. 그것이 여기서 확인할 것이다.
     const webPkg = readFileSync(join(dir, 'apps', 'web', 'package.json'), 'utf8');
-    expect(webPkg).toContain('"@cheolubak/eslint-plugin-fsd": "^0.1.0"');
+    expect(webPkg).toContain(`"@cheolubak/eslint-plugin-fsd": "${DEVKIT_VERSION_RANGE}"`);
     expect(webPkg).not.toContain('link:');
 
     expect(runIn(dir, 'lint')).toBe(0);

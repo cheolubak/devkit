@@ -56,6 +56,20 @@
   교정) · `e69bf87`(작업 기록) · `4c53c1d`(설계 10.1절 — 라이브에서만 확인되는 침묵하는
   실패 셋) · 이 문서 커밋(CodeRabbit 반영). 브랜치 `feature/auto-merge-workflow`, PR `#4`.
 
+### main 이 빨갛던 것 — 릴리스가 올린 버전 상수와 테스트 리터럴의 어긋남 (이슈 #6)
+- **변경 파일**: `packages/devkit-cli/tests/update-plan.test.ts` · `packages/devkit-cli/tests/e2e/packed.e2e.test.ts` · `packages/devkit-cli/tests/e2e/create.e2e.test.ts`
+- **내용**: 릴리스 커밋 `563bd5c` 가 `DEVKIT_VERSION_RANGE` 를 `^0.2.0` 으로 올리면서, 그 상수를 **하드코딩 리터럴로 참조하던 테스트**는 그대로 남아 `origin/main` 단독으로 빨간 상태가 됐다. `release.yml` 의 `git add` 목록은 `packages/*/package.json` 과 `registry-deps.ts` 뿐이라 테스트는 자동 갱신 대상이 아니다.
+  - **한 사실이 세 곳에 있었고 그중 둘만 동기화됐다** — 상수·게시본·테스트 리터럴. 릴리스는 상수와 게시본만 올린다. 셋을 둘로 줄이는 쪽(이슈의 3번 안)을 택했다: 리터럴을 지우고 상수를 import 한다. 1번(리터럴만 올리기)은 마이너마다 재발하고, 2번(`apply.ts` 가 테스트 소스를 정규식으로 고치기)은 릴리스 스크립트가 테스트를 초록으로 만드는 구조라 둘 다 버렸다.
+  - **원래 주석이 걱정한 "자기 자신과 비교하면 공허해진다"는 검증 대상을 오해한 것이다.** `update-plan.test.ts` 가 보는 것은 상수의 *값*이 아니라 **배선** — `registryDeps` 의 범위가 `buildPlan` 을 거쳐 `package.json` 패치에 흘러드는가. 값의 정합은 `registry-version.test.ts` 가 게시본과 대조해 이미 지킨다.
+  - **이슈가 지목한 곳은 셋 중 하나였다.** 같은 함정이 e2e 에 둘 더 있었다 — `tests/e2e/packed.e2e.test.ts:73`(`"@cheolubak/tsconfig": "^0.1.0"`)과 `tests/e2e/create.e2e.test.ts:233`(`"@cheolubak/eslint-plugin-fsd": "^0.1.0"`). 둘 다 생성물의 `package.json` 을 읽는데 그 값은 `registryDeps` 를 거쳐 나온 것이라 똑같이 어긋나 있었다. **`release.yml` 의 검증 스텝은 `pnpm test` 와 `pnpm test:e2e` 를 둘 다 돌리므로**, unit 만 고쳤다면 릴리스는 바로 다음 단계에서 다시 막혔다.
+  - **세 번째 지점은 내 전수 조사가 한 번 놓쳤고, e2e 를 실제로 돌려서야 드러났다.** 첫 grep 에 노이즈 제거용으로 붙인 `grep -v "...eslint..."` 가 `@cheolubak/eslint-plugin-fsd` 줄을 함께 삼켰다 — 필터가 진짜 대상을 걸러내 "0건"이 아니라 "안 보이게" 만든 것이다. 조사 결과가 깨끗해 보일 때 그것이 필터의 부작용인지 확인해야 한다. 재조사는 `^0\.\d+\.\d+` 가 아니라 **`@cheolubak/*` 에 붙은 버전 리터럴**로 패턴을 바꿔 필터 없이 훑었다.
+  - 나머지 `^0.1.0` 출현(`bin.test.ts:173`·`version-collect.test.ts:36,82`·`version-format.test.ts`·`release-apply.test.ts`)은 **건드리지 않았다** — 상수에서 흘러나온 기대값이 아니라 테스트가 `writeProject`/`project()` 로 **직접 쓰는 입력 픽스처**이거나 `nextRange` 순수 함수의 인자다(릴리스가 상수를 올려도 깨지지 않는다). `docs/` 의 계획서와 이 work-log 의 과거 기록도 그대로 뒀다 — 그 시점의 사실이다. 구분 기준은 "그 값이 `DEVKIT_VERSION_RANGE` 에서 흘러나왔는가" 하나다.
+- **검증**: 실패를 먼저 재현한 뒤(`expected '^0.2.0' to be '^0.1.0'`), 고친 단언이 여전히 무언가를 막는지 **변이로 증명**했다 — 통과하는 테스트는 그 자체로 증거가 아니다.
+  - 변이 1(배선 끊기): `registryDeps` 의 patch 가 상수 대신 `'*'` 를 심게 하자 `update-plan.test.ts` 가 잡았다(`expected '*' to be '^0.2.0'`). 상수를 import 해도 배선 검증은 공허해지지 않는다.
+  - 변이 2(값 어긋뜨리기): 상수만 `^0.9.0` 으로 바꾸자 `registry-version.test.ts` 가 게시본과 대조해 잡았고(`@cheolubak/eslint-config-nest@0.2.0 이 ^0.9.0 를 벗어난다`), `update-plan.test.ts` 는 정상 통과했다. 역할 분담이 실제로 성립하며 리터럴을 없애도 **검증 공백이 생기지 않는다**.
+  - e2e 수정도 같은 방식으로 양방향 확인했다: `packed` 를 원래 리터럴로 되돌리면 실제로 **실패**하고(`VITEST_EXIT=1`), 수정본은 통과한다. `create` 의 monorepo 케이스는 고치기 전 e2e 전체 실행에서 **실측으로 실패했다**(13건 중 1건). 두 e2e 수정 모두 불필요한 변경이 아니었음이 실행으로 확정됐다.
+  - 릴리스 검증 스텝과 같은 순서로 `pnpm build`·`pnpm test`(423건, devkit-cli)·`pnpm typecheck`·`pnpm lint:ox`(exit 0, 기존 경고만)·`pnpm lint:es`·`pnpm test:e2e`(13/13) 전부 그린. **`src/` 변경은 0건**이다.
+
 ### release 워크플로가 첫 단계에서 죽던 것 — 락파일 드리프트
 - **변경 파일**: `pnpm-lock.yaml`
 - **내용**: main의 release 워크플로([run 31154322380](https://github.com/cheolubak/devkit/actions/runs/31154322380))가 `pnpm install --frozen-lockfile`에서 `ERR_PNPM_OUTDATED_LOCKFILE`로 실패했다. 원인은 워크플로가 아니라 **직전 머지(PR #3, `78f42c5`)가 남긴 락파일 드리프트**다 — `packages/vitest-config/package.json`의 vitest peer 범위를 `^2.1.0 || ^3.0.0 || ^4.0.0`으로 넓히면서 `pnpm-lock.yaml`을 재생성하지 않았다.

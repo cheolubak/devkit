@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CATEGORIES, type Category } from '../src/lib/categories.js';
+import { DEVKIT_VERSION_RANGE } from '../src/ops/registry-deps.js';
 import type { Ctx } from '../src/types.js';
 import { buildPlan, effectiveCategories } from '../src/update/plan.js';
 
@@ -85,9 +86,15 @@ describe('buildPlan', () => {
     expect(parsed.name).toBe('demo');
     // 레시피의 devDependencies와 registryDeps의 버전 범위가 함께 들어간다.
     expect(parsed.devDependencies['typescript-eslint']).toBe('^8.65.0');
-    // 상수를 import해 자기 자신과 비교하면 값이 무엇으로 바뀌어도 통과한다.
-    // 리터럴로 고정한다 — 실제 게시 버전과의 정합은 registry-version.test.ts 가 지킨다.
-    expect(parsed.devDependencies['@cheolubak/tsconfig']).toBe('^0.1.0');
+    // 여기서 보는 것은 상수의 '값'이 아니라 배선이다 — registryDeps 가 선언한
+    // 범위가 buildPlan 을 거쳐 package.json 패치까지 실제로 흘러드는가. 그
+    // 배선은 상수를 import 해 비교해도 온전히 검증된다(키가 빠지거나 다른
+    // 값이 들어가면 undefined 나 불일치로 잡힌다).
+    //
+    // 값이 실제 게시본과 맞는지는 registry-version.test.ts 가 지킨다. 여기에
+    // 리터럴을 박으면 같은 사실이 세 곳(상수·게시본·이 리터럴)에 놓이고
+    // 그중 둘만 릴리스가 자동 갱신해, 마이너가 오를 때마다 main 이 빨개진다.
+    expect(parsed.devDependencies['@cheolubak/tsconfig']).toBe(DEVKIT_VERSION_RANGE);
   });
 
   it('마커를 주면 package.json에 얹힌다 — 쓰기 뒤가 아니라 계획 안이다', async () => {
