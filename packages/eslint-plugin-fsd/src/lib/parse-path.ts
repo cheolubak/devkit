@@ -33,12 +33,16 @@ export function parsePath(absPath: string): FsdLocation | null {
   const slice = layer.sliced ? (rel[1] ?? null) : null;
   const segment = layer.sliced ? (rel[2] ?? null) : (rel[1] ?? null);
 
+  const unit =
+    layer.publicApi === 'slice' ? slice : layer.publicApi === 'segment' ? segment : layer.name;
+
   return {
     layer: layer.name,
     rank: layer.rank,
     sliced: layer.sliced,
     slice,
     segment,
+    unit,
     depth: rel.length,
     folderName,
   };

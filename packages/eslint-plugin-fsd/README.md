@@ -125,6 +125,14 @@ export default [
 
 - 레이어: `app > pages > widgets > features > entities > shared`
 - `pages` 레이어 별칭: `views`, `screens` (Next.js 라우팅 폴더 충돌 회피)
+- **Public API를 소유하는 단위는 레이어마다 다르다.** `no-public-api-sidestep`은 이 단위를 넘을 때만 발화하고, 같은 단위 안에서는 내부 파일을 자유롭게 오갈 수 있다.
+
+  | 레이어 | 단위 | 의미 |
+  |---|---|---|
+  | `pages`·`widgets`·`features`·`entities` | 슬라이스 | `entities/user/index.ts`가 진입점. 슬라이스 안에서는 `ui ↔ model` 상대 import 자유 |
+  | `shared` | 세그먼트 | 슬라이스가 없으므로 `shared/ui`·`shared/lib`이 각각 진입점. 세그먼트를 넘으면 진입점을 거쳐야 한다 |
+  | `app` | 레이어 전체 | 최상위라 아무도 import할 수 없다(`no-higher-level-imports`가 막는다). 넘을 경계가 없으므로 내부 구성은 전부 내부다 |
+
 - FSD 루트는 `src/`로 자동 인식. **Next.js 프로젝트는 `src/` 레이아웃 사용 권장** (FSD 레이어는 `src/` 안에, 라우팅 `app/`·`pages/`는 프로젝트 루트에).
 - `recommended` 프리셋은 프로젝트 루트의 Next.js 라우팅 폴더 `app/`·`pages/`를 `ignores`로 제외한다 (루트 `pages/` 라우팅 파일이 FSD `pages` 레이어로 오인되어 `no-cross-imports`가 오탐하는 것을 방지). 만약 `src/` 없이 FSD `app`/`pages` 레이어를 프로젝트 루트에 두는 구성이라면 `recommended` 대신 규칙을 직접 켜서 이 제외를 피하라.
 - alias 기본값 `@`, `~` → FSD 루트(src) 기준 해석
