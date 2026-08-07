@@ -2,6 +2,14 @@
 
 ## 2026-08-07
 
+### 앵커된 `.claude` 조상 줄이 부정 패턴을 무력화하던 것과, 릴리스가 다음 릴리스를 깨던 스냅샷 수정
+- **변경 파일**: `packages/devkit-cli/src/ops/merge-ignore.ts` · `templates/_shared/_gitignore` · `tests/merge-ignore.test.ts` · `tests/merge-ignore-git.test.ts` · `tests/recipe-{nest,next,monorepo}.test.ts` · `tests/__snapshots__/recipe-{nest,next,monorepo}.test.ts.snap` · `work-log.md`
+- **내용**: 두 가지를 고쳤다. 브랜치 `fix/gitignore-anchored-ancestor`.
+  1. **`/.claude/`·`/.claude` 표기가 조상 스트립을 빠져나가고 있었다.** git 은 제외된 디렉토리 안으로 내려가지 않으므로 대상에 `.claude` 를 통째로 무시하는 줄이 있으면 devkit 블록의 `!.claude/agents/` 가 물리적으로 무효다. `mergeIgnore` 는 그런 조상 줄을 지워 대응하는데(최종 리뷰 Critical 의 해법), `isAncestorExclusion` 이 트레일링 슬래시만 정규화하고 **리딩 슬래시는 하지 않아** 앵커 표기 2종이 살아남았다. `git check-ignore` 로 4종(`.claude/`·`.claude`·`/.claude/`·`/.claude`) 전부 실측해 확인했다 — 넷 다 부정을 죽인다(앵커 2종은 루트만, 나머지는 모든 깊이). 두 층으로 막았다: (A) 정규화에 리딩 슬래시 추가, (B) 템플릿 블록 맨 앞에 `!.claude/` 를 넣어 디렉토리 자체를 되살림. B 는 병합기가 모르는 표기까지 견디는 안전망이라 A 와 중복이 아니다. 실패 방향이 "커밋돼야 할 파일이 조용히 안 들어감"이라 `git add` 도 `git status` 도 아무 말을 하지 않는 게 이 결함의 위험한 점이다.
+  2. **릴리스가 다음 릴리스를 깨고 있었다(별개 발견).** 레시피 스냅샷 3건이 생성물 마커의 `devkit.version` 을 리터럴로 박고 있어, 오늘 릴리스가 0.1.0 → 0.2.0 으로 올리자 main 이 빨개졌다. 워크플로는 **검증 → 버전 갱신** 순이라 그 실행 자체는 통과하고 대가는 다음 릴리스가 치른다 — mtime 버그와 같은 모양이 하나 더 예약돼 있었다. 스냅샷을 0.2.0 으로 갱신만 하면 매 릴리스 재발하므로 `<devkitVersion>` 자리표시자로 정규화했다. 값 자체는 각 파일의 「마커」 테스트가 `devkitVersion()` 과 직접 대조하고 있어 커버리지 손실이 없다. monorepo 는 루트와 `apps/web` **두 곳**에 마커가 있어 고정 경로 접근이 깊은 쪽을 놓쳤고, 트리 전체를 걷는 방식으로 고쳤다.
+- **검증**: 수정 전 RED 4건(단위 2 + git 판정 2) 확인 후 수정. `pnpm build` · `pnpm test` **374개/31파일** · `pnpm typecheck` · `pnpm lint:ox`(경고 3건 — 기존과 동일, 신규 0) · `pnpm lint:es` · `pnpm test:e2e` **13/13**(164s). git 판정 테스트는 새 파일을 만들지 않고 이미 있던 `merge-ignore-git.test.ts`(`a2d66e5`)에 넣었고, 블록을 손으로 적지 않고 배포 템플릿에서 읽어 갈라짐을 막았다. 중간에 `walk` 중첩 함수로 oxlint 경고 3건이 새로 생겨 자기재귀 단일 함수로 바꿔 없앴다(`74fe700` 의 관행).
+- **커밋**: 브랜치 `fix/gitignore-anchored-ancestor`, main 미머지
+
 ### 릴리스 워크플로 첫 실행 진단과 `assertDistFresh` 테스트의 CI 전용 실패 수정
 - **변경 파일**: `packages/devkit-cli/tests/bin.test.ts` · `work-log.md`
 - **내용**: "main 에 푸시했는데 워크플로가 안 돌았다"에서 출발해 두 가지가 나왔다.
