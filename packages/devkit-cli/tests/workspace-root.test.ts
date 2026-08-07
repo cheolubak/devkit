@@ -63,7 +63,10 @@ describe('assertOutsideWorkspace', () => {
     const inside = join(root, '.claude', 'worktrees');
 
     expect(() => assertOutsideWorkspace(inside)).toThrow(/pnpm 워크스페이스 안입니다/);
-    expect(() => assertOutsideWorkspace(inside)).toThrow(new RegExp(root.replaceAll('/', '\\/')));
+    // 경로는 정규식이 아니라 문자열로 대조한다 — toThrow(string) 은 부분 문자열
+    // 매칭이다. 경로를 정규식으로 만들면 `.` 같은 메타문자가 그대로 살아 단언이
+    // 조용히 헐거워지고, Windows 의 역슬래시 경로에서는 패턴 자체가 깨진다.
+    expect(() => assertOutsideWorkspace(inside)).toThrow(root);
   });
 
   it('워크스페이스 밖이면 조용하다', () => {

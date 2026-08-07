@@ -38,7 +38,8 @@ describe('lookupLayer', () => {
   it('슬라이스 레이어만 세그먼트 배럴까지 진입점으로 인정한다', () => {
     expect(publicApiDepth('slice')).toBe(3);
     expect(publicApiDepth('segment')).toBe(2);
-    expect(publicApiDepth('layer')).toBe(2);
+    // layer 단위는 레이어 폴더 자체가 유일한 진입점이라 1이다.
+    expect(publicApiDepth('layer')).toBe(1);
   });
 
   it('LAYERS는 rank 오름차순', () => {

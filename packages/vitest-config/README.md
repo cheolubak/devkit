@@ -38,9 +38,18 @@ pnpm add -D @cheolubak/vitest-config vitest jsdom
 
 ## 테스트를 어디서 찾는가
 
-`include`는 **소비자 루트 전체**(`**/*.{test,spec}.*`)를 훑는다. `src/**`로 좁혀 두었더니 `components/`·`lib/`에 테스트를 둔 기존 프로젝트에서 수집이 통째로 비었고, `passWithNoTests: true`가 그 빈 상태를 초록불로 보고했다 — 실패가 아니라 **침묵**으로 나타나는 조합이었다(실측: 테스트 30개 중 29개 누락). FSD를 쓰든 안 쓰든 테스트 위치와 무관하게 잡히는 쪽이 안전하다.
+`include`는 **소비자 루트 전체**를 훑는다. 확장자와 추가 `exclude`는 프리셋마다 다르다.
 
-`exclude`는 `configDefaults.exclude`를 펴고 그 위에 Next 산출물(`.next/`·`out/`·`coverage/`)만 더한다. **vitest의 `exclude`는 기본값에 얹히는 게 아니라 기본값을 대체한다** — 손으로 적는 순간 `node_modules/**`가 사라져 의존성 안의 테스트까지 긁어온다. `tests/config.test.ts`의 "src 밖 테스트는 수집하고 node_modules 는 제외한다"가 양쪽을 함께 고정한다.
+| 서브패스 | `include` | 기본 `exclude`에 더하는 것 |
+| --- | --- | --- |
+| `/next` | `**/*.{test,spec}.{ts,tsx}` | `.next/`, `out/`, `coverage/` |
+| `/node` | `**/*.{test,spec}.ts` | `coverage/` |
+
+`/node`가 `.tsx`를 빼는 것은 의도다 — DOM이 없는 Node 라이브러리·서버용이라 컴포넌트 테스트를 기대하지 않는다. **두 프리셋 모두 `.js`/`.jsx` 테스트는 수집하지 않는다.** JavaScript로 테스트를 쓰는 프로젝트라면 소비자 쪽에서 `include`를 덮어써야 한다.
+
+`src/**`로 좁혀 두었더니 `components/`·`lib/`에 테스트를 둔 기존 프로젝트에서 수집이 통째로 비었고, `passWithNoTests: true`가 그 빈 상태를 초록불로 보고했다 — 실패가 아니라 **침묵**으로 나타나는 조합이었다(실측: 테스트 30개 중 29개 누락). FSD를 쓰든 안 쓰든 테스트 위치와 무관하게 잡히는 쪽이 안전하다.
+
+`exclude`는 두 프리셋 다 `configDefaults.exclude`를 펴고 그 위에 위 표의 항목만 더한다. **vitest의 `exclude`는 기본값에 얹히는 게 아니라 기본값을 대체한다** — 손으로 적는 순간 `node_modules/**`가 사라져 의존성 안의 테스트까지 긁어온다. `tests/config.test.ts`의 "src 밖 테스트는 수집하고 node_modules 는 제외한다"가 양쪽을 함께 고정한다.
 
 프리셋 뒤에서 좁히고 싶으면 소비자가 자신의 `vitest.config.ts`에서 `include`를 덮어쓰면 된다.
 

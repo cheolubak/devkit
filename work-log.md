@@ -2,13 +2,22 @@
 
 ## 2026-08-07
 
+### PR #3 리뷰(CodeRabbit) 4건 처리 — 3건 반영, 1건은 진단이 거꾸로였다
+- **변경 파일**: `packages/eslint-plugin-fsd/src/lib/layers.ts`·`src/rules/no-public-api-sidestep.ts`·`tests/{layers,no-public-api-sidestep}.test.ts` · `packages/devkit-cli/tests/workspace-root.test.ts` · `packages/vitest-config/README.md` · `work-log.md`
+- **내용**:
+  1. **`layer` 단위의 진입점 깊이가 target과 어긋나 있었다(리뷰가 옳음, 다만 더 깊은 결함이었다).** 리뷰는 "`@/app/providers/Theme`가 `app/providers`를 이름하는데 단위는 `app`이다"라고 문구만 지적했지만, 원인은 내가 `publicApiDepth('layer')`를 **"새 에러를 안 늘리려고" 2로 둔 하드코딩**이었다. 문구만 고치면 임계값과 또 어긋나(통과하지도 않을 경로를 해법으로 안내) 임계값을 1로 맞췄다 — layer 단위는 레이어 폴더 자체가 유일한 진입점이다. target 구성도 `publicApiDepth`와 1:1로 대응시키고 그 이유를 주석에 박았다. 실측: 픽스처 에러 수는 6개 그대로다(app 내부 import는 `sameUnit`이 임계값에 닿기 전에 걸러낸다). 메시지는 `진입점 "app"`.
+  2. **경로를 정규식으로 대조하고 있었다.** `new RegExp(root.replaceAll('/', '\\/'))`는 `.` 같은 메타문자를 그대로 남겨 단언이 **조용히 헐거워지고**, Windows 역슬래시 경로에서는 패턴 자체가 깨진다. `toThrow(root)`(부분 문자열 매칭)로 바꿨다.
+  3. **vitest-config README가 두 프리셋을 뭉뚱그렸다.** `/next`는 `**/*.{test,spec}.{ts,tsx}` + `.next/`·`out/`·`coverage/`, `/node`는 `**/*.{test,spec}.ts` + `coverage/`인데 하나로 적어 양쪽 다 부정확했다. 표로 갈랐고, **둘 다 `.js`/`.jsx` 테스트는 수집하지 않는다**는 한계도 명시했다(원래 그랬으므로 회귀는 아니지만, 침묵하면 이번에 고친 그 함정과 같은 모양이 된다).
+  4. **집계 불일치 지적은 맞았지만 처방이 거꾸로였다.** 리뷰는 앞 항목의 `devkit-cli 416`을 `423`으로 고치라고 했는데, 416은 **그 커밋 시점의 정확한 값**이고 423은 가드 7건이 더해진 뒤다. 앞 기록을 423으로 바꾸면 없던 테스트가 있었던 것처럼 된다. 실제 결함은 **뒤 항목의 총합 523**이었다 — devkit-cli가 423이면 총합은 530이어야 한다(423+81+26). 양쪽에 "이 커밋 시점" 기준을 명시해 다시 어긋나지 않게 했다. 같은 PR에서 소비자 리포트의 원인 오귀속을 잡았던 것과 **같은 모양**이다: 증상 관측은 맞고 인과가 뒤집혀 있다.
+- **검증**: 단위 **531개**(이 커밋 시점: eslint-plugin-fsd 82 = 앞 항목의 81 + layer 임계값 테스트 1, devkit-cli 423, 나머지 26), `pnpm lint`(에러 0, oxlint 경고 5건 그대로), `pnpm typecheck`, `pnpm build`. 규칙 변경은 스크래치패드 FSD 픽스처에 빌드된 `dist`로 ESLint를 다시 돌려 메시지와 에러 수까지 확인했다.
+
 ### e2e가 실행 위치에 따라 조용히 깨지던 것 — 생성물 기준을 워크스페이스 밖으로
 - **변경 파일**: `packages/devkit-cli/tests/e2e/workspace-root.ts`(신설) · `tests/e2e/{create,update}.e2e.test.ts` · `tests/workspace-root.test.ts`(신설)
 - **내용**: `create`·`update` e2e가 생성물을 `resolve(TOOLKIT, '..')`에 만들었는데, 그건 **메인 체크아웃에서만** 저장소 밖이다. git worktree에서 돌리면 TOOLKIT이 `<repo>/.claude/worktrees/<name>`이라 부모가 `<repo>/.claude/worktrees` — 저장소 **안**이면서 워크스페이스 glob(`packages/*`) **밖**이다. 그러면 pnpm이 상위 `pnpm-workspace.yaml`을 찾고 생성물을 멤버로 보지 않아 `@cheolubak/*` 설치를 조용히 건너뛴다(`node_modules/@cheolubak` 자체가 안 생김). `pnpm install`은 성공으로 끝나고 실패는 한참 뒤 `pnpm lint`의 `ERR_MODULE_NOT_FOUND`로 나타난다.
   - **부분 실패라 회귀로 오인됐다.** `next`·`monorepo`는 `create-next-app`이 자체 `pnpm-workspace.yaml`을 만들어 독립 워크스페이스 루트가 되므로 통과하고 `--type nest` 3건만 죽는다. 앞선 작업에서 vitest·update를 고친 직후에 이 모양을 보면 그 변경의 회귀로 읽기 딱 좋다(실제로 그렇게 의심하고 파고들었다).
   - 기준을 `os.tmpdir()`로 옮겼다 — `packed.e2e.test.ts`가 **이미 같은 이유로** 임시 디렉토리를 쓰고 그 근거를 주석에 적어 두고 있었다(`create`·`update`만 옛 방식에 남아 있었다). 더해서 `assertOutsideWorkspace`가 기준 디렉토리의 조상에 `pnpm-workspace.yaml`이 있으면 **경로를 붙여 던진다.** 조용히 다른 곳으로 옮기지 않는 이유는 그러면 진짜 환경 문제가 숨기 때문이다.
   - 가드는 `tests/e2e/workspace-root.ts`로 빼서 두 e2e가 공유하고, 그 자체는 **기본 스위트**(`tests/workspace-root.test.ts`, 7건)에서 테스트한다 — `GITHUB_TOKEN`도 `pnpm install`도 필요 없고, e2e를 돌리지 않는 개발 루프에서 깨져도 바로 알아야 한다. `vitest.config.ts`의 include가 `tests/*.test.ts` 한 단계뿐이라 `tests/e2e/workspace-root.ts`가 테스트로 수집되지도 않는다.
-- **검증**: **같은 worktree에서 `pnpm test:e2e` 13/13 통과**(수정 전 같은 위치에서 3 실패, 170s). 단위 523개(devkit-cli 423 — 가드 7건 추가), `pnpm lint`(에러 0, oxlint 경고 5건 그대로), `pnpm typecheck`, `pnpm build`. 가드가 실제로 발화하는지는 `<root>/.claude/worktrees` 모양을 그대로 만들어 던지는 것으로 확인했다(경로가 메시지에 들어가는지까지).
+- **검증**: **같은 worktree에서 `pnpm test:e2e` 13/13 통과**(수정 전 같은 위치에서 3 실패, 170s). 단위 **530개**(이 커밋 시점: devkit-cli 423 = 앞 항목의 416 + 가드 7건, eslint-plugin-fsd 81, 나머지 26), `pnpm lint`(에러 0, oxlint 경고 5건 그대로), `pnpm typecheck`, `pnpm build`. 가드가 실제로 발화하는지는 `<root>/.claude/worktrees` 모양을 그대로 만들어 던지는 것으로 확인했다(경로가 메시지에 들어가는지까지).
 - **커밋**: `f5575da`. 브랜치 `worktree-lexical-bubbling-bee`, main 미머지.
 
 ### my-blogs 도입 리포트 반영 — FSD 세그먼트 진입점, vitest 침묵, update 경고 2건
@@ -18,7 +27,7 @@
   2. **RSC 경계 — 세그먼트 배럴도 진입점으로 인정(결정 반영).** 슬라이스당 진입점을 하나로 강제하면, 서버 전용 `api`와 클라이언트 `ui`를 함께 가진 슬라이스에서 그 배럴이 둘을 한 모듈 그래프로 묶어 `"use client"` 소비자가 `firebase-admin`을 번들로 끌어온다. `publicApiDepth`로 공개 깊이를 단위별로 갈랐다 — 슬라이스 레이어 3, 비-슬라이스 2. `@/entities/user/ui`는 통과하고 `@/entities/user/ui/avatar`는 그대로 막힌다. 메시지도 "짚힌 대상"이 아니라 **대신 써야 할 진입점**을 이름하도록 바꿨다.
   3. **vitest 설정이 테스트를 조용히 누락하고 있었다.** `include: ['src/**']`가 `components/`·`lib/`의 테스트를 통째로 빼고 `passWithNoTests: true`가 그걸 초록불로 보고했다(소비자 실측: 30개 중 29개 누락). include를 소비자 루트 전체로 넓히고, `exclude`는 `configDefaults.exclude`를 펴서 기본 제외를 잃지 않게 했다 — **vitest의 `exclude`는 기본값에 얹히는 게 아니라 대체한다.** peer는 vitest 2·3·4를 전부 실제로 구동해 확인한 뒤에야 `^4.0.0`을 더했다.
   4. **update가 조용히 지우던 두 가지에 고지를 붙였다.** 변경 목록의 "덮어쓰기"가 `package.json` 같은 패치와 `eslint.config.mjs` 같은 통째 교체를 한 단어로 뭉뚱그려 구분이 안 됐다. `PlannedFile.preservesExisting`으로 둘을 가르고, **마커가 없을 때만**(= devkit이 관리한 적 없을 때, 덮이는 게 전부 사람 것일 때) 교체 목록을 낸다. 별개로 `"type": "module"` 주입 시 CommonJS `.js`를 문법까지 열어 보고 골라 낸다. 둘 다 차단이 아니라 고지다 — JS 설정은 기계적 병합이 불가하고 남의 파일을 개명해 줄 수도 없다.
-- **검증**: `pnpm test` 523개(플러그인 81 + devkit-cli 416 + 나머지), `pnpm lint`(에러 0, oxlint 경고 5건 — 기존과 동일), `pnpm typecheck`, `pnpm build`.
+- **검증**: `pnpm test` 523개(이 커밋 시점: eslint-plugin-fsd 81 + devkit-cli 416 + 나머지 26. 뒤이은 e2e 수정이 가드 7건을 더해 530이 된다), `pnpm lint`(에러 0, oxlint 경고 5건 — 기존과 동일), `pnpm typecheck`, `pnpm build`.
   - **RuleTester 그린을 최종 증거로 쓰지 않았다.** 저장소 밖 스크래치패드에 실제 FSD 트리를 만들고 빌드된 `dist`의 `configs.recommended`로 ESLint를 돌려 RSC 안전 경로(`@/entities/user/ui`)가 조용하고 내부 파일은 그대로 잡히는 것을 확인했다.
   - **vitest는 소비자와 같은 설치 형태로 확인해야 했다.** 처음 `link:`로 프로브를 만들었더니 `vitest/config`가 워크스페이스의 vitest 2로 해석돼 peer 검증이 무의미했다. `file:`로 바꿔 pnpm이 `.pnpm` 아래 peer를 링크하는 실제 경로에서 2.1.9·3.2.7·4.1.10 세 메이저를 각각 돌렸다. (`file:`은 스냅샷을 **복사**하므로 설정을 고칠 때마다 재설치해야 한다 — 편집이 반영 안 돼 한 번 헛짚었다.)
   - **새 테스트가 회귀를 실제로 잡는지 반증했다.** `exclude`에서 `configDefaults`를 뺀 "회귀본"을 스크래치패드에 따로 두고 돌려 `node_modules/some-dep/sample.test.ts`가 수집되는 것을(2개 → 3개) 확인했다. 저장소 파일을 임시로 망가뜨리지 않은 이유는 자동 훅이 그 상태를 커밋한 사고가 반복됐기 때문이다.

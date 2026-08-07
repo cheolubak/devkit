@@ -47,9 +47,12 @@ export function lookupLayer(folderName: string): LayerDef | null {
  * 클라이언트는 `ui`만, 서버는 `api`만 짚을 수 있다.
  *
  * 슬라이스가 없는 레이어는 세그먼트가 이미 진입점이므로 2에서 멈춘다.
- * `layer` 단위(app)도 2다 — app 내부는 같은 unit이라 임계값에 닿기 전에
- * 걸러지고, 밖에서 app을 짚는 것은 no-higher-level-imports가 이미 잡는다.
+ * `layer` 단위(app)는 1이다 — 레이어 폴더 자체가 유일한 진입점이므로 그
+ * 아래는 전부 내부다. app 안에서의 import 는 같은 unit 이라 임계값에 닿기
+ * 전에 걸러지고, 밖에서 app 을 짚는 것은 애초에 정당한 경로가 없다
+ * (no-higher-level-imports 가 같은 줄을 더 정확한 문구로 잡는다).
  */
 export function publicApiDepth(unit: PublicApiUnit): number {
-  return unit === 'slice' ? 3 : 2;
+  if (unit === 'slice') return 3;
+  return unit === 'segment' ? 2 : 1;
 }

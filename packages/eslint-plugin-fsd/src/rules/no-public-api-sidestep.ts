@@ -16,12 +16,16 @@ export default createImportRule({
     if (sameUnit) return null;
     if (to.depth > publicApiDepth(to.unitKind)) {
       // 메시지가 이름하는 것은 "짚힌 대상"이 아니라 **대신 써야 할 진입점**이다.
-      // 슬라이스 레이어에서는 세그먼트 배럴까지가 진입점이므로
-      // `entities/user/ui/Avatar`는 `entities/user/ui`를 가리켜야 한다.
+      // 그래서 단위 종류마다 publicApiDepth 만큼의 앞부분을 그대로 낸다 —
+      // 슬라이스 3(`entities/user/ui`), 세그먼트 2(`shared/lib`), 레이어 1(`app`).
+      // 여기가 publicApiDepth 와 어긋나면 규칙이 통과시키지도 않을 경로를
+      // 해법이라고 안내하게 된다.
       const prefix =
         to.unitKind === 'slice'
           ? [to.folderName, to.slice, to.segment]
-          : [to.folderName, to.segment];
+          : to.unitKind === 'segment'
+            ? [to.folderName, to.segment]
+            : [to.folderName];
       const target = prefix.filter((part): part is string => part !== null).join('/');
       return { messageId: 'sidestep', data: { target } };
     }

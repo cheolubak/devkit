@@ -55,11 +55,20 @@ ruleTester.run('no-public-api-sidestep', rule, {
       errors: [{ messageId: 'sidestep' }],
     },
     // app을 레이어 통째로 한 단위로 본다고 해서, 밖에서 app 내부를 짚는 것까지
-    // 열리지는 않는다(레이어 방향 위반이기도 하다).
+    // 열리지는 않는다(레이어 방향 위반이기도 하다). 진입점은 레이어 폴더
+    // 자체이므로 `app/providers`가 아니라 `app`을 이름해야 한다 — 세그먼트를
+    // 이름하면 규칙이 통과시키지도 않을 경로를 해법이라고 안내하게 된다.
     {
       filename: '/proj/src/features/auth/ui/x.ts',
       code: "import '@/app/providers/Theme';",
-      errors: [{ messageId: 'sidestep' }],
+      errors: [{ messageId: 'sidestep', data: { target: 'app' } }],
+    },
+    // 그래서 한 단계 얕은 `@/app/providers`도 우회다 — layer 단위의 공개
+    // 깊이는 1이다.
+    {
+      filename: '/proj/src/features/auth/ui/x.ts',
+      code: "import '@/app/providers';",
+      errors: [{ messageId: 'sidestep', data: { target: 'app' } }],
     },
   ],
 });
