@@ -77,6 +77,7 @@ describe('formatVersionReport', () => {
     const output = formatVersionReport(REPORT);
     expect(lineWith(output, 'devbak')).toContain('0.2.0');
     expect(lineWith(output, '(monorepo)')).toContain('0.1.0');
+    // version-literal-ok: REPORT 픽스처가 직접 쓴 값이다(릴리스와 무관).
     expect(lineWith(output, '@cheolubak/eslint-plugin-fsd')).toContain('0.1.1');
   });
 
@@ -116,6 +117,7 @@ describe('formatVersionReport', () => {
       ],
     });
 
+    // version-literal-ok: 픽스처 값을 열 정렬 기준 토큰으로 쓸 뿐이다(릴리스와 무관).
     expect(startOf(lineWith(output, '@cheolubak/vitest-config'), '^0.1.0')).toBe(
       startOf(lineWith(output, '@cheolubak/eslint-plugin-fsd'), '^0.1.0'),
     );
