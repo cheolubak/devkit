@@ -817,7 +817,19 @@ Expected: 출력 없음 (working tree clean)
 pnpm test
 ```
 
-Expected: 전 패키지 PASS
+Expected: `packages/devkit-cli/tests/update-plan.test.ts` 의 **1건을 제외한** 전부 PASS.
+
+그 1건은 이 브랜치와 무관한 **사전 존재 실패**다 — 실측:
+
+```
+AssertionError: expected '^0.2.0' to be '^0.1.0'
+  tests/update-plan.test.ts:90
+```
+
+이슈 #6(버전 리터럴 드리프트)이며 PR #7이 수정 중이다. 이 브랜치는 그 파일을 건드리지 않는다.
+**이것을 고치려 하지 마라** — 다른 PR의 작업이고, 여기서 손대면 두 브랜치가 같은 줄에서 충돌한다.
+
+확인할 것은 하나다: 실패가 **그 1건뿐인가.** 다른 실패가 있으면 이 브랜치가 만든 회귀다.
 
 ```bash
 pnpm lint
