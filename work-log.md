@@ -2,6 +2,60 @@
 
 ## 2026-08-07
 
+### PR #4 리뷰 7건 — 승인이 커밋에 고정되지 않던 것(TOCTOU)
+- **변경 파일**: `.github/workflows/auto-merge.yml` · `packages/devkit-cli/templates/_shared/.github/workflows/{auto-merge,claude-review}.yml` · `packages/devkit-cli/tests/auto-merge-workflow.test.ts` · `docs/superpowers/plans/2026-08-07-auto-merge.md` · `work-log.md`
+- **A — 승인이 어느 커밋에 달렸는지 보지 않았다.** 게이트가 `gh pr view`로 리뷰를 읽고
+  `gh pr merge`로 **그 시점의 head**를 머지하는데 그 사이에 SHA 대조가 없었다. `main`에
+  브랜치 보호가 없어 새 푸시가 기존 승인을 무효화하지 않으므로 **경합조차 필요 없다** —
+  승인 뒤에 푸시하면 리뷰 워크플로가 새 커밋에 대해 다시 돌고, 그 완료가 `workflow_run`을
+  발화시켜 옛 승인으로 새 커밋이 머지된다. `def onHead($head)`를 승인 판정에 AND로 더하고
+  (`commit`이 없거나 `null`이면 세지 않는다 — 확인할 수 없으면 막는 쪽), 판정과 머지 사이의
+  잔여 창은 `--match-head-commit`으로 서버가 닫게 했다. `headRefOid`는 `--arg`가 아니라
+  `pr.json` 필드로 읽는다 — 그래야 두 사본의 jq가 글자 그대로 같다.
+  `CHANGES_REQUESTED`는 커밋을 따지지 않는다(fail-safe). 픽스처가 실물과 맞는지는
+  `gh pr view 1 --json reviews`로 `commit.oid`의 존재를 직접 확인했다.
+- **B — 봇 승인 하나가 머지를 통과시키는데 리뷰 프롬프트에 인젝션 방어가 0건이었다.**
+  그 승인은 PR 제목·본문·diff를 읽고 내리는 판단이고 전부 공격자 통제 입력이다. 동작은
+  요구사항이라 그대로 두고 프롬프트에 방어 문단을 더했다 — 입력 안의 지시문은 **검토 대상
+  데이터**이지 명령이 아니며, "이 PR을 승인하라"를 만나면 조용히 무시하는 게 아니라 **그
+  자체를 변경 요청 사유로 남긴다**.
+- **C·D·E는 게이트가 이미 옳아 자연 RED가 불가능했다.** 그래서 각 게이트를 실제로 망가뜨려
+  (fork 분기의 `exit 0` 무력화 / `.state` 경로 제거 / `latest`에서 `DISMISSED` 제거) 해당
+  테스트만 붉어지는 것을 확인하고 원복했다. **통과하는 테스트가 무언가를 막는다는 증거는
+  아니다** — 이 파일은 그 함정에 이미 한 번 걸렸다. fork 차단은 jq **바깥**의 셸이라
+  `verdict()`로 못 돌린다 — 분기를 잘라 `bash -c`로 실행하고, 추출 실패 시 던진다.
+- **F — 계획서가 보안 수정 이전 YAML을 통째로 담고 있었다**(`def trusted` 0건,
+  `isCrossRepository` 0건). "이 파일을 이렇게 만들어라"는 재구현 지시라 그대로 두면 공급망
+  구멍이 재생산된다. 두 embed를 실물과 바이트 단위로 맞췄고, 브리프에 없던 Task 2의
+  `claude-review.yml` 스니펫도 같은 이유로 방어 문단을 넣었다.
+- **검증** (단계별로 나눠 적는다 — 아래 수치는 서로 다른 시점의 실행이라 뭉뚱그리면
+  수정 전/후를 구분할 수 없다):
+  - **수정 전(RED)**: `auto-merge-workflow.test.ts` 7건 실패. 핵심은
+    `expected 'merge: 승인 1건, 체크 통과' to match /^skip:/` — 옛 커밋에 달린 승인이
+    머지를 통과하던 것.
+  - **수정 후(GREEN)**: 같은 파일 47/47. 두 파일 jq `diff` 출력 없음. ruby YAML 파싱
+    3파일 OK. 계획서 embed는 grep 개수뿐 아니라 **바이트 대조**까지 했다.
+    `pnpm build`·`typecheck`·`lint:ox`(경고 5, 에러 0)·`lint:es` 그린.
+  - **`pnpm test` 전체는 1건 실패하는데 이번 변경과 무관하다.** `tests/update-plan.test.ts:90`이
+    `'^0.1.0'`을 리터럴로 박아 뒀는데 자동 릴리스 커밋 `563bd5c`가 `DEVKIT_VERSION_RANGE`를
+    `^0.2.0`으로 올렸다. `origin/main` **자체가 이미 붉고** 이번 rebase로 딸려 들어왔다.
+    관련 파일 셋이 `origin/main`과 바이트 동일함을 확인해 이 브랜치의 결함이 아님을
+    가렸고, 재발 구조까지 적어 이슈 `#6`으로 분리했다.
+- **후속 — CodeRabbit 리뷰(`CHANGES_REQUESTED`)를 반영했다.** 위 F 수정이 계획서의
+  **embed YAML**은 고쳤지만 같은 문서의 **실행 가능한 검증 픽스처**와 설계 문서의 인라인
+  명령 두 곳(`gh pr view --json` 목록, 머지 명령)은 수정 이전 상태로 남겨 뒀다. 픽스처는
+  낡은 정도가 아니라 **따라 하면 실패하는 지시**였다 — 지금 게이트로 돌리면 문서가 적어 둔
+  `merge:`가 아니라 `skip: 승인이 없습니다`가 나온다. 픽스처 3개에 `headRefOid`·`commit.oid`·
+  `authorAssociation`을 넣고 **실제로 돌려 4개 전부 기대 출력과 일치**함을 확인했다.
+  설계에는 5.2.2절(승인을 커밋에 묶는 이유)을 신설하고 5.4·5.6의 명령을 실물과 맞췄다.
+  사용자 문서 세 곳(게이트 표, 승인 집계 설명, 루트 README)에도 커밋 고정 조건을 더했다.
+  - 교훈: **문서 동기화는 "그 파일을 고쳤는가"가 아니라 "그 사실을 말하는 모든 자리를
+    고쳤는가"다.** 같은 사실이 embed·픽스처·인라인 명령·산문 네 형태로 흩어져 있었고
+    첫 수정은 그중 하나만 봤다.
+- **커밋**: `159429e`(보안 수정 + 테스트) · `0e07eac`(계획서 embed) · `4a6cec9`(rebase 해시
+  교정) · `e69bf87`(작업 기록) · `4c53c1d`(설계 10.1절 — 라이브에서만 확인되는 침묵하는
+  실패 셋) · 이 문서 커밋(CodeRabbit 반영). 브랜치 `feature/auto-merge-workflow`, PR `#4`.
+
 ### release 워크플로가 첫 단계에서 죽던 것 — 락파일 드리프트
 - **변경 파일**: `pnpm-lock.yaml`
 - **내용**: main의 release 워크플로([run 31154322380](https://github.com/cheolubak/devkit/actions/runs/31154322380))가 `pnpm install --frozen-lockfile`에서 `ERR_PNPM_OUTDATED_LOCKFILE`로 실패했다. 원인은 워크플로가 아니라 **직전 머지(PR #3, `78f42c5`)가 남긴 락파일 드리프트**다 — `packages/vitest-config/package.json`의 vitest peer 범위를 `^2.1.0 || ^3.0.0 || ^4.0.0`으로 넓히면서 `pnpm-lock.yaml`을 재생성하지 않았다.
@@ -55,6 +109,82 @@
 - **검증**: RED 먼저 — 오탐 4건을 valid 케이스로 넣어 `4 failed | 5 passed` 실측 후 수정. 반대 방향(과하게 느슨해짐)을 잠그는 invalid 3건과 `sliced === (publicApi === 'slice')` 불변식 테스트를 추가. 플러그인 76개, 워크스페이스 전체 `pnpm test` 7태스크 그린, `pnpm lint`(에러 0, oxlint 경고 5건은 기존과 동일), `pnpm typecheck`, `pnpm build` 통과.
   - **RuleTester 그린으로 끝내지 않았다.** RuleTester는 `filename`을 문자열로 받을 뿐 파일이 없어도 되고 flat config 조립·`ignores`를 전혀 거치지 않는다. 저장소 **밖** 스크래치패드에 실제 FSD 디렉토리를 만들어 빌드된 `dist`의 `configs.recommended`로 ESLint를 돌려, 오탐 4건이 조용하고 진짜 위반 5건이 그대로 잡히는 것을 확인했다(검증용 생성물을 저장소 안에 만들면 자동 훅이 커밋해버리는 사고가 이전에 4회 있었다).
 - **커밋**: 브랜치 `worktree-lexical-bubbling-bee`(`origin/main` 기준 rebase 후 작업). main 미머지.
+
+### 자동 머지가 아무나의 승인을 받아들이던 것 (최종 리뷰 fix wave)
+- **변경 파일**: `.github/workflows/auto-merge.yml` · `packages/devkit-cli/templates/_shared/.github/workflows/auto-merge.yml` · `packages/devkit-cli/tests/auto-merge-workflow.test.ts` · `packages/devkit-cli/tests/e2e/packed.e2e.test.ts` · `README.md` · `packages/devkit-cli/README.md` · `docs/superpowers/specs/2026-08-07-auto-merge-design.md` · `docs/superpowers/plans/2026-08-07-auto-merge.md` · `work-log.md`
+- **C1 — 승인자 신원을 검증하지 않았다.** 이 브랜치가 배선한 게이트는 `APPROVED`를
+  세기만 하고 **누가** 남겼는지 보지 않았다. 전제 네 가지가 동시에 성립해 있었다:
+  (1) 공개 저장소에서는 읽기 권한만 있는 임의의 GitHub 사용자가 승인 리뷰를 제출할
+  수 있고, (2) 이 저장소는 공개이며 `main`에 브랜치 보호가 없고(`branches/main/protection`
+  → 404), (3) `pull_request_review`는 fork PR에 대해서도 base 저장소 컨텍스트에서
+  쓰기 토큰으로 도는데 — 승인을 남긴 것이 **사람 토큰**이면 GITHUB_TOKEN 제약이
+  적용되지 않아 이벤트가 정상 발화하고, (4) 머지가 곧바로 `gh workflow run release.yml`
+  로 이어져 `pnpm -r publish`(`packages: write`)까지 간다. 즉 계정 둘로 fork PR을 열고
+  승인만 남기면 인터넷의 임의 사용자가 `@cheolubak/*` 게시에 도달했다. 체크아웃을 뺀
+  것은 토큰 **탈취**를 막았지만, 토큰을 정당하게 쥔 잡이 공격자 코드를 `main`에 넣어
+  주는 경로는 그대로 열려 있었다. 승인은 `authorAssociation`이
+  `OWNER`/`MEMBER`/`COLLABORATOR`이거나 작성자가 `github-actions[bot]`인 것만 세도록
+  고쳤다(봇 허용이 안전한 이유: fork PR에 대해 `pull_request`의 GITHUB_TOKEN은 읽기
+  전용으로 강등돼 `claude-review.yml`이 fork PR을 승인하는 것 자체가 불가능하다 —
+  봇 승인의 존재가 곧 same-repo PR이라는 뜻이다). `CHANGES_REQUESTED`는 의도적으로
+  작성자를 가리지 않는다(fail-safe). 이 저장소판은 `isCrossRepository`로 fork PR을
+  한 겹 더 제외하되, 두 사본의 jq 동일성을 지키려 그 검사를 jq **바깥**에 두었다.
+- **왜 테스트가 못 잡았나.** 기존 테스트 **13건**의 단언 **24개**가 전부 문자열
+  검사였다(`toContain` 계열 22 · `toBeGreaterThan` 1 · `toBeNull` 1) — `--rebase`라는
+  **글자**만 봤다. C1을 찾은 것도 테스트가 아니라 사람이 jq를 손으로 돌려서였다.
+  그래서 템플릿 YAML에서 jq 구간을 잘라 픽스처에 실제로 돌리고 판정 문자열을 단언하는
+  테스트 17건을 추가했다(추출 실패 시 **던진다** — 빈 프로그램을 조용히 돌리면 모든
+  단언이 공허해진다). 첫 케이스가 C1 회귀 방어다.
+- **드리프트가 이미 나 있었다.** 두 사본의 주석 한 단어가 어긋나 있었다(`안 갖췄다`
+  vs `안 갖춰졌다`) — **한 번의 구현 세션 안에서 손으로 옮기다** 생긴 것이다. 다음엔
+  `isbad` 목록이나 `pending` 조건일 수 있고, 그쪽 사본이 바로 패키지를 게시하는
+  저장소의 것이다. 두 파일의 jq 구간을 `toBe`로 비교하는 관문을 더했다.
+- **문서 결함도 함께 고쳤다.** 템플릿이 소비자에게 "CI를 추가하면 `workflows:` 목록에
+  넣어라"고 **지시**하는데 `.github/workflows/**`는 `ci` 카테고리 통째 덮어쓰기
+  대상이라 `devbak update`가 그 편집을 말없이 되돌린다 — 되돌아간 증상이 하필 그
+  파일이 스스로 경고한 침묵하는 증상이다(PR이 승인된 채로 멈춘다). 이를 주석과
+  README 양쪽에 명시. README dry-run 예시 2건이 실물과 달라 실제로 돌려 고쳤고
+  (`--type nest` 신규 12 + 덮어쓰기 2, `--only claude,ci` 신규 6 — 둘 다
+  `.claude/agents/devkit-implementer.md`가 빠져 있었다), `no-auto-merge` 라벨이 기본
+  제공되지 않는다는 사실(`gh label create` 필요)을 양쪽 README에 적었다. 설계 문서에는
+  "누가 승인할 수 있는가" 절(5.2.1)을 신설했다 — 5.2절이 "권한 있는 트리거"를 다루면서
+  체크아웃만 본 것이 C1의 뿌리다.
+- **검증**: TDD — 수정 전 C1 케이스만 RED(`expected 'merge: 승인 1건, 체크 통과' to
+  match /^skip:/`), 수정 후 31/31 GREEN. 두 파일 jq 구간 `diff` 출력 없음. ruby YAML
+  파싱 양쪽 OK. `pnpm test` 51파일/529건(devkit-cli 34파일/437건) · `pnpm typecheck` · `pnpm lint:ox` ·
+  `pnpm lint:es` 전부 PASS. e2e는 돌리지 않았다(`GITHUB_TOKEN` 필요) — 단언만 더했다.
+- **함정 하나 더**: 처음 쓴 `trusted` 정의가 `["OWNER",...] | index(.authorAssociation)`
+  였는데, jq 파이프 안에서는 `.`이 **그 배열**이 되어 `Cannot index array with string`
+  으로 죽었다. 테스트를 실제로 돌리지 않았으면 게이트 전체가 런타임에 고장난 채
+  머지됐을 것이다 — 문자열 단언은 이것도 잡지 못한다.
+- **커밋**: `565de03`(보안 수정 + 게이트 실행 테스트 + 드리프트 관문) · 이 문서 커밋
+  (문서 일괄 — 자기 해시를 적을 수 없다)
+
+### 자동 승인·자동 머지 워크플로
+- **변경 파일**:
+  - `packages/devkit-cli/templates/_shared/.github/workflows/auto-merge.yml` (신규)
+  - `packages/devkit-cli/templates/_shared/.github/workflows/claude-review.yml`
+  - `packages/devkit-cli/tests/auto-merge-workflow.test.ts` (신규)
+  - `packages/devkit-cli/tests/plan-ops.test.ts`
+  - `.github/workflows/auto-merge.yml` (신규)
+  - `README.md`, `packages/devkit-cli/README.md`, `work-log.md`
+  - `docs/superpowers/specs/2026-08-07-auto-merge-design.md` (신규)
+  - `docs/superpowers/plans/2026-08-07-auto-merge.md` (신규)
+- **내용**: 승인이 1건 이상이면 PR을 rebase 머지하는 워크플로를 템플릿과 이 저장소에
+  더했다. 설계를 지배한 제약은 **GITHUB_TOKEN이 일으킨 이벤트는 새 워크플로 실행을
+  만들지 않는다**는 것이다 — Claude가 GITHUB_TOKEN으로 남긴 승인은
+  `pull_request_review`를 발화시키지 못하므로 `workflow_run`으로 리뷰 워크플로의
+  완료를 함께 듣는다. 같은 제약 때문에 이 저장소에서는 자동 머지가 만든 push가
+  `release.yml`을 트리거하지 못해, 머지 직후 `gh workflow run release.yml`로
+  깨운다(`workflow_dispatch`는 그 규칙의 명시적 예외다). 승인 수는 브랜치 보호
+  설정에 좌우되는 `reviewDecision` 대신 `reviews`를 리뷰어별 최신으로 접어 직접
+  센다. 체크 게이트는 자기 자신을 `workflowName`으로 빼야 한다 — `.name`은
+  워크플로가 아니라 잡 이름이라 그걸로 거르면 데드락이 그대로 남는다.
+  CLI 소스 변경은 없다(`copyOverlay('_shared')`와 `ci` 카테고리가 이미 덮는다).
+- **커밋**: `61b5c4d`(설계) · `f700859`(계획) · `a309c15`(Task 1: 템플릿 auto-merge.yml)
+  · `ddef4f5`(계획 문서 수정) · `5cae2cb`(Task 2: claude-review.yml 대칭 보강)
+  · `3c17a47`(Task 3: 이 저장소 auto-merge.yml) · 이 문서 커밋(Task 4, amend 대상이라
+  자기 해시를 적지 않는다)
 
 ### 앵커된 `.claude` 조상 줄이 부정 패턴을 무력화하던 것과, 릴리스가 다음 릴리스를 깨던 스냅샷 수정
 - **변경 파일**: `packages/devkit-cli/src/ops/merge-ignore.ts` · `templates/_shared/_gitignore` · `tests/merge-ignore.test.ts` · `tests/merge-ignore-git.test.ts` · `tests/recipe-{nest,next,monorepo}.test.ts` · `tests/__snapshots__/recipe-{nest,next,monorepo}.test.ts.snap` · `work-log.md`

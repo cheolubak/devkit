@@ -1,0 +1,186 @@
+name: Auto Merge
+
+# 승인이 1건 이상이면 PR 을 rebase 로 머지하고, 그 뒤 release.yml 을 깨운다.
+#
+# 트리거가 pull_request_review 하나인 이유. 이 저장소에는 Claude 리뷰
+# 워크플로가 없어 workflow_run 으로 들을 대상이 없다. 승인은 사람이 하고,
+# 사람 토큰이 만든 이벤트는 정상적으로 워크플로를 트리거한다.
+#
+# 알려진 한계 — PR 에서 도는 CI 워크플로를 나중에 추가하면 이 파일도 고쳐야
+# 한다. 승인 시점에 그 체크가 진행 중이면 아래 게이트가 "보류"로 끝나는데,
+# 다시 깨워 줄 트리거가 없어 PR 이 승인된 채로 멈춘다. 그때는 여기에
+#
+#   workflow_run:
+#     workflows: ['<그 워크플로의 name>']
+#     types: [completed]
+#
+# 을 더하고, 잡의 if 에 workflow_run 성공 조건을 넣어야 한다
+# (templates/_shared/.github/workflows/auto-merge.yml 이 그 형태다).
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write # 머지
+  pull-requests: write # 머지 API·브랜치 삭제
+  checks: read # statusCheckRollup 조회
+  actions: write # 머지 후 release.yml 을 workflow_dispatch 로 깨운다
+
+concurrency:
+  group: auto-merge-${{ github.event.pull_request.head.sha }}
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    # 체크아웃 단계가 없다. pull_request_review 는 base 저장소 컨텍스트에서
+    # 시크릿과 쓰기 토큰을 들고 도는 **권한 있는 트리거**다 — PR 의 head 를
+    # 체크아웃해 무언가 실행하면 fork PR 이 임의 코드로 그 토큰을 가져갈 수
+    # 있다. actions/checkout 을 추가하지 말 것. 체크아웃이 없으므로 gh 는
+    # git remote 로 저장소를 추론할 수 없다 — 모든 호출에 --repo 를 넘긴다.
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: 판정하고 머지
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          SELF: ${{ github.workflow }}
+          OPT_OUT_LABEL: no-auto-merge
+        run: |
+          set -euo pipefail
+
+          gh pr view "$PR" --repo "$REPO" --json state,isDraft,isCrossRepository,headRefOid,labels,reviews,statusCheckRollup > pr.json
+
+          # fork 에서 온 PR 은 아예 제외한다. 이 저장소의 머지는 곧바로
+          # release.yml 디스패치를 거쳐 패키지 게시로 이어지므로, 아래 신뢰
+          # 판정이 틀려도 공급망 경로가 결정적으로 닫히도록 한 겹 더 둔다.
+          # CLAUDE.md 워크플로상 이 저장소의 PR 은 전부 same-repo 브랜치라
+          # 실사용 손해가 없다.
+          #
+          # 아래 게이트 jq 바깥에 두는 것이 요구다 — 그 프로그램은 템플릿판과
+          # 글자 그대로 같아야 하고(tests/auto-merge-workflow.test.ts 가 고정),
+          # 템플릿 쪽 생성물은 fork 기여를 자동 머지하고 싶을 수 있다.
+          if [ "$(jq -r '.isCrossRepository' pr.json)" = 'true' ]; then
+            echo "skip: fork 에서 온 PR 입니다"
+            exit 0
+          fi
+
+          # 게이트 전체를 jq 한 프로그램에 모은다. 셸 분기로 흩으면 조건이
+          # 늘 때 조용히 빠지는 가지가 생긴다. 결과는 항상 한 줄로 로그에
+          # 남는다 — "왜 안 머지됐는가"가 실행 로그만으로 읽혀야 한다.
+          VERDICT=$(jq -r --arg SELF "$SELF" --arg LABEL "$OPT_OUT_LABEL" '
+            def norm: (. // "") | ascii_upcase;
+            def isbad($v): ["FAILURE","CANCELLED","TIMED_OUT","ACTION_REQUIRED","STARTUP_FAILURE","ERROR"] | index($v) != null;
+
+            # 리뷰어별 최신 리뷰만 남긴다. COMMENTED 는 집계에서 뺀다 —
+            # 승인 뒤에 코멘트를 하나 더 남긴 리뷰어를 승인 취소로 오판한다.
+            # DISMISSED 는 포함하되 승인으로 세지 않는다(철회가 반영돼야 한다).
+            # reviewDecision 은 쓰지 않는다 — 브랜치 보호의 required reviews
+            # 설정에 좌우되고, 설정이 없는 저장소에서는 비어 나온다.
+            def latest:
+              [ (.reviews // [])[]
+                | select(.state == "APPROVED"
+                      or .state == "CHANGES_REQUESTED"
+                      or .state == "DISMISSED") ]
+              | group_by(.author.login)
+              | map(max_by(.submittedAt));
+
+            # 자기 자신을 workflowName 으로 뺀다. CheckRun 의 .name 은
+            # 워크플로가 아니라 **잡** 이름이라, .name 으로 거르면 잡 이름과
+            # 어긋나 자기 자신이 집계에 남는다 — 그 체크는 항상 IN_PROGRESS
+            # 이므로 영원히 머지되지 않는다. StatusContext(외부 CI)에는 이
+            # 필드가 없으므로 // "" 로 받아 통과시킨다.
+            def others:
+              [ (.statusCheckRollup // [])[] | select((.workflowName // "") != $SELF) ];
+
+            # 승인은 **신뢰할 수 있는 사람의 것만** 센다. 공개 저장소에서는
+            # 읽기 권한만 있는 임의의 사용자가 승인 리뷰를 남길 수 있고,
+            # pull_request_review 는 fork PR 에 대해서도 base 저장소 컨텍스트에서
+            # 쓰기 토큰을 들고 돈다. 신원을 보지 않으면 인터넷의 아무나가 승인
+            # 한 건으로 main 머지에 도달한다.
+            #
+            # github-actions[bot] 을 로그인으로 허용하는 것은 안전하다. fork 에서
+            # 온 PR 에 대해 pull_request 트리거의 GITHUB_TOKEN 은 읽기 전용으로
+            # 강등되므로 claude-review.yml 이 fork PR 을 승인하는 것 자체가
+            # 불가능하다 — 봇 승인이 존재한다는 사실 자체가 same-repo PR 임을
+            # 뜻한다.
+            #
+            # 목록 리터럴에 index 를 걸지 않는다 — 파이프 안에서는 . 이 그
+            # 배열이 되어 .authorAssociation 이 배열 인덱싱으로 죽는다.
+            def trusted:
+              ((.authorAssociation // "") | . == "OWNER" or . == "MEMBER" or . == "COLLABORATOR")
+              or ((.author.login // "") == "github-actions[bot]");
+
+            # 승인은 **그 승인이 달린 커밋이 현재 head 일 때만** 센다. 브랜치
+            # 보호가 없으면 새 푸시가 기존 승인을 무효화하지 않는다 — 커밋 A 에
+            # 달린 승인이 그대로 커밋 B 를 머지시킨다. 경합조차 필요 없다:
+            # 승인 뒤에 푸시하면 리뷰 워크플로가 B 에 대해 다시 돌고, 그 완료가
+            # workflow_run 을 발화시켜 A 의 승인으로 B 가 머지된다.
+            #
+            # commit 이 없거나 null 인 리뷰(오래된 리뷰·API 형태 차이)는 승인으로
+            # 세지 않는다 — 확인할 수 없으면 막는 쪽이 안전하다.
+            def onHead($head): ((.commit.oid // "") | . != "" and . == $head);
+
+            # 비대칭은 **둘 다** 의도다. CHANGES_REQUESTED 는 작성자도 커밋도
+            # 가리지 않는다 — 막는 쪽은 fail-safe 이므로 외부인의 변경 요청도,
+            # 이전 커밋에 대한 변경 요청도 존중한다. 잘못 막으면 사람이 지우면
+            # 그만이지만 잘못 머지하면 되돌릴 수 없다.
+            def approvals:
+              (.headRefOid // "") as $head
+              | latest | map(select(.state == "APPROVED" and trusted and onHead($head))) | length;
+            # 승인은 있는데 전부 옛 커밋에 달린 경우를 "승인이 없습니다"와 갈라
+            # 낸다. 같은 문구로 뭉뚱그리면 승인해 둔 사람이 왜 안 머지되는지
+            # 실행 로그만으로 알 수 없다.
+            def stale:
+              (.headRefOid // "") as $head
+              | latest | map(select(.state == "APPROVED" and trusted and (onHead($head) | not))) | length;
+            def rejections: latest | map(select(.state == "CHANGES_REQUESTED")) | length;
+            def pending:
+              others
+              | map(select(((.status | norm) | . != "" and . != "COMPLETED")
+                        or ((.state | norm) == "PENDING")))
+              | length;
+            def failing:
+              others
+              | map(select(isbad(.conclusion | norm) or isbad(.state | norm)))
+              | length;
+
+            if .state != "OPEN" then "skip: PR 이 열려 있지 않습니다 (state=\(.state))"
+            elif .isDraft then "skip: draft PR 입니다"
+            elif ([(.labels // [])[].name] | index($LABEL)) then "skip: \($LABEL) 라벨이 붙어 있습니다"
+            elif rejections > 0 then "skip: 변경 요청이 \(rejections)건 있습니다"
+            elif approvals < 1 and stale > 0 then "skip: 승인 \(stale)건이 현재 head 에 대한 것이 아닙니다"
+            elif approvals < 1 then "skip: 승인이 없습니다"
+            elif pending > 0 then "skip: 체크 \(pending)건이 아직 진행 중입니다"
+            elif failing > 0 then "skip: 실패한 체크가 \(failing)건 있습니다"
+            else "merge: 승인 \(approvals)건, 체크 통과"
+            end
+          ' pr.json)
+
+          echo "$VERDICT"
+
+          # 게이트에 걸린 것은 고장이 아니라 정상 상태다. 실패로 끝내면 PR
+          # 체크가 빨간불이 되어 "조건이 아직 안 갖춰졌다"를 고장으로 보이게 한다.
+          case "$VERDICT" in
+            merge:*) ;;
+            *) exit 0 ;;
+          esac
+
+          # 게이트는 이미 "승인이 현재 head 에 달렸다"를 확인했다. 그래도 그
+          # 판정과 이 호출 사이에 새 푸시가 들어올 수 있고, 그 잔여 창은 서버만
+          # 닫을 수 있다 — head 가 바뀌었으면 GitHub 이 머지를 거부한다.
+          HEAD_SHA=$(jq -r '.headRefOid' pr.json)
+          gh pr merge "$PR" --repo "$REPO" --rebase --delete-branch --match-head-commit "$HEAD_SHA"
+
+          # GITHUB_TOKEN 이 만든 push 는 워크플로를 트리거하지 않는다 —
+          # release.yml 은 on: push: branches: [main] 이므로, 자동 머지를 켠
+          # 순간 릴리스가 아무 신호 없이 멈춘다. workflow_dispatch 는 그
+          # 규칙의 **명시적 예외**라 여기서 되살릴 수 있다(PAT 불필요).
+          #
+          # 실패하면 이 잡을 실패시킨다. 조용히 넘어가면 "머지는 됐는데
+          # 릴리스는 안 된" 상태가 신호 없이 남는다. release.yml 의
+          # concurrency(group: release)가 중복 실행을 직렬화하므로 사람이
+          # 다시 돌려도 안전하다.
+          gh workflow run release.yml --repo "$REPO" --ref main
+          echo "release.yml 을 디스패치했습니다"
