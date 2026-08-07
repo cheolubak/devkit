@@ -698,12 +698,20 @@ Expected: 출력 없음 (동일). 다르면 맞춘다.
 
 - [ ] **Step 4: YAML 이 파싱되는지 확인한다**
 
+이 환경에는 `pyyaml`이 없다(`python3 -c "import yaml"`은 `ModuleNotFoundError`로 죽는다).
+macOS가 기본 제공하는 ruby의 psych를 쓴다.
+
 ```bash
 cd /Users/dabot/Documents/develop/eslint
-python3 -c "import yaml,sys; [yaml.safe_load(open(p)) for p in ['.github/workflows/auto-merge.yml','packages/devkit-cli/templates/_shared/.github/workflows/auto-merge.yml']]; print('OK')"
+for f in .github/workflows/auto-merge.yml packages/devkit-cli/templates/_shared/.github/workflows/auto-merge.yml; do
+  ruby -ryaml -e 'd=YAML.load_file(ARGV[0]); puts "#{ARGV[0]}: parse OK, name=#{d["name"].inspect}"' "$f"
+done
 ```
 
-Expected: `OK`
+Expected: 두 줄 모두 `parse OK, name="Auto Merge"`
+
+**문자열 단언은 YAML 문법 오류를 잡지 못한다** — 테스트는 `readFile`로 원문 텍스트를 읽으므로
+YAML이 깨져도 그대로 통과한다. 이 단계를 "테스트가 검증한다"는 이유로 건너뛰지 말 것.
 
 - [ ] **Step 5: 전체 검증**
 
