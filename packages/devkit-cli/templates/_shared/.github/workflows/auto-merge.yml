@@ -109,7 +109,28 @@ jobs:
             def others:
               [ (.statusCheckRollup // [])[] | select((.workflowName // "") != $SELF) ];
 
-            def approvals: latest | map(select(.state == "APPROVED")) | length;
+            # 승인은 **신뢰할 수 있는 사람의 것만** 센다. 공개 저장소에서는
+            # 읽기 권한만 있는 임의의 사용자가 승인 리뷰를 남길 수 있고,
+            # pull_request_review 는 fork PR 에 대해서도 base 저장소 컨텍스트에서
+            # 쓰기 토큰을 들고 돈다. 신원을 보지 않으면 인터넷의 아무나가 승인
+            # 한 건으로 main 머지에 도달한다.
+            #
+            # github-actions[bot] 을 로그인으로 허용하는 것은 안전하다. fork 에서
+            # 온 PR 에 대해 pull_request 트리거의 GITHUB_TOKEN 은 읽기 전용으로
+            # 강등되므로 claude-review.yml 이 fork PR 을 승인하는 것 자체가
+            # 불가능하다 — 봇 승인이 존재한다는 사실 자체가 same-repo PR 임을
+            # 뜻한다.
+            #
+            # 목록 리터럴에 index 를 걸지 않는다 — 파이프 안에서는 . 이 그
+            # 배열이 되어 .authorAssociation 이 배열 인덱싱으로 죽는다.
+            def trusted:
+              ((.authorAssociation // "") | . == "OWNER" or . == "MEMBER" or . == "COLLABORATOR")
+              or ((.author.login // "") == "github-actions[bot]");
+
+            # 비대칭은 의도다. CHANGES_REQUESTED 는 작성자를 가리지 않고 센다 —
+            # 막는 쪽은 fail-safe 이므로 외부인의 변경 요청도 존중한다. 잘못
+            # 막으면 사람이 지우면 그만이지만 잘못 머지하면 되돌릴 수 없다.
+            def approvals: latest | map(select(.state == "APPROVED" and trusted)) | length;
             def rejections: latest | map(select(.state == "CHANGES_REQUESTED")) | length;
             def pending:
               others
