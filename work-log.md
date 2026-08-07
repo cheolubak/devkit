@@ -69,6 +69,7 @@
   - 변이 2(값 어긋뜨리기): 상수만 `^0.9.0` 으로 바꾸자 `registry-version.test.ts` 가 게시본과 대조해 잡았고(`@cheolubak/eslint-config-nest@0.2.0 이 ^0.9.0 를 벗어난다`), `update-plan.test.ts` 는 정상 통과했다. 역할 분담이 실제로 성립하며 리터럴을 없애도 **검증 공백이 생기지 않는다**.
   - e2e 수정도 같은 방식으로 양방향 확인했다: `packed` 를 원래 리터럴로 되돌리면 실제로 **실패**하고(`VITEST_EXIT=1`), 수정본은 통과한다. `create` 의 monorepo 케이스는 고치기 전 e2e 전체 실행에서 **실측으로 실패했다**(13건 중 1건). 두 e2e 수정 모두 불필요한 변경이 아니었음이 실행으로 확정됐다.
   - 릴리스 검증 스텝과 같은 순서로 `pnpm build`·`pnpm test`(423건, devkit-cli)·`pnpm typecheck`·`pnpm lint:ox`(exit 0, 기존 경고만)·`pnpm lint:es`·`pnpm test:e2e`(13/13) 전부 그린. **`src/` 변경은 0건**이다.
+- **커밋**: `6c2e80d` (브랜치 `worktree-greedy-moseying-brook`, push·PR 은 하지 않음)
 
 ### release 워크플로가 첫 단계에서 죽던 것 — 락파일 드리프트
 - **변경 파일**: `pnpm-lock.yaml`
