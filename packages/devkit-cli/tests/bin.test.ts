@@ -131,3 +131,79 @@ describe('assertDistFresh', () => {
     expect(() => assertDistFresh(pkg)).not.toThrow();
   });
 });
+
+describe('version', () => {
+  /** stdout 을 가로채 main 을 돌리고 쓰인 것을 이어 붙여 낸다. */
+  async function capture(argv: string[], cwd?: string): Promise<string> {
+    const written: string[] = [];
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      written.push(String(chunk));
+      return true;
+    });
+    try {
+      await main(argv, cwd === undefined ? {} : { cwd });
+    } finally {
+      write.mockRestore();
+    }
+    return written.join('');
+  }
+
+  function project(pkg: Record<string, unknown>): string {
+    const dir = mkdtempSync(join(tmpdir(), 'devbak-version-'));
+    created.push(dir);
+    writeFileSync(join(dir, 'package.json'), `${JSON.stringify(pkg, null, 2)}\n`);
+    return dir;
+  }
+
+  it('--version 은 버전 문자열 한 줄만 낸다', async () => {
+    // 리포트 형식을 스크립트가 파싱하게 두면 형식을 영영 바꿀 수 없다.
+    // 플래그가 값 하나만 내는 안정된 계약을 맡는다.
+    const output = await capture(['--version']);
+    expect(output).toMatch(/^\d+\.\d+\.\d+\S*\n$/);
+  });
+
+  it('-v 도 같게 동작한다', async () => {
+    expect(await capture(['-v'])).toBe(await capture(['--version']));
+  });
+
+  it('마커가 있으면 CLI · 마커 · 패키지를 낸다', async () => {
+    const dir = project({
+      name: 'my-api',
+      devkit: { type: 'nest', version: '0.1.0' },
+      devDependencies: { '@cheolubak/tsconfig': '^0.1.0' },
+    });
+
+    const output = await capture(['version'], dir);
+
+    expect(output).toContain('devbak');
+    expect(output).toContain('(nest)');
+    expect(output).toContain('@cheolubak/tsconfig');
+    expect(output).toContain('미설치');
+  });
+
+  it('devkit 프로젝트가 아니면 CLI 한 줄만 내고 던지지 않는다', async () => {
+    const dir = project({ name: 'plain' });
+
+    const output = await capture(['version'], dir);
+
+    expect(output.trimEnd().split('\n')).toHaveLength(1);
+    expect(output).toContain('devbak');
+  });
+
+  it('경로 인자를 받는다', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'devbak-version-'));
+    created.push(root);
+    const app = join(root, 'apps', 'web');
+    mkdirSync(app, { recursive: true });
+    writeFileSync(
+      join(app, 'package.json'),
+      `${JSON.stringify({ name: 'web', devkit: { type: 'next', version: '0.1.0' } })}\n`,
+    );
+
+    expect(await capture(['version', 'apps/web'], root)).toContain('(next)');
+  });
+
+  it('사용법에 version 이 들어 있다', async () => {
+    expect(await capture(['--help'])).toContain('pnpm devbak version [path]');
+  });
+});
