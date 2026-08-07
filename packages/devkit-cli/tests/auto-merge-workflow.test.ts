@@ -664,6 +664,18 @@ describe('_shared 리뷰 워크플로', () => {
     expect(doc).toContain('.claude/agents/devkit-reviewer.md');
     expect(doc).toContain('실제 코드 변경');
   });
+
+  it('draft PR 이 ready 로 전환되는 것을 듣고, 겹친 실행을 concurrency 로 막는다', async () => {
+    // ready_for_review 가 없으면 draft 로 열린 PR 이 ready 로 바뀌어도 재리뷰를
+    // 듣는 트리거가 없어 auto-merge 의 "draft PR 입니다" 게이트에서 조용히
+    // 멈춘다. concurrency 가 없으면 gh pr review --approve 가 commit_id 없이
+    // PR 최신 커밋에 승인을 기록하는 특성 때문에, 겹친 실행이 옛 커밋의 승인을
+    // 새 커밋에 남겨 auto-merge 의 onHead 판정이 봇 승인에 대해 깨질 수 있다.
+    const doc = await readReview();
+    expect(doc).toContain('ready_for_review');
+    expect(doc).toMatch(/^concurrency:/m);
+    expect(doc).toContain('cancel-in-progress: true');
+  });
 });
 
 /** 이 저장소 자신의 리뷰 워크플로. 템플릿이 아니라 운영 설정이다. */
@@ -711,6 +723,16 @@ describe('이 저장소판 리뷰 워크플로', () => {
     }
     const target = fileURLToPath(new URL(`../../../${matched[1]}`, import.meta.url));
     expect(existsSync(target), `${matched[1]} 이 저장소에 없다`).toBe(true);
+  });
+
+  it('draft PR 이 ready 로 전환되는 것을 듣고, 겹친 실행을 concurrency 로 막는다', () => {
+    // 템플릿판과 같은 이유. 이 저장소판은 머지가 곧바로 release.yml 디스패치를
+    // 거쳐 패키지 게시로 이어지므로, 겹친 실행이 옛 커밋의 승인을 새 커밋에
+    // 남기는 결함은 여기서 더 위험하다.
+    const doc = read();
+    expect(doc).toContain('ready_for_review');
+    expect(doc).toMatch(/^concurrency:/m);
+    expect(doc).toContain('cancel-in-progress: true');
   });
 });
 

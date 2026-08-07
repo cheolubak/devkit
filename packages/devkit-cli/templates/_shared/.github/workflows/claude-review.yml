@@ -1,7 +1,23 @@
 name: 'Claude Code Review'
 on:
   pull_request:
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, ready_for_review]
+
+# gh pr review --approve 는 commit_id 를 넘기지 않으면 GitHub 이 승인을 PR 의
+# **최신 커밋**에 기록한다. concurrency 없이 실행이 겹치면, 옛 커밋을 읽던
+# 실행의 승인이 이미 올라온 새 커밋에 기록돼 auto-merge.yml 의 onHead 판정
+# (승인은 그 승인이 달린 커밋이 현재 head 일 때만 센다)이 봇 승인에 대해
+# 깨질 수 있다.
+#
+# cancel-in-progress: true 로 닫아도 안전한 이유 — 취소된 실행의 CheckRun 은
+# 그 실행이 시작될 때의(옛) 커밋에 붙으므로 새 커밋의 rollup 을 오염시키지
+# 않고, workflow_run.conclusion 이 'cancelled' 가 되어 auto-merge.yml 의 잡
+# if 조건(conclusion == 'success')도 통과하지 못한다 — 겹쳐도 안전한 방향
+# (머지되지 않음)으로 닫힌다.
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   review:
     runs-on: ubuntu-latest
