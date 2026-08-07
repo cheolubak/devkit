@@ -691,3 +691,45 @@ describe('이 저장소판 리뷰 워크플로', () => {
     expect(existsSync(target), `${matched[1]} 이 저장소에 없다`).toBe(true);
   });
 });
+
+describe('이 저장소판 auto-merge 의 트리거 배선', () => {
+  function read(): string {
+    return readFileSync(REPO_AUTO_MERGE, 'utf8');
+  }
+
+  it('세 트리거를 모두 갖는다', () => {
+    // pull_request_review 만으로는 봇 승인을 못 잡고(GITHUB_TOKEN 이벤트는
+    // 워크플로를 트리거하지 않는다), workflow_run 만으로는 외부 앱의 Commit
+    // Status 완료를 못 잡는다. 셋 중 하나라도 빠지면 그 경로가 조용히 죽는다.
+    const doc = read();
+    expect(doc).toContain('workflow_run:');
+    expect(doc).toContain('pull_request_review:');
+    // status 는 값 없는 키다. 주석에도 이 단어가 나오므로 줄 구조로 본다.
+    expect(doc).toMatch(/^ {2}status:[ \t]*$/m);
+  });
+
+  it('workflow_run 이 듣는 이름이 저장소판 claude-review.yml 의 name 과 일치한다', () => {
+    // 이름이 어긋나면 워크플로는 **에러 없이** 영원히 실행되지 않는다.
+    const reviewName = workflowName(readFileSync(REPO_CLAUDE_REVIEW, 'utf8'));
+    const line = /^\s*workflows:[ \t]*(.+)$/m.exec(read());
+    expect(line, '저장소판 auto-merge.yml 에 workflows: 줄이 없다').not.toBeNull();
+    expect(line?.[1]).toContain(reviewName);
+  });
+
+  it('status 이벤트의 SHA 가 PR 번호 확정에 배선돼 있다', () => {
+    // 트리거만 더하고 SHA 출처를 안 늘리면 status 로 깨어난 실행이 빈
+    // HEAD_SHA 로 조회해 "열린 PR 없음"으로 끝난다 — 트리거는 있는데
+    // 아무것도 하지 않는, 가장 알아채기 어려운 형태의 실패다.
+    expect(read()).toMatch(/HEAD_SHA:.*github\.event\.sha/);
+  });
+
+  it('세 트리거가 같은 concurrency 키를 만든다', () => {
+    // 한쪽이 다른 키를 쓰면 같은 PR 의 두 실행이 서로 다른 그룹에 들어가
+    // 동시에 머지를 시도한다.
+    const group = /^\s*group:[ \t]*(.+)$/m.exec(read());
+    expect(group, 'concurrency group 이 없다').not.toBeNull();
+    expect(group?.[1]).toContain('workflow_run.head_sha');
+    expect(group?.[1]).toContain('github.event.sha');
+    expect(group?.[1]).toContain('pull_request.head.sha');
+  });
+});

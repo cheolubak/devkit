@@ -2,23 +2,38 @@ name: Auto Merge
 
 # 승인이 1건 이상이면 PR 을 rebase 로 머지하고, 그 뒤 release.yml 을 깨운다.
 #
-# 트리거가 pull_request_review 하나인 이유. 이 저장소에는 Claude 리뷰
-# 워크플로가 없어 workflow_run 으로 들을 대상이 없다. 승인은 사람이 하고,
-# 사람 토큰이 만든 이벤트는 정상적으로 워크플로를 트리거한다.
+# 트리거가 셋인 이유. 승인과 체크는 서로 다른 세 경로로 도착하고, 각 경로는
+# 자기만의 트리거로만 깨울 수 있다.
 #
-# 알려진 한계 — PR 에서 도는 CI 워크플로를 나중에 추가하면 이 파일도 고쳐야
-# 한다. 승인 시점에 그 체크가 진행 중이면 아래 게이트가 "보류"로 끝나는데,
-# 다시 깨워 줄 트리거가 없어 PR 이 승인된 채로 멈춘다. 그때는 여기에
+#   1. 사람이 UI 에서 누른 승인 → pull_request_review
+#   2. claude-review.yml 의 승인 → workflow_run
+#      GitHub 은 GITHUB_TOKEN 이 일으킨 이벤트로 새 워크플로 실행을 만들지
+#      않는다(workflow_dispatch·repository_dispatch 만 예외). 그래서 승인
+#      자체가 아니라 리뷰 워크플로의 "완료"를 듣는다.
+#   3. 외부 앱(CodeRabbit 등)의 Commit Status 전환 → status
+#      statusCheckRollup 에는 두 형태가 섞여 온다 — Actions 가 만드는
+#      CheckRun 과 외부 앱이 만드는 StatusContext(Commit Status API)다.
+#      후자의 완료는 workflow_run 으로 들을 수 없다. CodeRabbit 은 리뷰를
+#      체크보다 **먼저** 제출하므로, 이 트리거가 없으면 "승인은 됐는데 체크
+#      진행 중" 상태에서 깨워 줄 것이 없어 PR 이 조용히 멈춘다.
 #
-#   workflow_run:
-#     workflows: ['<그 워크플로의 name>']
-#     types: [completed]
+# 하나라도 빠지면 그 경로가 아무 신호 없이 죽는다.
 #
-# 을 더하고, 잡의 if 에 workflow_run 성공 조건을 넣어야 한다
-# (templates/_shared/.github/workflows/auto-merge.yml 이 그 형태다).
+# 주의 — workflow_run 과 status 는 **기본 브랜치에 있는 워크플로 파일만**
+# 실행한다. 이 파일을 고치는 PR 에서는 두 트리거가 동작하지 않는다. 그 PR 은
+# 사람이 승인해 pull_request_review 경로로 머지해야 하며, 새 트리거는 머지된
+# 다음 PR 부터 확인된다.
 on:
   pull_request_review:
     types: [submitted]
+  workflow_run:
+    workflows: ['Claude Code Review']
+    types: [completed]
+  # types 도 브랜치 필터도 받지 않는다 — 모든 커밋 상태 변경에 발화한다.
+  # PR 과 무관한 커밋에서도 돌지만 아래 PR 번호 확정이 즉시 걸러낸다.
+  # 이 워크플로 자신은 CheckRun 을 만들지 Commit Status 를 만들지 않으므로
+  # 자기 이벤트로 자기를 깨우는 순환은 없다.
+  status:
 
 permissions:
   contents: write # 머지
@@ -27,11 +42,18 @@ permissions:
   actions: write # 머지 후 release.yml 을 workflow_dispatch 로 깨운다
 
 concurrency:
-  group: auto-merge-${{ github.event.pull_request.head.sha }}
+  group: auto-merge-${{ github.event.workflow_run.head_sha || github.event.sha || github.event.pull_request.head.sha }}
   cancel-in-progress: false
 
 jobs:
   merge:
+    # 리뷰 워크플로가 실패했으면 머지를 시도할 이유가 없다. status 를
+    # success 로 좁히는 것은 낭비를 줄이기 위해서다 — pending·failure 에서
+    # 돌아도 게이트가 막지만 그때는 어차피 머지할 수 없다.
+    if: >-
+      github.event_name == 'pull_request_review'
+      || github.event.workflow_run.conclusion == 'success'
+      || github.event.state == 'success'
     runs-on: ubuntu-latest
     # 체크아웃 단계가 없다. pull_request_review 는 base 저장소 컨텍스트에서
     # 시크릿과 쓰기 토큰을 들고 도는 **권한 있는 트리거**다 — PR 의 head 를
@@ -42,9 +64,33 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       REPO: ${{ github.repository }}
     steps:
-      - name: 판정하고 머지
+      - name: PR 번호 확정
+        id: pr
         env:
-          PR: ${{ github.event.pull_request.number }}
+          EVENT: ${{ github.event_name }}
+          PR_FROM_REVIEW: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.event.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = 'pull_request_review' ]; then
+            NUMBER="$PR_FROM_REVIEW"
+          else
+            # workflow_run.pull_requests[] 를 쓰지 않는다 — fork 에서 온 PR 에
+            # 대해 비어 있고, 비면 이 워크플로가 **에러 없이** 아무것도 하지
+            # 않는다. head SHA 역조회는 그 실패가 드러난다.
+            NUMBER=$(gh api "repos/$REPO/commits/$HEAD_SHA/pulls" \
+              --jq '[.[] | select(.state == "open")][0].number // empty')
+          fi
+          if [ -z "$NUMBER" ]; then
+            echo "열린 PR 을 찾지 못했습니다 — 대상 없음"
+          else
+            echo "대상 PR: #$NUMBER"
+          fi
+          echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
+      - name: 판정하고 머지
+        if: steps.pr.outputs.number != ''
+        env:
+          PR: ${{ steps.pr.outputs.number }}
           SELF: ${{ github.workflow }}
           OPT_OUT_LABEL: no-auto-merge
         run: |
