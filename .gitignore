@@ -8,7 +8,14 @@ dist/
 .fixtures/
 
 # 로컬 에이전트/IDE 스크래치 — 커밋하지 않는다
-.claude/
+# 디렉토리째 무시하면 git 이 그 아래로 내려가지 않아 파일 하나를 되살릴 수
+# 없다. `.claude/*` 로 두어야 아래 부정 패턴이 먹는다. 예외는 리뷰 기준 문서
+# 하나뿐이다 — claude-review.yml 이 이 파일을 읽어 판정 근거로 삼으므로
+# 저장소에 실제로 들어가야 한다. 다른 로컬 스크래치는 계속 무시된다.
+.claude/*
+!.claude/agents/
+.claude/agents/*
+!.claude/agents/devkit-reviewer.md
 .idea/
 .superpowers/
 
