@@ -345,6 +345,10 @@ devkit update — demo-api (nest)
 
 **JSON이 아닌 오버레이 파일은 반대로 통째로 덮는다 — `.gitignore`만 예외다(위 참고).** 여기 해당하는 것: `CLAUDE.md`(`claude`), `eslint.config.mjs`·`.prettierignore`(`lint`), `jest.config.js`·`jest-e2e.config.js`·`vitest.config.ts`(`test`), `pnpm-workspace.yaml`(`repo`, monorepo 전용), `.claude/agents/**`·`.claude/commands/**`(`claude`), `.github/workflows/**`(`ci`). 프로젝트 `CLAUDE.md`에 쌓아 온 규칙처럼 사용자가 직접 손댄 내용도 update 한 번에 템플릿판으로 되돌아간다. 데이터 손실은 아니다 — 변경 목록에 "덮어쓰기"로 뜨고, 워킹트리 dirty 게이트 덕에 `git checkout -- <path>`로 되돌릴 수 있다. 특정 파일군을 통째로 빼려면 `--only`에서 그 카테고리를 제외하면 된다 — 예: `CLAUDE.md`를 건드리지 않으려면 `--only ci,lint,ts,test,deps,repo`로 `claude`를 뺀다.
 
+**마커가 없는 첫 적용에서는 통째로 교체되는 파일을 따로 알린다.** 변경 목록의 "덮어쓰기"는 두 가지를 한 단어로 뭉뚱그린다 — `package.json`처럼 기존 위에 패치가 얹히는 것과, `eslint.config.mjs`처럼 통째로 교체되는 것. 마커가 없다는 건 devkit이 이 프로젝트를 관리한 적이 없다는 뜻이고, 그러면 덮이는 것은 전부 사람이 쓴 것이므로 뒤쪽만 따로 이름 붙여 낸다. 마커가 있으면 그 "덮어쓰기"는 devkit 자신의 이전 산출물 갱신이라 알리지 않는다(매번 뜨면 노이즈가 된다).
+
+**`"type": "module"`이 새로 얹히면 깨질 CommonJS `.js`를 미리 알린다.** `next` 레시피는 `vitest.config.ts`가 CJS로 번들링되는 것을 막으려 이 키를 심는데, 그 안전 근거("`create-next-app` 산출물에 `.js`가 없다")는 갓 생성된 프로젝트에만 성립한다. update는 오래 쓴 프로젝트에도 같은 키를 심으므로, 대상을 훑어 `require(`·`module.exports`를 쓰는 `.js`만 골라 낸다(`node_modules`·빌드 산출물·`public`은 건너뛴다). 해법은 `.cjs`로 개명하는 것인데 남의 파일을 devkit이 개명해 줄 수는 없어 고지까지만 한다.
+
 **워킹트리가 dirty하면 거부한다.** 되돌리는 수단이 git이기 때문이다. `--force`로 우회할 수 있지만, 그러면 update의 결과와 미커밋 작업이 같은 diff에 섞인다. **`--dry-run`은 이 게이트를 통과한다** — 아무것도 쓰지 않으므로 되돌림 안전망이 애초에 필요 없고, 여기서 막으면 git 저장소가 아닌 대상에서 "그래도 계속할까요?" 확인 프롬프트에 걸려 비대화형 실행(CI 등)이 멈춰 선다. 즉 **git 저장소가 아닌 대상도 `--dry-run`으로는 미리 볼 수 있다** — 다만 실제 실행(`--dry-run` 없이)은 되돌릴 수단이 없다는 경고를 한 번 더 받는다.
 
 **비대화형 환경에서는 `--yes` 또는 `--dry-run` 없이 실행할 수 없다.** TTY가 아닌데 둘 다 없으면 확인 프롬프트에 매달리는 대신 즉시 거부하고 대안을 알린다 — CI 로그에서 "멈춘 것처럼 보이는" 원인 불명 상태를 피하기 위해서다.

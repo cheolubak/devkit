@@ -209,6 +209,43 @@ JSON이 아닌 파일은 **통째로 덮인다** — `--only`로 그 카테고�
 다음부터는 생략할 수 있다. 옵션·카테고리·보존 범위는
 [`packages/devkit-cli/README.md`](packages/devkit-cli/README.md#devbak-update--기존-프로젝트에-표준-재적용).
 
+### 첫 적용에서 update가 따로 경고하는 것
+
+devkit이 관리한 적 없는 프로젝트(마커 없음)에서는 "덮어쓰기"로 잡힌 파일이 전부
+**사람이 쓴 것**이다. 그래서 첫 적용에 한해 두 가지를 따로 알린다. 둘 다 차단이
+아니라 고지다 — devkit이 대신 고쳐 줄 수 없는 종류라, 조용히 지나가지 않는 것이
+할 수 있는 전부다.
+
+- **통째로 교체되는 파일 목록.** `eslint.config.mjs`의 `ignores`처럼 devkit이 알 수
+  없는 설정은 복원되지 않는다. 실제로 이걸 놓쳐 저장소 안의 라이브 git
+  worktree(`node_modules` 포함)를 린트하다, 거기 설치된 구버전
+  `eslint-plugin-react`가 ESLint 10 API와 충돌해 린트가 결과가 아니라
+  **크래시(exit 2)** 로 끝난 적이 있다. 적용 후 `ignores`를 다시 얹어야 한다.
+- **`"type": "module"`이 새로 얹히며 깨지는 CommonJS `.js`.** 확장자를 `.cjs`로
+  바꾸고 `require.resolve` 같은 참조도 함께 고친다.
+
+### 먼저 걷어내야 하는 패키지
+
+devkit의 ESLint 프리셋은 ESLint 10 위에서 돈다. 기존 프로젝트에 남은 **옛 설정
+패키지가 구버전 플러그인을 함께 끌고 오면** 그쪽이 먼저 크래시한다.
+
+```bash
+pnpm why eslint-plugin-react    # 무엇이 물고 오는지 먼저 본다
+pnpm remove eslint-config-next
+```
+
+`eslint-config-next`가 대표적이다 — 16.3.0 기준 `dependencies`에
+`eslint-plugin-react@^7.37.0`(ESLint 10에서 제거된 `context.getFilename()`을
+호출한다)과 `eslint-plugin-import@^2.32.0`이 들어 있다
+(`npm view eslint-config-next dependencies`로 확인).
+
+**devkit이 쓰는 `@next/eslint-plugin-next`는 다르다** — 16.2.12 기준
+`peerDependencies`가 없고 의존성도 `fast-glob` 하나뿐이라 이 문제와 무관하다.
+이름이 비슷해 크래시 원인을 devkit 프리셋으로 오인하기 쉬우므로 구분한다.
+
+`eslint-plugin-jsx-a11y@6.10.2`는 아직 ESLint 10을 peer로 선언하지 않아 설치 시
+경고가 나오지만 제거된 API를 호출하지 않으므로 **정상 동작한다** — 지우지 않는다.
+
 수동으로 붙이려면 아래처럼 한다. 각 패키지 README에도 설치·설정 예시가 있다.
 패키지는 GitHub Packages에 게시돼 있으므로 `pnpm add -D`로 설치하고, peer는
 직접 설치한다.
