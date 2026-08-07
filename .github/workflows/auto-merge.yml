@@ -19,6 +19,12 @@ name: Auto Merge
 #
 # 하나라도 빠지면 그 경로가 아무 신호 없이 죽는다.
 #
+# 알려진 한계 — PR 에서 도는 새 CI 워크플로(Actions)를 추가하면 그 name 을
+# 위 workflow_run.workflows: 목록에도 넣어야 한다. 외부 앱의 체크는 status 가
+# 이미 덮지만, Actions 워크플로의 CheckRun 완료는 workflow_run 으로만 들을 수
+# 있다. 승인 시점에 그 체크가 진행 중인데 목록에 없으면 아래 게이트가
+# "보류"로 끝나는데, 다시 깨워 줄 트리거가 없어 PR 이 승인된 채로 멈춘다.
+#
 # 주의 — workflow_run 과 status 는 **기본 브랜치에 있는 워크플로 파일만**
 # 실행한다. 이 파일을 고치는 PR 에서는 두 트리거가 동작하지 않는다. 그 PR 은
 # 사람이 승인해 pull_request_review 경로로 머지해야 하며, 새 트리거는 머지된

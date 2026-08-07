@@ -43,8 +43,8 @@ permissions:
   pull-requests: write # 머지 API·브랜치 삭제
   checks: read # statusCheckRollup 조회
 
-# 두 트리거가 **같은 키**를 만들어야 한다. 한쪽을 PR 번호로 잡으면 같은 PR 의
-# 두 실행이 서로 다른 그룹에 들어가 동시에 머지를 시도한다.
+# 세 트리거가 **같은 키**를 만들어야 한다. 한쪽을 PR 번호로 잡으면 같은 PR 의
+# 여러 실행이 서로 다른 그룹에 들어가 동시에 머지를 시도한다.
 # cancel-in-progress: false 여야 한다 — 취소하면 먼저 도착한 판정이 버려진다.
 concurrency:
   group: auto-merge-${{ github.event.workflow_run.head_sha || github.event.sha || github.event.pull_request.head.sha }}

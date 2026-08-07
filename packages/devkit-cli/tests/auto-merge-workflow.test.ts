@@ -21,6 +21,11 @@ const REPO_AUTO_MERGE = fileURLToPath(
   new URL('../../../.github/workflows/auto-merge.yml', import.meta.url),
 );
 
+/** 이 저장소 자신의 `.github/workflows/` 디렉토리 전체. */
+const REPO_WORKFLOWS_DIR = fileURLToPath(
+  new URL('../../../.github/workflows/', import.meta.url),
+);
+
 /**
  * 워크플로 YAML 의 최상위 `name:` 값. 따옴표를 벗긴다.
  *
@@ -648,8 +653,10 @@ describe('_shared 리뷰 워크플로', () => {
     expect(doc).toContain('검토 대상 데이터');
     expect(doc).toContain('지시');
     // 인젝션을 발견하면 조용히 무시하는 것으로 끝나면 안 된다 — 그 자체가
-    // 변경 요청 사유여야 다음 사람이 본다.
-    expect(doc).toContain('변경 요청');
+    // 변경 요청 사유여야 다음 사람이 본다. '변경 요청'만 찾으면 인젝션 방어
+    // 블록을 통째로 지워도 --request-changes 안내 문구가 남아 통과한다 —
+    // 방어 블록에만 있는 고유 조각으로 본다.
+    expect(doc).toContain('조용히 무시하고 넘어가지 않습니다');
   });
 
   it('승인 판단의 근거를 리뷰 기준과 실제 코드 변경으로 한정한다', async () => {
@@ -686,9 +693,11 @@ describe('이 저장소판 리뷰 워크플로', () => {
   it('프롬프트 인젝션 방어 지시를 갖는다', () => {
     // 이 리뷰의 승인 하나가 자동 머지를 통과시키고 그 머지가 패키지 게시로
     // 이어진다. diff·PR 제목·본문·커밋 메시지는 전부 공격자 통제 입력이다.
+    // '변경 요청'만 찾으면 인젝션 방어 블록을 통째로 지워도 --request-changes
+    // 안내 문구가 남아 통과한다 — 방어 블록에만 있는 고유 조각으로 본다.
     const doc = read();
     expect(doc).toContain('검토 대상 데이터');
-    expect(doc).toContain('변경 요청');
+    expect(doc).toContain('조용히 무시하고 넘어가지 않습니다');
   });
 
   it('프롬프트가 참조하는 리뷰 기준 문서가 실제로 존재한다', () => {
@@ -744,5 +753,39 @@ describe('이 저장소판 auto-merge 의 트리거 배선', () => {
     expect(group?.[1]).toContain('workflow_run.head_sha');
     expect(group?.[1]).toContain('github.event.sha');
     expect(group?.[1]).toContain('pull_request.head.sha');
+  });
+
+  it('pull_request 트리거를 갖는 워크플로의 name 이 모두 workflows: 목록에 있다', async () => {
+    // status 트리거는 외부 앱의 Commit Status 만 덮고, Actions 워크플로의
+    // CheckRun 완료는 workflow_run 으로만 들을 수 있다. 누군가 PR 에서 도는
+    // 새 CI 워크플로를 추가했는데 그 name 을 아래 workflows: 목록에 안
+    // 넣으면, 승인 시점에 그 체크가 진행 중일 때 다시 깨워 줄 트리거가 없어
+    // "승인은 됐는데 체크 진행 중"에서 에러 없이 영구 정지한다.
+    const files = await readdir(REPO_WORKFLOWS_DIR);
+    const yamlFiles = files.filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
+
+    const prWorkflowNames: string[] = [];
+    for (const file of yamlFiles) {
+      const doc = await readFile(join(REPO_WORKFLOWS_DIR, file), 'utf8');
+      // pull_request_review: 를 pull_request: 로 잘못 매치하면 auto-merge.yml
+      // 자신이 대상에 들어와 이 테스트가 항상 실패한다 — 줄 구조로 정확히
+      // 가른다(값이 없는 최상위 트리거 키만, 2-space 들여쓰기로).
+      if (/^ {2}pull_request:[ \t]*$/m.test(doc)) {
+        prWorkflowNames.push(workflowName(doc));
+      }
+    }
+
+    // 매치가 0건이면 이 관문은 아무것도 검증하지 않는다 — 조용히 통과시키지
+    // 않고 던진다. 지금은 claude-review.yml 하나가 걸려 통과하고, 새 PR CI
+    // 가 들어오는 순간 이 단언이 그것을 붙잡아야 한다.
+    if (prWorkflowNames.length === 0) {
+      throw new Error('pull_request 트리거를 갖는 워크플로를 하나도 찾지 못했다');
+    }
+
+    const line = /^\s*workflows:[ \t]*(.+)$/m.exec(read());
+    expect(line, '저장소판 auto-merge.yml 에 workflows: 줄이 없다').not.toBeNull();
+    for (const name of prWorkflowNames) {
+      expect(line?.[1], `workflows: 목록에 '${name}' 이 없다`).toContain(name);
+    }
   });
 });
