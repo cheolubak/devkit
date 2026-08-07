@@ -7,10 +7,35 @@ import { nestRecipe } from '../src/recipes/nest.js';
 // 문자열로 포함해(e-s-LINT) skipVerify여도 거짓양성이 난다.
 const isVerifyStep = (s: { label: string }): boolean => s.label === 'pnpm lint' || s.label === 'pnpm build';
 
+/**
+ * 마커의 version 은 devkit-cli 자신의 버전이라 릴리스마다 바뀐다. 스냅샷에
+ * 그대로 박으면 버전을 올릴 때마다 이 테스트가 깨지고, 그러면 **다음** 릴리스의
+ * 검증 스텝이 거기서 막힌다(0.1.0 → 0.2.0 에서 실제로 일어났다 — 릴리스는
+ * 검증을 마친 뒤에 버전을 올리므로 그 실행은 통과하고 main 만 빨개진다).
+ * 값 자체는 아래 마커 테스트가 devkitVersion() 과 직접 대조하므로, 스냅샷은
+ * 구조만 고정한다.
+ */
+function withStableVersion<T>(node: T): T {
+  // 트리 전체를 걷는다 — monorepo 는 루트와 apps/web 두 곳에 마커를 심어서,
+  // 고정 경로로 찾으면 깊은 쪽을 조용히 놓친다(실제로 놓쳤다).
+  if (node === null || typeof node !== 'object') return node;
+  if (Array.isArray(node)) {
+    for (const item of node) withStableVersion(item);
+    return node;
+  }
+  const record = node as Record<string, unknown>;
+  const marker = record.devkit;
+  if (marker !== null && typeof marker === 'object' && 'version' in marker) {
+    (marker as { version: string }).version = '<devkitVersion>';
+  }
+  for (const value of Object.values(record)) withStableVersion(value);
+  return node;
+}
+
 describe('nest 레시피', () => {
   it('단계 목록이 스냅샷과 일치한다', () => {
     const steps = nestRecipe().map((s) => ({ kind: s.kind, detail: s.describe() }));
-    expect(steps).toMatchSnapshot();
+    expect(withStableVersion(steps)).toMatchSnapshot();
   });
 
   it('eslint-plugin-prettier와 eslint-config-prettier를 제거한다', () => {

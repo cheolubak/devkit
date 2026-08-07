@@ -68,7 +68,7 @@ exports[`nest 레시피 > 단계 목록이 스냅샷과 일치한다 1`] = `
         },
         "devkit": {
           "type": "nest",
-          "version": "0.1.0",
+          "version": "<devkitVersion>",
         },
         "jest": null,
         "prettier": "@cheolubak/prettier-config",
