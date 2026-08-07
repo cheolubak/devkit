@@ -5,6 +5,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { packageLayout, packageRoot } from './lib/layout.js';
+import { devkitVersion } from './lib/version.js';
 import { pathExists } from './ops/path-exists.js';
 import { monorepoRecipe } from './recipes/monorepo.js';
 import { nestRecipe } from './recipes/nest.js';
@@ -12,6 +13,8 @@ import { nextRecipe } from './recipes/next.js';
 import { run } from './run.js';
 import type { Ctx, ProjectType, Recipe } from './types.js';
 import { runUpdate } from './update/index.js';
+import { collectVersionReport } from './version/collect.js';
+import { formatVersionReport } from './version/format.js';
 
 /**
  * pnpm-workspace.yaml을 상위로 탐색해 툴킷 저장소 루트를 찾는다.
@@ -73,7 +76,8 @@ const RECIPES: Partial<Record<ProjectType, Recipe>> = {
 const USAGE =
   '사용법:\n' +
   '  pnpm devbak create <name> --type <nest|next|monorepo> [--no-verify]\n' +
-  '  pnpm devbak update [path] [--only <categories>] [--type <t>] [--dry-run] [--yes] [--force]';
+  '  pnpm devbak update [path] [--only <categories>] [--type <t>] [--dry-run] [--yes] [--force]\n' +
+  '  pnpm devbak version [path]';
 
 export interface MainOptions {
   /**
@@ -96,6 +100,7 @@ export async function main(argv: string[], options: MainOptions = {}): Promise<v
       'dry-run': { type: 'boolean', default: false },
       yes: { type: 'boolean', default: false },
       force: { type: 'boolean', default: false },
+      version: { type: 'boolean', default: false, short: 'v' },
       help: { type: 'boolean', default: false },
     },
   });
@@ -108,7 +113,24 @@ export async function main(argv: string[], options: MainOptions = {}): Promise<v
     return;
   }
 
+  // --version 은 값 하나만 내는 안정된 계약이다. 리포트 형식을 스크립트가
+  // 파싱하게 두면 형식을 영영 바꿀 수 없어, 사람이 읽는 출력과 기계가 읽는
+  // 출력을 처음부터 갈라 둔다.
+  if (values.version === true) {
+    process.stdout.write(`${devkitVersion()}\n`);
+    return;
+  }
+
   const [command, ...rest] = positionals;
+  // --help 와 같이 assertDistFresh 앞에 둔다. "내가 지금 뭘 쓰고 있나"를
+  // 묻는 명령이 빌드 상태에 막히는 것은 정확히 거꾸로다. 버전 값 자체는
+  // package.json 에서 직접 읽으므로 dist 신선도와 무관하게 정확하다.
+  // 툴킷 저장소도 필요 없으므로 findToolkitRoot 도 부르지 않는다.
+  if (command === 'version') {
+    runVersionCommand(rest[0], options.cwd ?? process.cwd());
+    return;
+  }
+
   if (command !== 'create' && command !== 'update') {
     throw new Error(USAGE);
   }
@@ -202,6 +224,15 @@ async function runUpdateCommand(
     yes: values.yes === true,
     force: values.force === true,
   });
+}
+
+/**
+ * 진단 명령이므로 종료 코드는 항상 0 이다 — devkit 프로젝트가 아닌 것도,
+ * 마커가 깨진 것도 정당한 답이지 실패가 아니다.
+ */
+function runVersionCommand(path: string | undefined, baseDir: string): void {
+  const targetDir = resolve(baseDir, path ?? '.');
+  process.stdout.write(formatVersionReport(collectVersionReport(targetDir)));
 }
 
 const isDirectRun = process.argv[1] !== undefined && import.meta.url.endsWith(basename(process.argv[1]));
