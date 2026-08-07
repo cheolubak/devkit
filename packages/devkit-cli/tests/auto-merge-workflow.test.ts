@@ -358,6 +358,37 @@ describe('자동 머지 게이트 판정 (jq 를 실제로 돌린다)', () => {
     expect(got).toContain('실패한 체크');
   });
 
+  it('변경 요청을 같은 리뷰어가 DISMISSED 로 철회하면 막지 않는다', () => {
+    // Commit Status 전환이 만든 함정을 푸는 경로다. rejections 판정은 커밋을
+    // 가리지 않는데(의도된 fail-safe) 통과 신호는 커밋에 묶인다. 승인 방식일
+    // 때는 새 승인이 그 리뷰어의 최신 리뷰가 되어 옛 변경 요청을 덮었지만,
+    // status 만 남기면 옛 CHANGES_REQUESTED 가 그대로 남아 고쳐진 PR 이
+    // 영원히 막힌다. 리뷰어가 스스로 철회하는 것이 그 회복 경로다.
+    const got = verdict(
+      prJson({
+        reviews: [
+          reviewBy('github-actions', 'CHANGES_REQUESTED', 'CONTRIBUTOR', '2026-08-07T01:00:00Z'),
+          reviewBy('github-actions', 'DISMISSED', 'CONTRIBUTOR', '2026-08-07T02:00:00Z'),
+        ],
+        statusCheckRollup: [{ context: 'claude-review', state: 'SUCCESS' }],
+      }),
+    );
+    expect(got).toMatch(/^merge:/);
+  });
+
+  it('철회하지 않은 변경 요청은 claude-review 통과로도 뚫리지 않는다', () => {
+    // 비대칭이 유지되는지 본다. status 가 success 라고 해서 남의(혹은 자기
+    // 이전) 변경 요청을 무시하면, 막는 쪽 fail-safe 가 통과 신호 하나로
+    // 뒤집힌다.
+    const got = verdict(
+      prJson({
+        reviews: [reviewBy('reviewer', 'CHANGES_REQUESTED', 'COLLABORATOR')],
+        statusCheckRollup: [{ context: 'claude-review', state: 'SUCCESS' }],
+      }),
+    );
+    expect(got).toContain('변경 요청');
+  });
+
   it('claude-review status 가 pending 이면 막는다', () => {
     const got = verdict(
       prJson({
@@ -738,6 +769,19 @@ describe('_shared 리뷰 워크플로', () => {
     expect(doc).toContain('Bash(gh api:*)');
   });
 
+  it('통과할 때 자기 이전 변경 요청을 철회하도록 지시한다', async () => {
+    // rejections 판정은 커밋을 가리지 않는데(의도된 fail-safe) 통과 신호는
+    // 커밋에 묶인다. 승인 방식일 때는 새 승인이 그 리뷰어의 최신 리뷰가 되어
+    // 옛 변경 요청을 덮었지만, status 만 남기면 옛 CHANGES_REQUESTED 가
+    // 그대로 남아 고쳐진 PR 이 영원히 막힌다.
+    //
+    // 이 결함은 **첫 리뷰에서는 드러나지 않는다** — 통과하면 그냥 머지된다.
+    // "지적 → 수정 → 재리뷰" 사이클에서만 나타나므로 실행으로 잡기 어렵다.
+    const doc = await readReview();
+    expect(doc).toContain('/dismissals');
+    expect(doc).toContain('event=DISMISS');
+  });
+
   it('프롬프트 인젝션 방어 지시를 갖는다', async () => {
     // 이 리뷰의 승인 하나가 자동 머지를 통과시킨다(게이트는 approvals >= 1
     // 이고 봇을 신뢰한다). 그런데 이 프롬프트가 읽는 diff·PR 제목·PR 본문·
@@ -809,6 +853,19 @@ describe('이 저장소판 리뷰 워크플로', () => {
     expect(doc).toContain('context=claude-review');
     // 지시가 있어도 도구가 막혀 있으면 status 를 만들지 못한다.
     expect(doc).toContain('Bash(gh api:*)');
+  });
+
+  it('통과할 때 자기 이전 변경 요청을 철회하도록 지시한다', () => {
+    // rejections 판정은 커밋을 가리지 않는데(의도된 fail-safe) 통과 신호는
+    // 커밋에 묶인다. 승인 방식일 때는 새 승인이 그 리뷰어의 최신 리뷰가 되어
+    // 옛 변경 요청을 덮었지만, status 만 남기면 옛 CHANGES_REQUESTED 가
+    // 그대로 남아 고쳐진 PR 이 영원히 막힌다.
+    //
+    // 이 결함은 **첫 리뷰에서는 드러나지 않는다** — 통과하면 그냥 머지된다.
+    // "지적 → 수정 → 재리뷰" 사이클에서만 나타나므로 실행으로 잡기 어렵다.
+    const doc = read();
+    expect(doc).toContain('/dismissals');
+    expect(doc).toContain('event=DISMISS');
   });
 
   it('프롬프트 인젝션 방어 지시를 갖는다', () => {
