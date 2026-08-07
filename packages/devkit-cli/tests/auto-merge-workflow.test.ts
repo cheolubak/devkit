@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -643,5 +643,51 @@ describe('_shared 리뷰 워크플로', () => {
     const doc = await readReview();
     expect(doc).toContain('.claude/agents/devkit-reviewer.md');
     expect(doc).toContain('실제 코드 변경');
+  });
+});
+
+/** 이 저장소 자신의 리뷰 워크플로. 템플릿이 아니라 운영 설정이다. */
+const REPO_CLAUDE_REVIEW = fileURLToPath(
+  new URL('../../../.github/workflows/claude-review.yml', import.meta.url),
+);
+
+describe('이 저장소판 리뷰 워크플로', () => {
+  function read(): string {
+    return readFileSync(REPO_CLAUDE_REVIEW, 'utf8');
+  }
+
+  it('통과와 실패 양쪽 지시를 모두 갖는다', () => {
+    // 승인만 지시하면 문제를 찾았을 때 인라인 코멘트만 남고 리뷰 상태가
+    // 안 찍힌다. 그러면 auto-merge 의 "변경 요청 없음" 게이트는 존재하지만
+    // 아무것도 막지 못한다.
+    const doc = read();
+    expect(doc).toContain('--approve');
+    expect(doc).toContain('--request-changes');
+  });
+
+  it('gh pr review 를 허용 도구로 갖는다', () => {
+    // 지시가 있어도 도구가 막혀 있으면 Claude 는 승인도 변경 요청도 못 한다.
+    expect(read()).toContain('Bash(gh pr review:*)');
+  });
+
+  it('프롬프트 인젝션 방어 지시를 갖는다', () => {
+    // 이 리뷰의 승인 하나가 자동 머지를 통과시키고 그 머지가 패키지 게시로
+    // 이어진다. diff·PR 제목·본문·커밋 메시지는 전부 공격자 통제 입력이다.
+    const doc = read();
+    expect(doc).toContain('검토 대상 데이터');
+    expect(doc).toContain('변경 요청');
+  });
+
+  it('프롬프트가 참조하는 리뷰 기준 문서가 실제로 존재한다', () => {
+    // 경로가 어긋나면 Claude 는 기준을 못 읽고 자기 판단으로 승인하는데,
+    // 워크플로는 초록불로 끝나 아무도 모른다. 경로를 여기에 손으로 박지
+    // 않고 프롬프트에서 뽑아 검증한다 — 박으면 그것 자체가 두 번째 사본이
+    // 되어 드리프트 대상이 된다.
+    const matched = /(\.claude\/agents\/[\w-]+\.md)/.exec(read());
+    if (matched === null) {
+      throw new Error('프롬프트에 리뷰 기준 문서 경로가 없다');
+    }
+    const target = fileURLToPath(new URL(`../../../${matched[1]}`, import.meta.url));
+    expect(existsSync(target), `${matched[1]} 이 저장소에 없다`).toBe(true);
   });
 });
