@@ -20,7 +20,19 @@ const SHIPPED_BLOCK = ((): string[] => {
   const lines = readFileSync(new URL('../templates/_shared/_gitignore', import.meta.url), 'utf8')
     .replace(/\n$/, '')
     .split('\n');
-  return lines.slice(lines.indexOf(DEVKIT_BLOCK_START) + 1, lines.indexOf(DEVKIT_BLOCK_END));
+  // 마커를 못 찾으면 indexOf 가 -1 을 주고, slice(0, -1) 이 되어 **템플릿
+  // 전체(마지막 줄 제외)를 블록으로** 조용히 취급한다. `.claude/*` 와 부정
+  // 패턴이 그 안에 그대로 들어 있어 테스트는 계속 통과하고, 정작 검증하려던
+  // "배포되는 블록"은 검증되지 않는다. mergeIgnore 가 열린 구분자에 대해
+  // 던지는 것과 같은 이유로 여기서도 던진다 — 조용한 후퇴를 만들지 않는다.
+  const startAt = lines.indexOf(DEVKIT_BLOCK_START);
+  const endAt = lines.indexOf(DEVKIT_BLOCK_END);
+  if (startAt === -1 || endAt <= startAt) {
+    throw new Error(
+      `템플릿 _shared/_gitignore 에서 devkit 블록 구분자를 찾지 못했습니다(start=${startAt}, end=${endAt}).`,
+    );
+  }
+  return lines.slice(startAt + 1, endAt);
 })();
 
 const created: string[] = [];
