@@ -53,6 +53,19 @@ describe('_shared 자동 머지 워크플로', () => {
     expect(doc).toContain('pull_request_review:');
   });
 
+  it('status 트리거로 외부 CI 의 Commit Status 완료를 듣는다', async () => {
+    // 외부 CI 는 StatusContext(Commit Status API)를 쓴다. 그 완료는
+    // workflow_run 으로 들을 수 없어, 승인 시점에 그 체크가 진행 중이면
+    // 다시 깨어날 트리거가 없어 PR 이 승인된 채로 멈춘다.
+    const doc = await readAutoMerge();
+    expect(doc).toMatch(/^ {2}status:[ \t]*$/m);
+  });
+
+  it('status 이벤트의 SHA 가 PR 번호 확정에 배선돼 있다', async () => {
+    const doc = await readAutoMerge();
+    expect(doc).toMatch(/HEAD_SHA:.*github\.event\.sha/);
+  });
+
   it('workflow_run 이 듣는 이름이 claude-review.yml 의 name 과 일치한다', async () => {
     // 이름이 어긋나면 워크플로는 **에러 없이** 영원히 실행되지 않는다.
     // 실행으로는 절대 드러나지 않으므로 여기서 결합을 고정한다.
