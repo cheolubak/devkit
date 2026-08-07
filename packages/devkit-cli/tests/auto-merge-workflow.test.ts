@@ -301,18 +301,71 @@ describe('자동 머지 게이트 판정 (jq 를 실제로 돌린다)', () => {
       const got = verdict(
         prJson({ reviews: [reviewBy(login, 'APPROVED', 'CONTRIBUTOR')] }),
       );
-      expect(got, `${login} 이 승인으로 세어졌다`).toBe('skip: 승인이 없습니다');
+      expect(got, `${login} 이 승인으로 세어졌다`).toBe('skip: 승인도 claude-review 통과도 없습니다');
     }
   });
 
-  it('collaborator 봇 계정의 승인은 신뢰한다', () => {
-    // 자동 승인은 collaborator 권한을 가진 별도 봇 계정의 PAT 로 남긴다.
-    // 그 리뷰의 authorAssociation 은 COLLABORATOR 라 로그인 특례 없이
-    // 통과한다 — 이것이 봇 승인이 실제로 도달하는 유일한 경로다.
+  it('collaborator 의 승인은 신뢰한다', () => {
     const got = verdict(
-      prJson({ reviews: [reviewBy('devkit-review-bot', 'APPROVED', 'COLLABORATOR')] }),
+      prJson({ reviews: [reviewBy('mate', 'APPROVED', 'COLLABORATOR')] }),
     );
     expect(got).toMatch(/^merge:/);
+  });
+
+  it('claude-review status 가 success 면 사람 승인 없이도 머지한다', () => {
+    // Claude 의 통과 신호는 리뷰 승인이 아니라 Commit Status 로 온다.
+    // Actions 의 GITHUB_TOKEN 은 PR 을 승인할 수 없지만(플랫폼 제약) Commit
+    // Status 는 만들 수 있다 — 그래서 승인 API 를 아예 쓰지 않는다.
+    const got = verdict(
+      prJson({ statusCheckRollup: [{ context: 'claude-review', state: 'SUCCESS' }] }),
+    );
+    expect(got).toMatch(/^merge:/);
+  });
+
+  it('claude-review status 는 head 커밋에 자동으로 묶인다', () => {
+    // statusCheckRollup 은 PR 의 **head 커밋**에 대한 것만 돌려준다. 그래서
+    // 리뷰 승인과 달리 onHead 판정이 필요 없다 — 새 커밋을 푸시하면 그
+    // status 가 없는 상태로 시작한다. 옛 승인이 새 커밋을 머지시키던 TOCTOU
+    // 가 이 경로에는 존재하지 않는다.
+    //
+    // 이 테스트는 그 사실을 문서화한다. 픽스처에 옛 커밋 status 라는 것을
+    // 만들 수 없다는 것 자체가 근거다 — rollup 에 들어 있으면 head 의 것이다.
+    const got = verdict(
+      prJson({
+        headRefOid: HEAD_OID,
+        statusCheckRollup: [{ context: 'claude-review', state: 'SUCCESS' }],
+      }),
+    );
+    expect(got).toMatch(/^merge:/);
+  });
+
+  it('다른 context 의 success 는 승인으로 세지 않는다', () => {
+    // 외부 CI 가 초록불이라는 사실은 "리뷰를 통과했다"가 아니다. context 를
+    // 정확히 보지 않으면 CodeRabbit 의 SUCCESS 하나로 머지된다.
+    const got = verdict(
+      prJson({ statusCheckRollup: [{ context: 'CodeRabbit', state: 'SUCCESS' }] }),
+    );
+    expect(got).toBe('skip: 승인도 claude-review 통과도 없습니다');
+  });
+
+  it('claude-review status 가 failure 면 막는다', () => {
+    const got = verdict(
+      prJson({
+        reviews: [reviewBy('owner', 'APPROVED', 'OWNER')],
+        statusCheckRollup: [{ context: 'claude-review', state: 'FAILURE' }],
+      }),
+    );
+    expect(got).toContain('실패한 체크');
+  });
+
+  it('claude-review status 가 pending 이면 막는다', () => {
+    const got = verdict(
+      prJson({
+        reviews: [reviewBy('owner', 'APPROVED', 'OWNER')],
+        statusCheckRollup: [{ context: 'claude-review', state: 'PENDING' }],
+      }),
+    );
+    expect(got).toContain('진행 중');
   });
 
   it('외부인의 변경 요청은 신뢰 승인이 있어도 막는다', () => {
@@ -332,7 +385,7 @@ describe('자동 머지 게이트 판정 (jq 를 실제로 돌린다)', () => {
   });
 
   it('승인이 0건이면 막는다', () => {
-    expect(verdict(prJson())).toBe('skip: 승인이 없습니다');
+    expect(verdict(prJson())).toBe('skip: 승인도 claude-review 통과도 없습니다');
   });
 
   it('draft PR 은 막는다', () => {
@@ -420,12 +473,12 @@ describe('자동 머지 게이트 판정 (jq 를 실제로 돌린다)', () => {
     const got = verdict(
       prJson({ labels: null, reviews: null, statusCheckRollup: null }),
     );
-    expect(got).toBe('skip: 승인이 없습니다');
+    expect(got).toBe('skip: 승인도 claude-review 통과도 없습니다');
   });
 
   it('키 자체가 없어도 크래시하지 않는다', () => {
     const got = verdict({ state: 'OPEN', isDraft: false });
-    expect(got).toBe('skip: 승인이 없습니다');
+    expect(got).toBe('skip: 승인도 claude-review 통과도 없습니다');
   });
 
   it('닫힌 PR 은 막는다', () => {
@@ -517,7 +570,7 @@ describe('자동 머지 게이트 판정 (jq 를 실제로 돌린다)', () => {
         ],
       }),
     );
-    expect(got).toBe('skip: 승인이 없습니다');
+    expect(got).toBe('skip: 승인도 claude-review 통과도 없습니다');
   });
 
   it('외부 CI 의 Status API 형태(.state)로 진행중을 판정한다', () => {
@@ -671,15 +724,18 @@ describe('_shared 리뷰 워크플로', () => {
     expect(doc).toContain('Bash(gh pr review:*)');
   });
 
-  it('승인용 토큰이 Actions 자동 토큰이 아니다', async () => {
+  it('통과 신호를 Commit Status 로 남긴다', async () => {
     // Actions 의 GITHUB_TOKEN 으로는 PR 을 승인할 수 없다 — GitHub 이
     // "GitHub Actions is not permitted to approve pull requests" 로 거부한다.
     // 그 토큰을 넘기면 리뷰는 정상적으로 돌고 워크플로도 success 로 끝나지만
     // 승인만 남지 않아 자동 머지가 영원히 오지 않는다. 실패가 초록불 뒤에
     // 숨는 형태라 실행으로는 드러나지 않는다.
     const doc = await readReview();
-    expect(doc).toMatch(/github_token:\s*\$\{\{\s*secrets\.REVIEW_BOT_TOKEN\s*\}\}/);
-    expect(doc).not.toMatch(/github_token:\s*\$\{\{\s*secrets\.GITHUB_TOKEN\s*\}\}/);
+    expect(doc).toContain('statuses: write');
+    expect(doc).toMatch(/statuses\/\$\{\{\s*github\.event\.pull_request\.head\.sha\s*\}\}/);
+    expect(doc).toContain('context=claude-review');
+    // 지시가 있어도 도구가 막혀 있으면 status 를 만들지 못한다.
+    expect(doc).toContain('Bash(gh api:*)');
   });
 
   it('프롬프트 인젝션 방어 지시를 갖는다', async () => {
@@ -741,15 +797,18 @@ describe('이 저장소판 리뷰 워크플로', () => {
     expect(read()).toContain('Bash(gh pr review:*)');
   });
 
-  it('승인용 토큰이 Actions 자동 토큰이 아니다', () => {
+  it('통과 신호를 Commit Status 로 남긴다', () => {
     // Actions 의 GITHUB_TOKEN 으로는 PR 을 승인할 수 없다 — GitHub 이
     // "GitHub Actions is not permitted to approve pull requests" 로 거부한다.
     // 그 토큰을 넘기면 리뷰는 정상적으로 돌고 워크플로도 success 로 끝나지만
     // 승인만 남지 않아 자동 머지가 영원히 오지 않는다. 실패가 초록불 뒤에
     // 숨는 형태라 실행으로는 드러나지 않는다.
     const doc = read();
-    expect(doc).toMatch(/github_token:\s*\$\{\{\s*secrets\.REVIEW_BOT_TOKEN\s*\}\}/);
-    expect(doc).not.toMatch(/github_token:\s*\$\{\{\s*secrets\.GITHUB_TOKEN\s*\}\}/);
+    expect(doc).toContain('statuses: write');
+    expect(doc).toMatch(/statuses\/\$\{\{\s*github\.event\.pull_request\.head\.sha\s*\}\}/);
+    expect(doc).toContain('context=claude-review');
+    // 지시가 있어도 도구가 막혀 있으면 status 를 만들지 못한다.
+    expect(doc).toContain('Bash(gh api:*)');
   });
 
   it('프롬프트 인젝션 방어 지시를 갖는다', () => {
