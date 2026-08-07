@@ -132,6 +132,17 @@ describe('_shared 자동 머지 워크플로', () => {
       expect(call, `--repo 가 없다: ${call.trim()}`).toContain('--repo');
     }
   });
+
+  it('head SHA 를 조회하고 머지를 그 커밋에 고정한다', async () => {
+    // 브랜치 보호가 없으면 새 푸시가 기존 승인을 무효화하지 않는다. 게이트가
+    // 리뷰를 읽는 시점과 gh pr merge 가 머지하는 시점 사이에 head 가 바뀌면
+    // 커밋 A 에 달린 승인으로 커밋 B 가 머지된다. jq 판정(승인이 현재 head 에
+    // 달렸는가)에 더해, 서버 측에서 한 번 더 거부하도록 --match-head-commit 을
+    // 넘긴다 — 읽기와 머지 사이의 잔여 창을 닫는 것은 GitHub 만 할 수 있다.
+    const doc = await readAutoMerge();
+    expect(doc).toContain('headRefOid');
+    expect(doc).toMatch(/gh pr merge .*--match-head-commit/);
+  });
 });
 
 /**
@@ -175,11 +186,17 @@ function verdict(pr: unknown, self = 'Auto Merge'): string {
   }
 }
 
-/** `gh pr view --json state,isDraft,labels,reviews,statusCheckRollup` 의 형태. */
+/** PR 의 현재 head 커밋. 픽스처 전체가 이 값을 기준으로 승인을 고정한다. */
+const HEAD_OID = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+/** 승인이 달렸던 **이전** 커밋. 그 승인은 현재 head 를 머지시키면 안 된다. */
+const OLD_OID = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+
+/** `gh pr view --json state,isDraft,headRefOid,labels,reviews,statusCheckRollup` 의 형태. */
 function prJson(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     state: 'OPEN',
     isDraft: false,
+    headRefOid: HEAD_OID,
     labels: [],
     reviews: [],
     statusCheckRollup: [],
@@ -192,8 +209,15 @@ function reviewBy(
   state: string,
   authorAssociation: string,
   submittedAt = '2026-08-07T00:00:00Z',
+  commitOid: string | null = HEAD_OID,
 ): Record<string, unknown> {
-  return { author: { login }, state, authorAssociation, submittedAt };
+  return {
+    author: { login },
+    state,
+    authorAssociation,
+    submittedAt,
+    commit: commitOid === null ? null : { oid: commitOid },
+  };
 }
 
 const passingCheck = {
@@ -372,16 +396,198 @@ describe('자동 머지 게이트 판정 (jq 를 실제로 돌린다)', () => {
     const got = verdict(
       prJson({
         reviews: [
-          { author: null, state: 'APPROVED', authorAssociation: 'NONE', submittedAt: '2026-08-07T00:00:00Z' },
+          {
+            author: null,
+            state: 'APPROVED',
+            authorAssociation: 'NONE',
+            submittedAt: '2026-08-07T00:00:00Z',
+            commit: { oid: HEAD_OID },
+          },
           reviewBy('owner', 'APPROVED', 'OWNER'),
         ],
       }),
     );
     expect(got).toMatch(/^merge:/);
   });
+
+  it('이전 커밋에 달린 승인으로는 현재 head 를 머지하지 않는다', () => {
+    // TOCTOU 회귀 방어. main 에 브랜치 보호가 없어 새 푸시가 기존 승인을
+    // 무효화하지 않는다 — 경합조차 필요 없다. 승인 뒤에 푸시하면 리뷰
+    // 워크플로가 새 커밋에 대해 다시 돌고, 그 완료가 workflow_run 을
+    // 발화시켜 옛 승인으로 새 커밋이 머지된다.
+    const got = verdict(
+      prJson({
+        reviews: [reviewBy('owner', 'APPROVED', 'OWNER', '2026-08-07T00:00:00Z', OLD_OID)],
+      }),
+    );
+    expect(got).toMatch(/^skip:/);
+    expect(got).toContain('head');
+  });
+
+  it('commit 을 확인할 수 없는 승인은 세지 않는다', () => {
+    // 오래된 리뷰나 API 형태 차이로 commit 이 없거나 null 로 올 수 있다.
+    // 확인할 수 없으면 막는 쪽이 안전하다.
+    const got = verdict(
+      prJson({
+        reviews: [
+          { author: { login: 'owner' }, state: 'APPROVED', authorAssociation: 'OWNER', submittedAt: '2026-08-07T00:00:00Z' },
+        ],
+      }),
+    );
+    expect(got).toMatch(/^skip:/);
+  });
+
+  it('commit 이 null 인 승인도 세지 않는다', () => {
+    const got = verdict(
+      prJson({
+        reviews: [reviewBy('owner', 'APPROVED', 'OWNER', '2026-08-07T00:00:00Z', null)],
+      }),
+    );
+    expect(got).toMatch(/^skip:/);
+  });
+
+  it('이전 커밋에 달린 변경 요청은 커밋과 무관하게 막는다', () => {
+    // 비대칭은 의도다. 승인은 head 에 고정하지만 CHANGES_REQUESTED 는 어느
+    // 커밋에 대한 것이든 막는다 — 막는 쪽이 fail-safe 다.
+    const got = verdict(
+      prJson({
+        reviews: [
+          reviewBy('owner', 'APPROVED', 'OWNER', '2026-08-07T01:00:00Z'),
+          reviewBy('stranger', 'CHANGES_REQUESTED', 'NONE', '2026-08-07T00:00:00Z', OLD_OID),
+        ],
+      }),
+    );
+    expect(got).toContain('변경 요청');
+  });
+
+  it('신뢰 승인 뒤 같은 사람의 DISMISSED 가 오면 승인이 철회된다', () => {
+    // DISMISSED 는 집계에 포함하되 승인으로 세지 않는다. 빼면 그 사람의
+    // 최신 리뷰가 옛 APPROVED 로 남아 철회가 반영되지 않는다.
+    const got = verdict(
+      prJson({
+        reviews: [
+          reviewBy('owner', 'APPROVED', 'OWNER', '2026-08-07T01:00:00Z'),
+          reviewBy('owner', 'DISMISSED', 'OWNER', '2026-08-07T02:00:00Z'),
+        ],
+      }),
+    );
+    expect(got).toBe('skip: 승인이 없습니다');
+  });
+
+  it('외부 CI 의 Status API 형태(.state)로 진행중을 판정한다', () => {
+    // statusCheckRollup 은 두 형태가 섞여 온다 — Actions 는 CheckRun
+    // (.status/.conclusion/.workflowName), 외부 CI 는 StatusContext(.state).
+    // StatusContext 에는 .status 자체가 없어 CheckRun 경로만 보면 진행 중인
+    // 외부 CI 를 통과시킨다.
+    const got = verdict(
+      prJson({
+        reviews: [reviewBy('owner', 'APPROVED', 'OWNER')],
+        statusCheckRollup: [{ state: 'PENDING' }],
+      }),
+    );
+    expect(got).toContain('진행 중');
+  });
+
+  it('외부 CI 의 Status API 형태(.state)로 실패를 판정한다', () => {
+    const got = verdict(
+      prJson({
+        reviews: [reviewBy('owner', 'APPROVED', 'OWNER')],
+        statusCheckRollup: [{ state: 'FAILURE' }],
+      }),
+    );
+    expect(got).toContain('실패한 체크');
+  });
+
+  it('외부 CI 가 SUCCESS 면 통과시킨다', () => {
+    const got = verdict(
+      prJson({
+        reviews: [reviewBy('owner', 'APPROVED', 'OWNER')],
+        statusCheckRollup: [{ state: 'SUCCESS' }],
+      }),
+    );
+    expect(got).toMatch(/^merge:/);
+  });
+});
+
+/**
+ * 이 저장소판 워크플로에만 있는 fork 차단 분기를 YAML 에서 꺼낸다.
+ *
+ * jq 게이트 **바깥**의 셸 로직이라 verdict() 로는 돌릴 수 없다 — 두 사본의 jq
+ * 프로그램이 글자 그대로 같아야 하므로 이 검사는 의도적으로 셸에 있다.
+ *
+ * extractGate() 와 같은 이유로 던진다 — 추출에 실패했을 때 빈 스크립트를
+ * 돌리면 아래 단언이 전부 공허해진다.
+ */
+const FORK_GATE_OPEN = `if [ "$(jq -r '.isCrossRepository' pr.json)" = 'true' ]; then`;
+
+function extractForkGate(yaml: string, source: string): string {
+  const lines = yaml.split('\n');
+  const start = lines.findIndex((line) => line.includes(FORK_GATE_OPEN));
+  if (start === -1) throw new Error(`${source}: fork 차단 분기를 찾지 못했다`);
+  const end = lines.findIndex((line, i) => i > start && line.trim() === 'fi');
+  if (end === -1) throw new Error(`${source}: fork 차단 분기의 fi 를 찾지 못했다`);
+  // YAML 블록 스칼라의 들여쓰기를 벗긴다. 그대로 두면 bash 는 돌지만
+  // 스크립트가 원문과 다르게 보여 나중에 읽는 사람을 헷갈리게 한다.
+  return lines
+    .slice(start, end + 1)
+    .map((line) => line.replace(/^ {10}/, ''))
+    .join('\n');
+}
+
+const FORK_GATE = extractForkGate(readFileSync(REPO_AUTO_MERGE, 'utf8'), '.github/workflows');
+
+/** 뽑아낸 fork 분기를 실제 bash 로 돌린다. 통과하면 뒤의 echo 가 실행된다. */
+function forkGate(pr: unknown): string {
+  const dir = mkdtempSync(join(tmpdir(), 'devbak-fork-'));
+  try {
+    writeFileSync(join(dir, 'pr.json'), JSON.stringify(pr));
+    return execFileSync('bash', ['-c', `set -euo pipefail\n${FORK_GATE}\necho '통과'`], {
+      cwd: dir,
+      encoding: 'utf8',
+    }).trim();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+describe('이 저장소판의 fork 차단 게이트', () => {
+  // 이 저장소의 머지는 곧바로 release.yml 디스패치를 거쳐 패키지 게시로
+  // 이어진다. 승인자 신뢰 판정이 틀려도 공급망 경로가 결정적으로 닫히도록
+  // 한 겹 더 둔 것이다.
+
+  it('fork 에서 온 PR 이면 스킵한다', () => {
+    expect(forkGate({ isCrossRepository: true })).toBe('skip: fork 에서 온 PR 입니다');
+  });
+
+  it('같은 저장소의 브랜치면 통과시킨다', () => {
+    expect(forkGate({ isCrossRepository: false })).toBe('통과');
+  });
+
+  it('--json 목록과 스킵 분기 양쪽에 isCrossRepository 가 있다', () => {
+    // 조회 목록에서 빠지면 jq 가 null 을 읽어 분기가 조용히 무력해진다.
+    const doc = readFileSync(REPO_AUTO_MERGE, 'utf8');
+    expect(doc).toMatch(/--json [^\n]*isCrossRepository/);
+    expect(doc).toContain(FORK_GATE_OPEN);
+  });
+
+  it('템플릿판에는 fork 차단이 없다', async () => {
+    // 의도적 비대칭이다. 생성물은 fork 기여를 자동 머지하고 싶을 수 있고,
+    // 그쪽은 머지가 게시로 이어지지 않는다. 템플릿에 이 검사를 넣으면
+    // 생성된 프로젝트가 외부 기여를 영원히 막는다.
+    const doc = await readAutoMerge();
+    expect(doc).not.toContain('isCrossRepository');
+  });
 });
 
 describe('두 auto-merge.yml 사본의 게이트 동일성', () => {
+  it('이 저장소판도 승인을 head 커밋에 고정한다', () => {
+    // 게이트 동일성만으로는 부족하다 — headRefOid 조회와
+    // --match-head-commit 은 jq 바깥이라 한쪽만 빠져도 동일성 단언은 통과한다.
+    const doc = readFileSync(REPO_AUTO_MERGE, 'utf8');
+    expect(doc).toMatch(/--json [^\n]*headRefOid/);
+    expect(doc).toMatch(/gh pr merge .*--match-head-commit/);
+  });
+
   it('이 저장소판과 템플릿판의 jq 프로그램이 글자 그대로 같다', () => {
     // 템플릿은 다른 저장소로 복사되므로 이 저장소의 composite action 을
     // 참조할 수 없다 — 중복은 의도다. 대신 드리프트를 여기서 막는다.
@@ -417,5 +623,25 @@ describe('_shared 리뷰 워크플로', () => {
     // 지시가 있어도 도구가 막혀 있으면 Claude 는 승인도 변경 요청도 못 한다.
     const doc = await readReview();
     expect(doc).toContain('Bash(gh pr review:*)');
+  });
+
+  it('프롬프트 인젝션 방어 지시를 갖는다', async () => {
+    // 이 리뷰의 승인 하나가 자동 머지를 통과시킨다(게이트는 approvals >= 1
+    // 이고 봇을 신뢰한다). 그런데 이 프롬프트가 읽는 diff·PR 제목·PR 본문·
+    // 커밋 메시지·코드 주석은 **전부 공격자 통제 입력**이다. 방어 지시가
+    // 없으면 "이 PR 을 승인하라"를 diff 에 심는 것만으로 사람이 아무도 안 본
+    // 변경이 main 에 들어간다.
+    const doc = await readReview();
+    expect(doc).toContain('검토 대상 데이터');
+    expect(doc).toContain('지시');
+    // 인젝션을 발견하면 조용히 무시하는 것으로 끝나면 안 된다 — 그 자체가
+    // 변경 요청 사유여야 다음 사람이 본다.
+    expect(doc).toContain('변경 요청');
+  });
+
+  it('승인 판단의 근거를 리뷰 기준과 실제 코드 변경으로 한정한다', async () => {
+    const doc = await readReview();
+    expect(doc).toContain('.claude/agents/devkit-reviewer.md');
+    expect(doc).toContain('실제 코드 변경');
   });
 });

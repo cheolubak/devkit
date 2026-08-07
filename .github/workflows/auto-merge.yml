@@ -50,7 +50,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          gh pr view "$PR" --repo "$REPO" --json state,isDraft,isCrossRepository,labels,reviews,statusCheckRollup > pr.json
+          gh pr view "$PR" --repo "$REPO" --json state,isDraft,isCrossRepository,headRefOid,labels,reviews,statusCheckRollup > pr.json
 
           # fork 에서 온 PR 은 아예 제외한다. 이 저장소의 머지는 곧바로
           # release.yml 디스패치를 거쳐 패키지 게시로 이어지므로, 아래 신뢰
@@ -112,10 +112,29 @@ jobs:
               ((.authorAssociation // "") | . == "OWNER" or . == "MEMBER" or . == "COLLABORATOR")
               or ((.author.login // "") == "github-actions[bot]");
 
-            # 비대칭은 의도다. CHANGES_REQUESTED 는 작성자를 가리지 않고 센다 —
-            # 막는 쪽은 fail-safe 이므로 외부인의 변경 요청도 존중한다. 잘못
-            # 막으면 사람이 지우면 그만이지만 잘못 머지하면 되돌릴 수 없다.
-            def approvals: latest | map(select(.state == "APPROVED" and trusted)) | length;
+            # 승인은 **그 승인이 달린 커밋이 현재 head 일 때만** 센다. 브랜치
+            # 보호가 없으면 새 푸시가 기존 승인을 무효화하지 않는다 — 커밋 A 에
+            # 달린 승인이 그대로 커밋 B 를 머지시킨다. 경합조차 필요 없다:
+            # 승인 뒤에 푸시하면 리뷰 워크플로가 B 에 대해 다시 돌고, 그 완료가
+            # workflow_run 을 발화시켜 A 의 승인으로 B 가 머지된다.
+            #
+            # commit 이 없거나 null 인 리뷰(오래된 리뷰·API 형태 차이)는 승인으로
+            # 세지 않는다 — 확인할 수 없으면 막는 쪽이 안전하다.
+            def onHead($head): ((.commit.oid // "") | . != "" and . == $head);
+
+            # 비대칭은 **둘 다** 의도다. CHANGES_REQUESTED 는 작성자도 커밋도
+            # 가리지 않는다 — 막는 쪽은 fail-safe 이므로 외부인의 변경 요청도,
+            # 이전 커밋에 대한 변경 요청도 존중한다. 잘못 막으면 사람이 지우면
+            # 그만이지만 잘못 머지하면 되돌릴 수 없다.
+            def approvals:
+              (.headRefOid // "") as $head
+              | latest | map(select(.state == "APPROVED" and trusted and onHead($head))) | length;
+            # 승인은 있는데 전부 옛 커밋에 달린 경우를 "승인이 없습니다"와 갈라
+            # 낸다. 같은 문구로 뭉뚱그리면 승인해 둔 사람이 왜 안 머지되는지
+            # 실행 로그만으로 알 수 없다.
+            def stale:
+              (.headRefOid // "") as $head
+              | latest | map(select(.state == "APPROVED" and trusted and (onHead($head) | not))) | length;
             def rejections: latest | map(select(.state == "CHANGES_REQUESTED")) | length;
             def pending:
               others
@@ -131,6 +150,7 @@ jobs:
             elif .isDraft then "skip: draft PR 입니다"
             elif ([(.labels // [])[].name] | index($LABEL)) then "skip: \($LABEL) 라벨이 붙어 있습니다"
             elif rejections > 0 then "skip: 변경 요청이 \(rejections)건 있습니다"
+            elif approvals < 1 and stale > 0 then "skip: 승인 \(stale)건이 현재 head 에 대한 것이 아닙니다"
             elif approvals < 1 then "skip: 승인이 없습니다"
             elif pending > 0 then "skip: 체크 \(pending)건이 아직 진행 중입니다"
             elif failing > 0 then "skip: 실패한 체크가 \(failing)건 있습니다"
@@ -147,7 +167,11 @@ jobs:
             *) exit 0 ;;
           esac
 
-          gh pr merge "$PR" --repo "$REPO" --rebase --delete-branch
+          # 게이트는 이미 "승인이 현재 head 에 달렸다"를 확인했다. 그래도 그
+          # 판정과 이 호출 사이에 새 푸시가 들어올 수 있고, 그 잔여 창은 서버만
+          # 닫을 수 있다 — head 가 바뀌었으면 GitHub 이 머지를 거부한다.
+          HEAD_SHA=$(jq -r '.headRefOid' pr.json)
+          gh pr merge "$PR" --repo "$REPO" --rebase --delete-branch --match-head-commit "$HEAD_SHA"
 
           # GITHUB_TOKEN 이 만든 push 는 워크플로를 트리거하지 않는다 —
           # release.yml 은 on: push: branches: [main] 이므로, 자동 머지를 켠
