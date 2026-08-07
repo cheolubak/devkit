@@ -89,6 +89,18 @@ describe('mergeIgnore', () => {
       expect(result).toContain('!.claude/agents/');
     });
 
+    it('리딩 슬래시로 앵커된 /.claude/ 도 같은 조상으로 취급한다', () => {
+      const result = mergeIgnore('/.claude/\n', [], BLOCK);
+      expect(result.split('\n')).not.toContain('/.claude/');
+      expect(result).toContain('!.claude/agents/');
+    });
+
+    it('트레일링 슬래시가 없는 /.claude 도 같은 조상으로 취급한다', () => {
+      const result = mergeIgnore('/.claude\n', [], BLOCK);
+      expect(result.split('\n')).not.toContain('/.claude');
+      expect(result).toContain('!.claude/agents/');
+    });
+
     it('.claude/foo 처럼 자식을 가리키는 줄은 건드리지 않는다 — 정확히 일치할 때만 지운다', () => {
       const result = mergeIgnore('.claude/foo\n', [], BLOCK);
       expect(result).toContain('.claude/foo');

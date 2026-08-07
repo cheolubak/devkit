@@ -9,10 +9,28 @@ import { nextRecipe } from '../src/recipes/next.js';
 const isInstallStep = (s: { label: string }): boolean => s.label === 'pnpm install';
 const isVerifyStep = (s: { label: string }): boolean => s.label === 'pnpm lint' || s.label === 'pnpm build';
 
+/** 릴리스마다 바뀌는 마커 version 을 자리표시자로 바꾼다 — 이유는 recipe-nest.test.ts 참고. */
+function withStableVersion<T>(node: T): T {
+  // 트리 전체를 걷는다 — monorepo 는 루트와 apps/web 두 곳에 마커를 심어서,
+  // 고정 경로로 찾으면 깊은 쪽을 조용히 놓친다(실제로 놓쳤다).
+  if (node === null || typeof node !== 'object') return node;
+  if (Array.isArray(node)) {
+    for (const item of node) withStableVersion(item);
+    return node;
+  }
+  const record = node as Record<string, unknown>;
+  const marker = record.devkit;
+  if (marker !== null && typeof marker === 'object' && 'version' in marker) {
+    (marker as { version: string }).version = '<devkitVersion>';
+  }
+  for (const value of Object.values(record)) withStableVersion(value);
+  return node;
+}
+
 describe('next 레시피', () => {
   it('단계 목록이 스냅샷과 일치한다', () => {
     const steps = nextRecipe().map((s) => ({ kind: s.kind, detail: s.describe() }));
-    expect(steps).toMatchSnapshot();
+    expect(withStableVersion(steps)).toMatchSnapshot();
   });
 
   it('--no-eslint로 스캐폴딩한다 — 우리 설정을 깨끗하게 얹기 위해서다', () => {

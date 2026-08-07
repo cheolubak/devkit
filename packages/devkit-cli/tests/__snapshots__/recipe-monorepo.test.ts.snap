@@ -83,7 +83,7 @@ exports[`monorepo 레시피 > 단계 목록이 스냅샷과 일치한다 1`] = `
             },
             "devkit": {
               "type": "next",
-              "version": "0.1.0",
+              "version": "<devkitVersion>",
             },
             "prettier": "@cheolubak/prettier-config",
             "scripts": {
@@ -190,7 +190,7 @@ exports[`monorepo 레시피 > 단계 목록이 스냅샷과 일치한다 1`] = `
       "patch": {
         "devkit": {
           "type": "monorepo",
-          "version": "0.1.0",
+          "version": "<devkitVersion>",
         },
       },
       "required": [],

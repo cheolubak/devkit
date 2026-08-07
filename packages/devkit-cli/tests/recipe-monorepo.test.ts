@@ -2,10 +2,28 @@ import { describe, expect, it } from 'vitest';
 import { devkitVersion } from '../src/lib/version.js';
 import { monorepoRecipe } from '../src/recipes/monorepo.js';
 
+/** 릴리스마다 바뀌는 마커 version 을 자리표시자로 바꾼다 — 이유는 recipe-nest.test.ts 참고. */
+function withStableVersion<T>(node: T): T {
+  // 트리 전체를 걷는다 — monorepo 는 루트와 apps/web 두 곳에 마커를 심어서,
+  // 고정 경로로 찾으면 깊은 쪽을 조용히 놓친다(실제로 놓쳤다).
+  if (node === null || typeof node !== 'object') return node;
+  if (Array.isArray(node)) {
+    for (const item of node) withStableVersion(item);
+    return node;
+  }
+  const record = node as Record<string, unknown>;
+  const marker = record.devkit;
+  if (marker !== null && typeof marker === 'object' && 'version' in marker) {
+    (marker as { version: string }).version = '<devkitVersion>';
+  }
+  for (const value of Object.values(record)) withStableVersion(value);
+  return node;
+}
+
 describe('monorepo 레시피', () => {
   it('단계 목록이 스냅샷과 일치한다', () => {
     const steps = monorepoRecipe().map((s) => ({ kind: s.kind, detail: s.describe() }));
-    expect(steps).toMatchSnapshot();
+    expect(withStableVersion(steps)).toMatchSnapshot();
   });
 
   it('next 레시피를 합성한다 — 로직을 복제하지 않는다', () => {

@@ -38,12 +38,15 @@ function ancestorPathsToStrip(block: readonly string[]): Set<string> {
 
 /**
  * line 이 ancestors 안의 어떤 경로와 "정확히" 같은 디렉토리 제외 줄인지
- * 본다. 트레일링 슬래시 유무만 다른 것도 같은 줄로 취급한다(`.claude` ==
- * `.claude/`). `.claude/foo` 처럼 자식을 가리키는 줄은 걸리지 않는다 —
- * exact match 만 본다.
+ * 본다. 표기만 다르고 같은 대상을 가리키는 것은 같은 줄로 취급한다 —
+ * 트레일링 슬래시(`.claude` == `.claude/`)와 리딩 슬래시(`/.claude`)다.
+ * 리딩 슬래시는 "이 무시 파일 기준으로 앵커"라는 뜻일 뿐이고, 대상의 루트
+ * `.gitignore` 에서는 결국 같은 `.claude` 디렉토리를 제외한다 — 이것을
+ * 남겨두면 block 의 부정 패턴이 그대로 죽는다(git check-ignore 로 실측).
+ * `.claude/foo` 처럼 자식을 가리키는 줄은 걸리지 않는다 — exact match 만 본다.
  */
 function isAncestorExclusion(line: string, ancestors: ReadonlySet<string>): boolean {
-  const trimmed = line.trim().replace(/\/$/, '');
+  const trimmed = line.trim().replace(/^\//, '').replace(/\/$/, '');
   return ancestors.has(trimmed);
 }
 
