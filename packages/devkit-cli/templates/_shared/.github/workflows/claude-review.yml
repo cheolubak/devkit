@@ -31,7 +31,20 @@ jobs:
       - name: Run Claude Code Review
         uses: anthropics/claude-code-action@v1
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # secrets.GITHUB_TOKEN 이 아니다. Actions 의 자동 토큰으로는 PR 을
+          # 승인할 수 없다 — GitHub 이 "GitHub Actions is not permitted to
+          # approve pull requests" 로 거부한다. 워크플로가 자기 승인으로 브랜치
+          # 보호를 우회하지 못하게 막는 플랫폼 제약이라 저장소 설정으로 열리지
+          # 않는다.
+          #
+          # 그래서 승인은 **collaborator 권한을 가진 별도 봇 계정의 PAT** 로
+          # 남긴다. 그 리뷰의 authorAssociation 이 COLLABORATOR 라
+          # auto-merge.yml 의 신뢰 판정을 통과한다. PAT 에 필요한 권한은
+          # 이 저장소에 대한 Pull requests: Read and write 뿐이다.
+          #
+          # 이 토큰이 없으면 리뷰는 돌지만 승인이 남지 않고, 게이트는 승인 0
+          # 으로 판정해 머지하지 않는다 — 안전한 방향으로 실패한다.
+          github_token: ${{ secrets.REVIEW_BOT_TOKEN }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           track_progress: true
           prompt: |

@@ -143,8 +143,14 @@ describe('_shared 자동 머지 워크플로', () => {
   it('모든 gh pr 호출이 --repo 를 넘긴다', async () => {
     // 체크아웃이 없어 git remote 가 없다 — --repo 없이는 gh 가 대상
     // 저장소를 추론하지 못하고 죽는다.
+    // 주석 줄은 제외한다. 이 파일의 주석은 게이트가 무엇을 읽는지 설명하며
+    // `gh pr view --json` 같은 명령을 **언급**하는데, 그것은 호출이 아니다.
+    // 거르지 않으면 설명을 자세히 쓸수록 테스트가 빨개진다 — 실제로 그렇게
+    // 됐다.
     const doc = await readAutoMerge();
-    const calls = doc.split('\n').filter((line) => line.includes('gh pr '));
+    const calls = doc
+      .split('\n')
+      .filter((line) => line.includes('gh pr ') && !line.trim().startsWith('#'));
     expect(calls.length, 'gh pr 호출이 하나도 없다').toBeGreaterThan(0);
     for (const call of calls) {
       expect(call, `--repo 가 없다: ${call.trim()}`).toContain('--repo');
@@ -277,12 +283,34 @@ describe('자동 머지 게이트 판정 (jq 를 실제로 돌린다)', () => {
     expect(got).toMatch(/^merge:/);
   });
 
-  it('github-actions[bot] 의 승인은 authorAssociation 과 무관하게 신뢰한다', () => {
-    // fork 에서 온 PR 에 대해 pull_request 트리거의 GITHUB_TOKEN 은 읽기
-    // 전용으로 강등되므로 claude-review.yml 이 fork PR 을 승인하는 것 자체가
-    // 불가능하다. 봇 승인이 존재한다는 사실 자체가 same-repo PR 임을 뜻한다.
+  it('Actions 봇 로그인만으로는 신뢰하지 않는다 — 두 API 형태 모두', () => {
+    // 예전 게이트는 로그인이 'github-actions[bot]' 이면 authorAssociation 과
+    // 무관하게 통과시켰다. 그 특례는 **두 번 틀렸고** 둘 다 PR 을 실제로 열어
+    // 확인했다.
+    //
+    //   1. Actions 의 GITHUB_TOKEN 으로는 PR 을 승인할 수 없다. GitHub 이
+    //      "GitHub Actions is not permitted to approve pull requests" 로
+    //      거부하므로 그 특례를 탈 승인이 애초에 생기지 않는다.
+    //   2. 게이트가 읽는 `gh pr view --json` 은 GraphQL 이고 봇 로그인을
+    //      대괄호 **없이** 준다. REST 만 'github-actions[bot]' 이다.
+    //
+    // 2번이 이 파일의 옛 픽스처가 놓친 지점이다 — REST 형태로만 고정해
+    // 통과했지만, 실제 게이트가 받는 GraphQL 형태는 검사한 적이 없었다.
+    // 그래서 두 형태를 모두 넣는다.
+    for (const login of ['github-actions', 'github-actions[bot]']) {
+      const got = verdict(
+        prJson({ reviews: [reviewBy(login, 'APPROVED', 'CONTRIBUTOR')] }),
+      );
+      expect(got, `${login} 이 승인으로 세어졌다`).toBe('skip: 승인이 없습니다');
+    }
+  });
+
+  it('collaborator 봇 계정의 승인은 신뢰한다', () => {
+    // 자동 승인은 collaborator 권한을 가진 별도 봇 계정의 PAT 로 남긴다.
+    // 그 리뷰의 authorAssociation 은 COLLABORATOR 라 로그인 특례 없이
+    // 통과한다 — 이것이 봇 승인이 실제로 도달하는 유일한 경로다.
     const got = verdict(
-      prJson({ reviews: [reviewBy('github-actions[bot]', 'APPROVED', 'NONE')] }),
+      prJson({ reviews: [reviewBy('devkit-review-bot', 'APPROVED', 'COLLABORATOR')] }),
     );
     expect(got).toMatch(/^merge:/);
   });
@@ -643,6 +671,17 @@ describe('_shared 리뷰 워크플로', () => {
     expect(doc).toContain('Bash(gh pr review:*)');
   });
 
+  it('승인용 토큰이 Actions 자동 토큰이 아니다', async () => {
+    // Actions 의 GITHUB_TOKEN 으로는 PR 을 승인할 수 없다 — GitHub 이
+    // "GitHub Actions is not permitted to approve pull requests" 로 거부한다.
+    // 그 토큰을 넘기면 리뷰는 정상적으로 돌고 워크플로도 success 로 끝나지만
+    // 승인만 남지 않아 자동 머지가 영원히 오지 않는다. 실패가 초록불 뒤에
+    // 숨는 형태라 실행으로는 드러나지 않는다.
+    const doc = await readReview();
+    expect(doc).toMatch(/github_token:\s*\$\{\{\s*secrets\.REVIEW_BOT_TOKEN\s*\}\}/);
+    expect(doc).not.toMatch(/github_token:\s*\$\{\{\s*secrets\.GITHUB_TOKEN\s*\}\}/);
+  });
+
   it('프롬프트 인젝션 방어 지시를 갖는다', async () => {
     // 이 리뷰의 승인 하나가 자동 머지를 통과시킨다(게이트는 approvals >= 1
     // 이고 봇을 신뢰한다). 그런데 이 프롬프트가 읽는 diff·PR 제목·PR 본문·
@@ -700,6 +739,17 @@ describe('이 저장소판 리뷰 워크플로', () => {
   it('gh pr review 를 허용 도구로 갖는다', () => {
     // 지시가 있어도 도구가 막혀 있으면 Claude 는 승인도 변경 요청도 못 한다.
     expect(read()).toContain('Bash(gh pr review:*)');
+  });
+
+  it('승인용 토큰이 Actions 자동 토큰이 아니다', () => {
+    // Actions 의 GITHUB_TOKEN 으로는 PR 을 승인할 수 없다 — GitHub 이
+    // "GitHub Actions is not permitted to approve pull requests" 로 거부한다.
+    // 그 토큰을 넘기면 리뷰는 정상적으로 돌고 워크플로도 success 로 끝나지만
+    // 승인만 남지 않아 자동 머지가 영원히 오지 않는다. 실패가 초록불 뒤에
+    // 숨는 형태라 실행으로는 드러나지 않는다.
+    const doc = read();
+    expect(doc).toMatch(/github_token:\s*\$\{\{\s*secrets\.REVIEW_BOT_TOKEN\s*\}\}/);
+    expect(doc).not.toMatch(/github_token:\s*\$\{\{\s*secrets\.GITHUB_TOKEN\s*\}\}/);
   });
 
   it('프롬프트 인젝션 방어 지시를 갖는다', () => {
