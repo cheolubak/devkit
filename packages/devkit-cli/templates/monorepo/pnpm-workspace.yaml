@@ -16,7 +16,7 @@ catalog:
   '@next/eslint-plugin-next': ^16.0.0
   eslint-plugin-jsx-a11y: ^6.10.0
   eslint-plugin-react-hooks: ^7.1.0
-  vitest: ^2.1.0
+  vitest: ^4.0.0
   jsdom: ^25.0.0
 
 ignoredBuiltDependencies:
