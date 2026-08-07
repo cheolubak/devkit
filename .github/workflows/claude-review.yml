@@ -3,10 +3,15 @@ name: 'Claude Code Review'
 # PR 마다 Claude 가 리뷰하고 승인 또는 변경 요청을 남긴다. 그 승인을
 # auto-merge.yml 이 게이트로 읽는다.
 #
-# 이 워크플로는 GITHUB_TOKEN 으로 승인하므로 그 승인은 pull_request_review 를
-# 발화시키지 못한다 — auto-merge.yml 은 workflow_run 으로 이 워크플로의 "완료"를
-# 듣는다. 따라서 아래 name: 값은 그쪽 workflows: 목록과 **글자 그대로** 같아야
-# 한다. 어긋나면 자동 머지는 에러 없이 그냥 실행되지 않는다.
+# 승인은 별도 봇 계정의 PAT 로 남긴다(아래 github_token 주석 참고). 그것은
+# 사람 토큰이므로 승인이 pull_request_review 를 정상 발화시킨다 — 자동 머지는
+# 그 경로로 깨어난다.
+#
+# auto-merge.yml 이 workflow_run 으로 이 워크플로의 "완료"도 듣는데, 그것은
+# 중복 안전망이다. 리뷰가 승인 없이 끝났을 때(변경 요청·실패)에도 게이트를 한 번
+# 돌려 로그에 판정을 남기고, 승인이 어떤 이유로 이벤트를 못 만들어도 머지 경로가
+# 살아 있게 한다. 따라서 아래 name: 값은 그쪽 workflows: 목록과 **글자 그대로**
+# 같아야 한다 — 어긋나면 그 안전망이 에러 없이 사라진다.
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
