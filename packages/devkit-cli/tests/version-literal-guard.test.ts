@@ -1,0 +1,95 @@
+import { readdir, readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+
+const TESTS_DIR = fileURLToPath(new URL('.', import.meta.url));
+
+/** 이 파일 자신은 검사 대상이 아니다 — 아래 패턴 문자열이 스스로 걸린다. */
+const SELF = 'version-literal-guard.test.ts';
+
+/**
+ * 같은 줄에서 이 셋이 모두 보이면 실패시킨다:
+ *   1. `@cheolubak/` 패키지 이름
+ *   2. 따옴표로 감싼 하드코딩 버전(`'^0.1.0'`, `"0.1.1"`)
+ *   3. `expect(`
+ *
+ * **왜 `expect(` 를 함께 요구하는가.** 테스트가 직접 만드는 입력 픽스처
+ * (`devDependencies: { '@cheolubak/tsconfig': '^0.1.0' }`) 는 정당하다 —
+ * 그 값은 릴리스가 건드리지 않고, 테스트 안에서 자기완결적이다. 문제가 되는
+ * 것은 **생성물에서 읽은 값을 하드코딩 버전과 대조하는 단언**뿐이다. 그 값은
+ * `DEVKIT_VERSION_RANGE` 에서 흘러나오므로 릴리스가 상수를 올리면 단언만
+ * 뒤처지고, 다음 릴리스의 검증 스텝이 거기서 막힌다(이슈 #6).
+ *
+ * 실제로 이 모양이 세 곳에 있었다: `update-plan.test.ts`, `packed.e2e.test.ts`,
+ * `create.e2e.test.ts`. 앞의 둘은 단위 스위트가, 마지막 하나는 e2e 만 잡을 수
+ * 있었다 — `vitest.config.ts` 의 include 가 `tests/*.test.ts` 한 단계라
+ * `tests/e2e/` 는 개발 루프에서 아예 돌지 않기 때문이다. 이 가드는 기본
+ * 스위트에서 돌면서 **e2e 안쪽까지 읽는다.** 고치는 법은 리터럴을
+ * `DEVKIT_VERSION_RANGE` import 로 바꾸는 것이다.
+ *
+ * **알려진 한계**: 판정이 한 줄 단위라 `expect(` 와 리터럴이 다른 줄에 있는
+ * 여러 줄 단언은 빠져나간다. 세 실제 사례가 전부 한 줄이었기에 이 범위로
+ * 둔다 — 조용히 약한 것보다 한계를 적어 두는 쪽이 낫다.
+ */
+const PKG = '@cheolubak/';
+const VERSION_LITERAL = /['"]\^?\d+\.\d+\.\d+['"]/;
+const EXPECT_CALL = 'expect(';
+
+/**
+ * 정당한 예외를 남길 때 쓰는 표식. 이유를 함께 적는다.
+ *
+ * 위반한 줄 자체나 **바로 윗줄** 어디에 있어도 인정한다 — 단언이 길면
+ * 포매터가 트레일링 주석을 허용하지 않아, 같은 줄만 인정하면 표식을 달 수
+ * 없는 줄이 생긴다.
+ */
+const OPT_OUT = 'version-literal-ok';
+
+async function testSourceFiles(): Promise<string[]> {
+  const entries = await readdir(TESTS_DIR, { recursive: true, withFileTypes: true });
+  return entries
+    .filter((e) => e.isFile() && e.name.endsWith('.ts') && e.name !== SELF)
+    .map((e) => `${e.parentPath}/${e.name}`);
+}
+
+describe('테스트가 릴리스 관리 버전을 하드코딩하지 않는다', () => {
+  it('@cheolubak/* 버전 리터럴을 단언에 박은 곳이 없다', async () => {
+    const files = await testSourceFiles();
+    // 하나도 못 읽으면 아래 루프가 0회 돌아 "검사할 것이 없으니 통과"가 된다.
+    // 이 저장소의 다른 방어들과 같은 이유로 던진다(registry-version.test.ts,
+    // package-task-coverage.test.ts).
+    if (files.length === 0) {
+      throw new Error(`테스트 소스를 하나도 찾지 못했다: ${TESTS_DIR}`);
+    }
+    // e2e 를 실제로 훑고 있는지까지 확인한다 — include 나 디렉토리 구조가
+    // 바뀌어 e2e 가 스캔에서 빠지면, 정확히 이 가드가 막으려던 사각지대가
+    // 소리 없이 돌아온다(create.e2e.test.ts 가 그렇게 살아남았다).
+    expect(files.some((f) => f.includes('/e2e/'))).toBe(true);
+
+    const sources = await Promise.all(
+      files.map(async (file) => ({ file, lines: (await readFile(file, 'utf8')).split('\n') })),
+    );
+
+    const violations: string[] = [];
+    for (const { file, lines } of sources) {
+      lines.forEach((line, i) => {
+        if (!line.includes(PKG)) return;
+        if (!line.includes(EXPECT_CALL)) return;
+        if (!VERSION_LITERAL.test(line)) return;
+        if (line.includes(OPT_OUT) || (lines[i - 1]?.includes(OPT_OUT) ?? false)) return;
+        violations.push(`${file.replace(TESTS_DIR, '')}:${i + 1} — ${line.trim()}`);
+      });
+    }
+
+    // 목록을 그대로 보여줘야 어디를 고칠지 바로 안다. expect 의 두 번째 인자
+    // (메시지)는 oxlint 의 vitest(valid-expect) 가 막으므로, 이 저장소의 다른
+    // 방어들처럼 던진다.
+    if (violations.length > 0) {
+      throw new Error(
+        '릴리스가 올리는 버전을 단언에 하드코딩했다. DEVKIT_VERSION_RANGE 를 import 해 ' +
+          '비교하라 — 리터럴로 두면 다음 마이너 릴리스의 검증 스텝이 여기서 막힌다.\n' +
+          `정당한 예외라면 그 줄이나 바로 윗줄에 \`${OPT_OUT}: <이유>\` 주석을 남겨라.\n` +
+          violations.join('\n'),
+      );
+    }
+  });
+});

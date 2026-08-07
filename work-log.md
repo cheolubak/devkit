@@ -69,7 +69,19 @@
   - 변이 2(값 어긋뜨리기): 상수만 `^0.9.0` 으로 바꾸자 `registry-version.test.ts` 가 게시본과 대조해 잡았고(`@cheolubak/eslint-config-nest@0.2.0 이 ^0.9.0 를 벗어난다`), `update-plan.test.ts` 는 정상 통과했다. 역할 분담이 실제로 성립하며 리터럴을 없애도 **검증 공백이 생기지 않는다**.
   - e2e 수정도 같은 방식으로 양방향 확인했다: `packed` 를 원래 리터럴로 되돌리면 실제로 **실패**하고(`VITEST_EXIT=1`), 수정본은 통과한다. `create` 의 monorepo 케이스는 고치기 전 e2e 전체 실행에서 **실측으로 실패했다**(13건 중 1건). 두 e2e 수정 모두 불필요한 변경이 아니었음이 실행으로 확정됐다.
   - 릴리스 검증 스텝과 같은 순서로 `pnpm build`·`pnpm test`(423건, devkit-cli)·`pnpm typecheck`·`pnpm lint:ox`(exit 0, 기존 경고만)·`pnpm lint:es`·`pnpm test:e2e`(13/13) 전부 그린. **`src/` 변경은 0건**이다.
-- **커밋**: `6c2e80d` (브랜치 `worktree-greedy-moseying-brook`, push·PR 은 하지 않음)
+- **커밋**: `6c2e80d` (브랜치 `fix/version-literal-drift`, PR [#7](https://github.com/cheolubak/devkit/pull/7))
+
+### PR #7 리뷰 반영 — 네 번째 재발을 막는 가드
+- **변경 파일**: `packages/devkit-cli/tests/version-literal-guard.test.ts`(신설) · `packages/devkit-cli/tests/version-format.test.ts`
+- **내용**: 리뷰에서 나온 유일한 실질 지적 — **세 곳을 고쳤지만 네 번째 유입을 막는 장치가 없었다.** `registry-version.test.ts` 는 `packages/*/package.json` 만 스캔하고 테스트 소스는 보지 않으며, 린트에도 해당 규칙이 없다. 더 나쁜 것은 `vitest.config.ts` 의 include 가 `tests/*.test.ts` **한 단계**라 `tests/e2e/` 는 개발 루프에서 아예 안 돈다 — `create.e2e.test.ts:233` 이 이슈 작성자·전수 조사·단위 스위트를 전부 통과해 살아남은 게 정확히 이 구조 때문이다.
+  - 가드는 **기본 스위트에서 돌면서 `tests/` 아래를 재귀로 읽어 e2e 안쪽까지 훑는다.** 판정은 한 줄에 `@cheolubak/` · 따옴표 친 버전 리터럴 · `expect(` 셋이 모두 있을 때다.
+  - **`expect(` 를 함께 요구하는 것이 핵심 판별자다.** 테스트가 직접 만드는 입력 픽스처(`bin.test.ts:173`, `version-collect.test.ts:36,57,82`, `version-format.test.ts:42,43,114` 등 9곳)는 릴리스가 건드리지 않는 자기완결적 값이라 정당하다. 실제로 세 버그는 전부 `expect(` 와 같은 줄이었고 9개 픽스처는 전부 아니었다 — 마커를 9곳에 다는 대신 판별자 하나로 갈렸다.
+  - 그래도 걸린 2건(`version-format.test.ts:80,119`)은 확인 결과 `REPORT` 픽스처를 포매터가 렌더한 값이라 오탐이었다. 지우지 않고 `version-literal-ok: <이유>` 마커로 **판단을 코드에 남겼다** — 가드의 의도가 금지가 아니라 "어느 쪽인지 판단하게 만드는 것"이기 때문이다.
+  - **알려진 한계를 주석에 적었다**: 판정이 한 줄 단위라 `expect(` 와 리터럴이 다른 줄인 여러 줄 단언은 빠져나간다. 실제 사례 셋이 전부 한 줄이라 이 범위로 뒀다 — 조용히 약한 것보다 낫다.
+- **검증**: 변이 3건으로 증명했다. (1) e2e 리터럴을 되돌리자 **기본 스위트에서** 잡았다(`e2e/create.e2e.test.ts:236`) — 사각지대가 실제로 닫혔다는 결정적 증거. (2) 단위 리터럴을 되돌리자 잡았다(`update-plan.test.ts:97`). (3) 가드 자신이 e2e 를 스캔에서 빠뜨리도록 변이하자 `files.some(...'/e2e/')` 방어가 발화했다 — 가드가 소리 없이 무력해지지 않는다.
+  - `pnpm build`·`pnpm test`(devkit-cli **424건**, 가드 1건 추가)·`pnpm typecheck`·`pnpm lint:ox`(exit 0, 새 파일 지적 0건)·`pnpm lint:es` 전부 exit 0. e2e 는 재실행하지 않았다 — 변경이 단위 스위트 파일과 주석뿐이고 e2e 소스는 커밋본과 바이트 동일함을 `git diff --quiet` 로 확인했다.
+  - 처음 쓴 `expect(violations, message)` 2인자 형태는 oxlint 의 `vitest(valid-expect)` 가 막았다. 이 저장소가 이미 쓰는 관용구(상세 메시지는 `throw`)로 맞췄다.
+- **리뷰가 지적하지 않고 넘긴 것**: 1.0.0 릴리스 때 `satisfiesCaretZero` 가 `^1.0.0` 을 보고 던져 릴리스가 또 자기를 막는다. 다만 그건 **의도된 트립와이어**이고 에러 메시지가 "판정 로직을 고쳐라"라고 명시하므로 결함이 아니다. "재발이 끝난다"는 서술이 0.x 마이너 범프 범위임을 여기 적어 둔다.
 
 ### release 워크플로가 첫 단계에서 죽던 것 — 락파일 드리프트
 - **변경 파일**: `pnpm-lock.yaml`
