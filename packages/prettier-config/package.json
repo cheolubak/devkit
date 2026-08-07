@@ -1,6 +1,6 @@
 {
   "name": "@cheolubak/prettier-config",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "개인 프로젝트 공용 Prettier 설정 (빌드 없음, JSON 단일 파일)",
   "license": "MIT",
   "keywords": [

@@ -14,7 +14,7 @@ import { applyPatch, type JsonObject } from './merge-json.js';
  * `>=0.1.0 <0.2.0` 이라 패치 선행을 그대로 흡수한다. 마이너가 올라가는 순간
  * 이 상수도 함께 올려야 하며, 그것을 registry-version.test.ts 가 강제한다.
  */
-export const DEVKIT_VERSION_RANGE = '^0.1.0';
+export const DEVKIT_VERSION_RANGE = '^0.2.0';
 
 export interface RegistryDepsOptions {
   /** targetDir 기준 상대 경로. 기본값 'package.json' */

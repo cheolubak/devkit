@@ -1,6 +1,6 @@
 {
   "name": "@cheolubak/eslint-config-nest",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "NestJS 백엔드용 ESLint 공유 설정 (ESLint 10 flat config 전용, 타입 인식 + zod DTO 검증)",
   "license": "MIT",
   "keywords": [
