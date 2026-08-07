@@ -115,3 +115,29 @@ describe('_shared 자동 머지 워크플로', () => {
     }
   });
 });
+
+describe('_shared 리뷰 워크플로', () => {
+  async function readReview(): Promise<string> {
+    return readFile(CLAUDE_REVIEW, 'utf8');
+  }
+
+  it('통과와 실패 양쪽 지시를 모두 갖는다', async () => {
+    // 승인만 지시하면 문제를 찾았을 때 인라인 코멘트만 남고 리뷰 상태가
+    // 안 찍힌다. 그러면 auto-merge 의 "변경 요청 없음" 게이트는 존재하지만
+    // 아무것도 막지 못한다 — 나중에 승인 하나가 들어오면 그대로 머지된다.
+    const doc = await readReview();
+    expect(doc).toContain('--approve');
+    expect(doc).toContain('--request-changes');
+  });
+
+  it('코멘트만 남기고 끝내지 말라고 명시한다', async () => {
+    const doc = await readReview();
+    expect(doc).toContain('코멘트만 남기고 끝내지 않습니다');
+  });
+
+  it('gh pr review 를 허용 도구로 갖는다', async () => {
+    // 지시가 있어도 도구가 막혀 있으면 Claude 는 승인도 변경 요청도 못 한다.
+    const doc = await readReview();
+    expect(doc).toContain('Bash(gh pr review:*)');
+  });
+});

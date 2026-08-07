@@ -31,6 +31,14 @@ jobs:
 
             구체적인 문제에 대해서는 인라인 주석을 사용하여 자세한 피드백을 제공해주세요.
 
-            리뷰 완료 후 심각한 문제가 없으면 `gh pr review ${{ github.event.pull_request.number }} --approve -b "LGTM"` 명령으로 승인해주세요.
+            리뷰를 마치면 반드시 승인 또는 변경 요청 중 하나를 남깁니다.
+            코멘트만 남기고 끝내지 않습니다 — 자동 머지(.github/workflows/auto-merge.yml)가
+            이 리뷰 상태를 게이트로 읽습니다. 상태를 남기지 않으면 문제를 찾고도
+            나중에 들어온 승인 하나로 그대로 머지됩니다.
+
+            - 심각한 문제가 없으면:
+              `gh pr review ${{ github.event.pull_request.number }} --approve -b "LGTM"`
+            - 심각한 문제가 있으면:
+              `gh pr review ${{ github.event.pull_request.number }} --request-changes -b "<문제 요약>"`
           claude_args: |
             --allowedTools "Read,Glob,Grep,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr review:*)"
