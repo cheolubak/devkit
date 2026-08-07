@@ -2,6 +2,15 @@
 
 ## 2026-08-07
 
+### e2e가 실행 위치에 따라 조용히 깨지던 것 — 생성물 기준을 워크스페이스 밖으로
+- **변경 파일**: `packages/devkit-cli/tests/e2e/workspace-root.ts`(신설) · `tests/e2e/{create,update}.e2e.test.ts` · `tests/workspace-root.test.ts`(신설)
+- **내용**: `create`·`update` e2e가 생성물을 `resolve(TOOLKIT, '..')`에 만들었는데, 그건 **메인 체크아웃에서만** 저장소 밖이다. git worktree에서 돌리면 TOOLKIT이 `<repo>/.claude/worktrees/<name>`이라 부모가 `<repo>/.claude/worktrees` — 저장소 **안**이면서 워크스페이스 glob(`packages/*`) **밖**이다. 그러면 pnpm이 상위 `pnpm-workspace.yaml`을 찾고 생성물을 멤버로 보지 않아 `@cheolubak/*` 설치를 조용히 건너뛴다(`node_modules/@cheolubak` 자체가 안 생김). `pnpm install`은 성공으로 끝나고 실패는 한참 뒤 `pnpm lint`의 `ERR_MODULE_NOT_FOUND`로 나타난다.
+  - **부분 실패라 회귀로 오인됐다.** `next`·`monorepo`는 `create-next-app`이 자체 `pnpm-workspace.yaml`을 만들어 독립 워크스페이스 루트가 되므로 통과하고 `--type nest` 3건만 죽는다. 앞선 작업에서 vitest·update를 고친 직후에 이 모양을 보면 그 변경의 회귀로 읽기 딱 좋다(실제로 그렇게 의심하고 파고들었다).
+  - 기준을 `os.tmpdir()`로 옮겼다 — `packed.e2e.test.ts`가 **이미 같은 이유로** 임시 디렉토리를 쓰고 그 근거를 주석에 적어 두고 있었다(`create`·`update`만 옛 방식에 남아 있었다). 더해서 `assertOutsideWorkspace`가 기준 디렉토리의 조상에 `pnpm-workspace.yaml`이 있으면 **경로를 붙여 던진다.** 조용히 다른 곳으로 옮기지 않는 이유는 그러면 진짜 환경 문제가 숨기 때문이다.
+  - 가드는 `tests/e2e/workspace-root.ts`로 빼서 두 e2e가 공유하고, 그 자체는 **기본 스위트**(`tests/workspace-root.test.ts`, 7건)에서 테스트한다 — `GITHUB_TOKEN`도 `pnpm install`도 필요 없고, e2e를 돌리지 않는 개발 루프에서 깨져도 바로 알아야 한다. `vitest.config.ts`의 include가 `tests/*.test.ts` 한 단계뿐이라 `tests/e2e/workspace-root.ts`가 테스트로 수집되지도 않는다.
+- **검증**: **같은 worktree에서 `pnpm test:e2e` 13/13 통과**(수정 전 같은 위치에서 3 실패, 170s). 단위 523개(devkit-cli 423 — 가드 7건 추가), `pnpm lint`(에러 0, oxlint 경고 5건 그대로), `pnpm typecheck`, `pnpm build`. 가드가 실제로 발화하는지는 `<root>/.claude/worktrees` 모양을 그대로 만들어 던지는 것으로 확인했다(경로가 메시지에 들어가는지까지).
+- **커밋**: `f5575da`. 브랜치 `worktree-lexical-bubbling-bee`, main 미머지.
+
 ### my-blogs 도입 리포트 반영 — FSD 세그먼트 진입점, vitest 침묵, update 경고 2건
 - **변경 파일**: `packages/eslint-plugin-fsd/src/lib/{layers,types,parse-path}.ts`·`src/rules/no-public-api-sidestep.ts`·`tests/{layers,parse-path,no-public-api-sidestep}.test.ts`·`README.md` · `packages/vitest-config/{next.js,node.js,package.json,README.md,tests/config.test.ts}` · `packages/devkit-cli/src/{recipes/next.ts,lib/classify.ts,update/{index,plan,cjs-scan}.ts}`·`templates/monorepo/pnpm-workspace.yaml`·`tests/{cjs-scan,classify,update-flow}.test.ts`·`tests/__snapshots__/recipe-{next,monorepo}.test.ts.snap`·`README.md` · 루트 `README.md` · `work-log.md`
 - **내용**: 소비자(my-blogs)가 devkit을 실제로 도입하며 낸 리포트 6건을 devkit 실물에 대고 검증하고 전부 반영했다. 커밋 `7fd3046`·`0d1c69a`·`b4d157d`·`c34e39e`.
@@ -14,7 +23,7 @@
   - **vitest는 소비자와 같은 설치 형태로 확인해야 했다.** 처음 `link:`로 프로브를 만들었더니 `vitest/config`가 워크스페이스의 vitest 2로 해석돼 peer 검증이 무의미했다. `file:`로 바꿔 pnpm이 `.pnpm` 아래 peer를 링크하는 실제 경로에서 2.1.9·3.2.7·4.1.10 세 메이저를 각각 돌렸다. (`file:`은 스냅샷을 **복사**하므로 설정을 고칠 때마다 재설치해야 한다 — 편집이 반영 안 돼 한 번 헛짚었다.)
   - **새 테스트가 회귀를 실제로 잡는지 반증했다.** `exclude`에서 `configDefaults`를 뺀 "회귀본"을 스크래치패드에 따로 두고 돌려 `node_modules/some-dep/sample.test.ts`가 수집되는 것을(2개 → 3개) 확인했다. 저장소 파일을 임시로 망가뜨리지 않은 이유는 자동 훅이 그 상태를 커밋한 사고가 반복됐기 때문이다.
   - update 경고는 문구까지 눈으로 봤다 — 스크래치패드에 레거시 프로젝트(고유 `ignores`를 가진 `eslint.config.mjs` + CJS `cache-handlers/logging-handler.js`)를 만들고 `--dry-run`을 돌려, 소비자가 겪은 두 사고가 각각 파일명과 함께 뜨는 것을 확인했다.
-  - **`pnpm test:e2e`는 13개 중 3개가 실패하는데 이번 변경과 무관하다 — 위치 문제다.** 셋 다 `--type nest`이고 원인이 하나다: e2e가 생성물을 `PARENT`(= 툴킷 루트의 부모)에 만드는데, **worktree에서 돌리면 그 `PARENT`가 `.claude/worktrees/`** 가 되어 메인 저장소 **안**이면서 워크스페이스 globs(`packages/*`) **밖**이 된다. 그러면 pnpm이 상위 `pnpm-workspace.yaml`을 찾고 이 디렉토리는 멤버가 아니라 `node_modules/@cheolubak` 자체가 안 생긴다(실패 잔여물에서 직접 확인: 선언 4건, 설치 0건, `pnpm-workspace.yaml` 없음). `next`·`monorepo`가 통과하는 것은 `create-next-app`이 자체 `pnpm-workspace.yaml`을 만들어 독립 워크스페이스 루트가 되기 때문이다. **테스트 주석이 이미 경고하던 실패 모드**이며(`create.e2e.test.ts:38-41` "TOOLKIT으로 되돌리지 말 것"), 저장소 **밖**(스크래치패드)에서 같은 `create --type nest`를 돌려 lint·build가 전부 통과하는 것으로 확정했다. **worktree에서는 e2e를 신뢰할 수 없다** — 메인 체크아웃에서 돌려야 한다.
+  - **`pnpm test:e2e`는 13개 중 3개가 실패하는데 이번 변경과 무관하다 — 위치 문제다.** 셋 다 `--type nest`이고 원인이 하나다: e2e가 생성물을 `PARENT`(= 툴킷 루트의 부모)에 만드는데, **worktree에서 돌리면 그 `PARENT`가 `.claude/worktrees/`** 가 되어 메인 저장소 **안**이면서 워크스페이스 globs(`packages/*`) **밖**이 된다. 그러면 pnpm이 상위 `pnpm-workspace.yaml`을 찾고 이 디렉토리는 멤버가 아니라 `node_modules/@cheolubak` 자체가 안 생긴다(실패 잔여물에서 직접 확인: 선언 4건, 설치 0건, `pnpm-workspace.yaml` 없음). `next`·`monorepo`가 통과하는 것은 `create-next-app`이 자체 `pnpm-workspace.yaml`을 만들어 독립 워크스페이스 루트가 되기 때문이다. **테스트 주석이 이미 경고하던 실패 모드**이며(`create.e2e.test.ts:38-41` "TOOLKIT으로 되돌리지 말 것"), 저장소 **밖**(스크래치패드)에서 같은 `create --type nest`를 돌려 lint·build가 전부 통과하는 것으로 확정했다. **worktree에서는 e2e를 신뢰할 수 없다** — 메인 체크아웃에서 돌려야 한다. → **후속에서 e2e 자체를 고쳤다**(위 「e2e가 실행 위치에 따라 조용히 깨지던 것」, `f5575da`). 이제 어디서 돌려도 13/13이다.
   - **게시 전에는 소비자에게 닿지 않는다.** 생성물은 `@cheolubak/*`를 레지스트리에서 받으므로 vitest-config의 include·peer 수정은 다음 릴리스 이후에야 효력이 있다. e2e의 `next`가 통과한 것은 **게시본 0.1.1 + vitest 4** 조합이 이미 동작한다는 뜻이다(peer 경고만 뜬다).
 - **커밋**: 브랜치 `worktree-lexical-bubbling-bee`(`origin/main` 기준 rebase 후 작업). main 미머지.
 
