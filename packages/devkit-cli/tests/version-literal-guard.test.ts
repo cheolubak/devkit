@@ -1,16 +1,25 @@
 import { readdir, readFile } from 'node:fs/promises';
+import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const TESTS_DIR = fileURLToPath(new URL('.', import.meta.url));
 
-/** 이 파일 자신은 검사 대상이 아니다 — 아래 패턴 문자열이 스스로 걸린다. */
+/**
+ * 이 파일 자신은 검사 대상이 아니다.
+ *
+ * 지금 형태로는 빼지 않아도 걸리지 않는다 — 확인해 봤다. 아래 문서 주석에
+ * `@cheolubak/tsconfig': '^0.1.0'` 예시가 있지만 그 줄에 `expect(` 가 없어
+ * 세 조건이 한 줄에서 만나지 않는다. 그래도 빼 두는 이유는 **예시를 하나만
+ * 더 실감나게 적으면 곧바로 자기 자신을 신고하기 때문이다.** 가드가 자기
+ * 문서 때문에 빨개지면 고치는 사람이 진짜 위반과 구분하지 못한다.
+ */
 const SELF = 'version-literal-guard.test.ts';
 
 /**
  * 같은 줄에서 이 셋이 모두 보이면 실패시킨다:
  *   1. `@cheolubak/` 패키지 이름
- *   2. 따옴표로 감싼 하드코딩 버전(`'^0.1.0'`, `"0.1.1"`)
+ *   2. 따옴표나 백틱으로 감싼 하드코딩 버전(`'^0.1.0'`, `"0.1.1"`)
  *   3. `expect(`
  *
  * **왜 `expect(` 를 함께 요구하는가.** 테스트가 직접 만드는 입력 픽스처
@@ -32,7 +41,9 @@ const SELF = 'version-literal-guard.test.ts';
  * 둔다 — 조용히 약한 것보다 한계를 적어 두는 쪽이 낫다.
  */
 const PKG = '@cheolubak/';
-const VERSION_LITERAL = /['"]\^?\d+\.\d+\.\d+['"]/;
+// 백틱도 받는다. `toBe(`^0.1.0`)` 는 이 저장소에서 드문 형태지만, 따옴표
+// 두 종류만 보면 그 한 형태로 가드를 그냥 지나칠 수 있다.
+const VERSION_LITERAL = /['"`]\^?\d+\.\d+\.\d+['"`]/;
 const EXPECT_CALL = 'expect(';
 
 /**
@@ -48,7 +59,11 @@ async function testSourceFiles(): Promise<string[]> {
   const entries = await readdir(TESTS_DIR, { recursive: true, withFileTypes: true });
   return entries
     .filter((e) => e.isFile() && e.name.endsWith('.ts') && e.name !== SELF)
-    .map((e) => `${e.parentPath}/${e.name}`);
+    // 문자열로 이으면 안 된다 — 최상위 항목의 parentPath 는 readdir 에 넘긴
+    // 값 그대로라 끝에 구분자가 붙어 있고(`.../tests/`), 하위 디렉토리 항목은
+    // Node 가 만들어 붙지 않는다(`.../tests/e2e`). 그대로 이으면 최상위만
+    // 슬래시가 겹쳐 위반 메시지의 경로가 서로 다른 모양으로 나온다.
+    .map((e) => join(e.parentPath, e.name));
 }
 
 describe('테스트가 릴리스 관리 버전을 하드코딩하지 않는다', () => {
@@ -76,7 +91,7 @@ describe('테스트가 릴리스 관리 버전을 하드코딩하지 않는다',
         if (!line.includes(EXPECT_CALL)) return;
         if (!VERSION_LITERAL.test(line)) return;
         if (line.includes(OPT_OUT) || (lines[i - 1]?.includes(OPT_OUT) ?? false)) return;
-        violations.push(`${file.replace(TESTS_DIR, '')}:${i + 1} — ${line.trim()}`);
+        violations.push(`${relative(TESTS_DIR, file)}:${i + 1} — ${line.trim()}`);
       });
     }
 
