@@ -39,6 +39,8 @@ export GITHUB_TOKEN=$(gh auth token)   # 또는 read:packages 권한의 PAT
 pnpm build            # devkit-cli의 dist를 최신화한다 (필수 — 아래 참고)
 pnpm devbak create <name> --type <nest|next|monorepo> [--no-verify]
 pnpm devbak create --help                          # 사용법만 출력하고 종료
+pnpm devbak version [path]                         # 버전 확인
+pnpm devbak --version                              # CLI 버전만 한 줄로
 ```
 
 - `<name>`: 생성할 디렉토리 이름이자 프로젝트 이름. 이미 존재하는 디렉토리는
@@ -147,6 +149,46 @@ CLI는 실행 전에 `dist/bin.js`가 `src/`보다 새로운지 확인하고, �
 ### CI 워크플로를 쓰려면
 
 생성된 저장소에 시크릿 `CLAUDE_CODE_OAUTH_TOKEN`을 등록해야 한다(API key가 아니다). 없으면 워크플로가 동작하지 않는다. **파일이 놓였다는 사실이 리뷰가 동작한다는 뜻은 아니다.**
+
+## `devbak version` — 지금 무엇을 쓰고 있는지 본다
+
+```
+pnpm devbak version              # 실행한 위치(cwd) 기준
+pnpm devbak version ../my-api    # 경로를 주면 그곳 기준
+pnpm devbak --version            # CLI 버전만 한 줄로
+```
+
+세 층을 한 번에 낸다 — 설치된 CLI 자신, 프로젝트의 devkit 마커, 그리고
+선언된 `@cheolubak/*`의 실제 설치 버전.
+
+```
+$ pnpm devbak version
+devbak                          0.2.0
+
+. (monorepo)                    0.1.0
+  패키지                        선언    설치본
+  @cheolubak/eslint-plugin-fsd  ^0.1.0  0.1.1
+  @cheolubak/prettier-config    ^0.1.0  0.1.1
+
+apps/web (next)                 0.1.0
+  패키지                        선언    설치본
+  @cheolubak/eslint-plugin-fsd  ^0.1.0  0.1.1
+  @cheolubak/vitest-config      ^0.1.0  미설치
+```
+
+**선언과 설치본을 둘 다 내는 이유**: `package.json`에 심기는 값은 구체적
+버전이 아니라 고정 캐럿 범위(`^0.1.0`)라, 선언만 보면 게시 대상이 전부
+똑같아 보인다. 실제로 무엇이 깔렸는지는 `node_modules`를 봐야 안다.
+
+**모노레포는 마커가 있는 하위 워크스페이스까지 함께 낸다.** 루트에
+`monorepo` 마커, `apps/web`에 `next` 마커가 따로 들어가기 때문이다.
+
+`devbak version`은 **실패하지 않는다** — devkit 프로젝트가 아니면 CLI 한
+줄만 내고 종료 코드 0으로 끝난다. `pnpm build`를 하지 않아 `dist`가
+낡았어도 막히지 않는다. 최신 버전이 나왔는지는 묻지 않으므로
+(`pnpm outdated`가 답한다) 네트워크를 타지 않는다. 단, 준 경로 자체가
+없거나 디렉토리가 아니면 그건 진단 결과가 아니라 입력 오류이므로
+에러를 내고 종료 코드 1로 끝난다.
 
 ## `devbak update` — 기존 프로젝트에 표준 재적용
 
