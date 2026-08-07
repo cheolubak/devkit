@@ -36,6 +36,17 @@ function commitAll(dir: string): void {
   });
 }
 
+/**
+ * 출력을 [변경 목록, 경고]로 가른다. 경고가 없으면 뒤가 빈 문자열이다.
+ *
+ * describe 안에 두면 unicorn(consistent-function-scoping)이 걸린다 —
+ * 부모 스코프에서 잡는 것이 없기 때문이다(74fe700 의 관행).
+ */
+function splitAtWarning(output: string): [string, string] {
+  const at = output.indexOf('통째로 교체됩니다');
+  return at === -1 ? [output, ''] : [output.slice(0, at), output.slice(at)];
+}
+
 const base = (targetDir: string) => ({
   targetDir,
   toolkitRoot: TOOLKIT,
@@ -178,6 +189,117 @@ describe('runUpdate', () => {
     await runUpdate({ ...base(dir), only: 'claude' });
 
     expect(existsSync(join(dir, '.claude'))).toBe(true);
+  });
+
+  /**
+   * 실측 회귀(2026-08-07 소비자): 기존 프로젝트에 devkit 을 처음 붙였을 때
+   * eslint.config.mjs 가 통째로 교체돼 그 안의 ignores 가 증발했고, 저장소
+   * 안의 라이브 worktree 를 린트하다 린트가 크래시로 끝났다. 변경 목록에는
+   * 그냥 "덮어쓰기"로만 보여 사람이 놓쳤다.
+   */
+  describe('통째 교체 경고', () => {
+    /** 기존 eslint.config.mjs 와 .gitignore 를 가진, 마커 없는 프로젝트. */
+    function projectWithOwnConfigs(pkg: Record<string, unknown> = {}): string {
+      const dir = makeProject(pkg, false);
+      writeFileSync(
+        join(dir, 'eslint.config.mjs'),
+        "export default [{ ignores: ['.claude/**'] }];\n",
+      );
+      writeFileSync(join(dir, '.gitignore'), 'my-own-rule\n');
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      commitAll(dir);
+      return dir;
+    }
+
+    /** 마커가 있으면 --type 을 주지 않는다 — 마커로 유형을 찾는 경로를 탄다. */
+    async function messagesFrom(dir: string, hasMarker = false): Promise<string> {
+      const lines: string[] = [];
+      await runUpdate({
+        ...base(dir),
+        ...(hasMarker ? {} : { type: 'next' }),
+        only: 'lint,repo',
+        dryRun: true,
+        log: (message) => lines.push(message),
+      });
+      return lines.join('\n');
+    }
+
+    it('마커가 없으면 통째로 교체되는 파일을 이름 붙여 알린다', async () => {
+      const output = await messagesFrom(projectWithOwnConfigs());
+
+      expect(output).toContain('통째로 교체됩니다');
+      expect(output).toContain('eslint.config.mjs');
+    });
+
+    it('병합·패치되는 파일은 그 경고에 넣지 않는다', async () => {
+      const output = await messagesFrom(projectWithOwnConfigs());
+      const [changeList, warning] = splitAtWarning(output);
+
+      // 먼저 이 둘이 실제로 덮어쓰기 대상이라는 것부터 확인한다. 계획에
+      // 아예 없으면 아래 not.toContain 은 아무것도 증명하지 못한다.
+      expect(changeList).toContain('.gitignore');
+      expect(changeList).toContain('package.json');
+
+      // .gitignore 는 mergeIgnore 가, package.json 은 JSON 패치가 기존 내용을
+      // 살린다. 이것까지 "사라진다"고 말하면 경고가 늑대소년이 된다.
+      expect(warning).not.toContain('.gitignore');
+      expect(warning).not.toContain('package.json');
+    });
+
+    it('마커가 있으면 알리지 않는다 — devkit 자신의 이전 산출물 갱신이다', async () => {
+      const dir = projectWithOwnConfigs({ devkit: { type: 'next', version: '0.1.0' } });
+      const output = await messagesFrom(dir, true);
+
+      // 같은 파일이 여전히 덮어쓰기 대상인데도 경고만 빠졌음을 본다 —
+      // "경고가 없다"가 "할 일이 없었다"로 설명되지 않게 한다.
+      expect(output).toContain('eslint.config.mjs');
+      expect(output).not.toContain('통째로 교체됩니다');
+    });
+  });
+
+  /**
+   * 실측 회귀(2026-08-07 소비자): update 가 "type": "module" 을 심자
+   * cache-handlers/logging-handler.js 의 require/module.exports 가 ESM 으로
+   * 재해석돼 죽었다. 레시피 주석의 "안전하다"는 근거는 갓 생성된 프로젝트에만
+   * 성립하는데 update 는 오래 쓴 프로젝트에도 같은 키를 심는다.
+   */
+  describe('type: module 경고', () => {
+    async function messagesFrom(dir: string): Promise<string> {
+      const lines: string[] = [];
+      await runUpdate({
+        ...base(dir),
+        type: 'next',
+        dryRun: true,
+        log: (message) => lines.push(message),
+      });
+      return lines.join('\n');
+    }
+
+    it('CommonJS .js 가 있으면 무엇이 깨질지 이름 붙여 알린다', async () => {
+      const dir = makeProject();
+      writeFileSync(join(dir, 'logging-handler.js'), 'module.exports = () => {};\n');
+      commitAll(dir);
+
+      const output = await messagesFrom(dir);
+
+      expect(output).toContain('"type": "module"');
+      expect(output).toContain('logging-handler.js');
+    });
+
+    it('이미 type: module 이면 조용하다 — 바뀌는 것이 없다', async () => {
+      const dir = makeProject({ type: 'module' });
+      // 있더라도 재해석될 것이 없다. 파일 존재가 아니라 "해석이 뒤집히는가"가 기준이다.
+      writeFileSync(join(dir, 'logging-handler.js'), 'module.exports = () => {};\n');
+      commitAll(dir);
+
+      expect(await messagesFrom(dir)).not.toContain('ESM 으로 재해석');
+    });
+
+    it('CommonJS .js 가 없으면 조용하다', async () => {
+      const dir = makeProject();
+
+      expect(await messagesFrom(dir)).not.toContain('ESM 으로 재해석');
+    });
   });
 
   it('package.json이 없으면 던진다', async () => {

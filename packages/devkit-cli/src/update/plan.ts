@@ -74,6 +74,8 @@ export async function buildPlan({
 }: BuildPlanOptions): Promise<PlannedFile[]> {
   const files = new Map<string, string>();
   const jsonTargets = new Map<string, JsonObject>();
+  // 대상의 기존 내용을 반영해 만든 경로. PlannedFile.preservesExisting 의 출처다.
+  const preserving = new Set<string>();
   // 카테고리는 필터를 통과한 시점의 값을 기억한다. 합성된 하위 프로젝트의
   // 파일은 루트 기준 경로로 다시 분류하면 어떤 패턴에도 걸리지 않는다.
   const fileCategories = new Map<string, Category>();
@@ -87,7 +89,7 @@ export async function buildPlan({
     // 지우면 두 방향이 자연히 맞는다(설계 5.7절).
     if (step.removes !== undefined) {
       dropPlanned(
-        [files, jsonTargets, fileCategories],
+        [files, jsonTargets, fileCategories, preserving],
         ctx.targetDir,
         stepCtx.targetDir,
         step.removes,
@@ -125,6 +127,7 @@ export async function buildPlan({
           const existing = await readExistingOrEmpty(join(ctx.targetDir, relPath));
           files.set(relPath, mergeIgnore(existing, change.lines, change.block));
           fileCategories.set(relPath, fileCategory);
+          preserving.add(relPath);
         }
         continue;
       }
@@ -169,8 +172,12 @@ export async function buildPlan({
     fileCategories.set('package.json', 'repo');
   }
 
+  // JSON 은 전부 "대상 내용 + 패치"로 만들어진다(readJsonOrEmpty 로 기존을
+  // 읽어 applyPatch 한다). 마커만 얹힌 package.json 도 같은 경로라 여기서
+  // 한 번에 표시하면 분기마다 add 하는 것보다 빠뜨릴 여지가 없다.
   for (const [relPath, value] of jsonTargets) {
     files.set(relPath, `${JSON.stringify(value, null, 2)}\n`);
+    preserving.add(relPath);
   }
 
   return [...files]
@@ -181,6 +188,7 @@ export async function buildPlan({
         // 카테고리 필터는 이미 끝났다. 여기 값은 표시·디버깅용이며,
         // package.json 처럼 여러 카테고리가 섞인 파일은 파일 카테고리를 쓴다.
         category: fileCategories.get(relPath) ?? 'repo',
+        preservesExisting: preserving.has(relPath),
       }),
     )
     // localeCompare 는 ICU 로케일에 따라 순서가 달라질 수 있다. 표시
@@ -199,8 +207,14 @@ function isPackageJson(relPath: string): boolean {
  * `apps/web/.claude/agents/devkit-reviewer.md` 를 걸러야 한다.
  * 레시피가 join() 으로 만든 경로에는 플랫폼 구분자가 섞이므로 정규화한다.
  */
+/** Map 과 Set 을 함께 받기 위한 최소 계약. 여기서 쓰는 건 이 둘뿐이다. */
+interface Droppable {
+  keys(): Iterable<string>;
+  delete(key: string): unknown;
+}
+
 function dropPlanned(
-  maps: ReadonlyArray<Map<string, unknown>>,
+  maps: ReadonlyArray<Droppable>,
   root: string,
   stepTarget: string,
   removes: readonly string[],
