@@ -56,6 +56,29 @@
   - **RuleTester 그린으로 끝내지 않았다.** RuleTester는 `filename`을 문자열로 받을 뿐 파일이 없어도 되고 flat config 조립·`ignores`를 전혀 거치지 않는다. 저장소 **밖** 스크래치패드에 실제 FSD 디렉토리를 만들어 빌드된 `dist`의 `configs.recommended`로 ESLint를 돌려, 오탐 4건이 조용하고 진짜 위반 5건이 그대로 잡히는 것을 확인했다(검증용 생성물을 저장소 안에 만들면 자동 훅이 커밋해버리는 사고가 이전에 4회 있었다).
 - **커밋**: 브랜치 `worktree-lexical-bubbling-bee`(`origin/main` 기준 rebase 후 작업). main 미머지.
 
+### 자동 승인·자동 머지 워크플로
+- **변경 파일**:
+  - `packages/devkit-cli/templates/_shared/.github/workflows/auto-merge.yml` (신규)
+  - `packages/devkit-cli/templates/_shared/.github/workflows/claude-review.yml`
+  - `packages/devkit-cli/tests/auto-merge-workflow.test.ts` (신규)
+  - `.github/workflows/auto-merge.yml` (신규)
+  - `README.md`, `packages/devkit-cli/README.md`
+- **내용**: 승인이 1건 이상이면 PR을 rebase 머지하는 워크플로를 템플릿과 이 저장소에
+  더했다. 설계를 지배한 제약은 **GITHUB_TOKEN이 일으킨 이벤트는 새 워크플로 실행을
+  만들지 않는다**는 것이다 — Claude가 GITHUB_TOKEN으로 남긴 승인은
+  `pull_request_review`를 발화시키지 못하므로 `workflow_run`으로 리뷰 워크플로의
+  완료를 함께 듣는다. 같은 제약 때문에 이 저장소에서는 자동 머지가 만든 push가
+  `release.yml`을 트리거하지 못해, 머지 직후 `gh workflow run release.yml`로
+  깨운다(`workflow_dispatch`는 그 규칙의 명시적 예외다). 승인 수는 브랜치 보호
+  설정에 좌우되는 `reviewDecision` 대신 `reviews`를 리뷰어별 최신으로 접어 직접
+  센다. 체크 게이트는 자기 자신을 `workflowName`으로 빼야 한다 — `.name`은
+  워크플로가 아니라 잡 이름이라 그걸로 거르면 데드락이 그대로 남는다.
+  CLI 소스 변경은 없다(`copyOverlay('_shared')`와 `ci` 카테고리가 이미 덮는다).
+- **커밋**: `3296c56`(설계) · `bf79583`(계획) · `a2611b0`(Task 1: 템플릿 auto-merge.yml)
+  · `34a8b06`(계획 문서 수정) · `f07492f`(Task 2: claude-review.yml 대칭 보강)
+  · `b6a7ccf`(Task 3: 이 저장소 auto-merge.yml) · 이 문서 커밋(Task 4, amend 대상이라
+  자기 해시를 적지 않는다)
+
 ### 앵커된 `.claude` 조상 줄이 부정 패턴을 무력화하던 것과, 릴리스가 다음 릴리스를 깨던 스냅샷 수정
 - **변경 파일**: `packages/devkit-cli/src/ops/merge-ignore.ts` · `templates/_shared/_gitignore` · `tests/merge-ignore.test.ts` · `tests/merge-ignore-git.test.ts` · `tests/recipe-{nest,next,monorepo}.test.ts` · `tests/__snapshots__/recipe-{nest,next,monorepo}.test.ts.snap` · `work-log.md`
 - **내용**: 두 가지를 고쳤다. 브랜치 `fix/gitignore-anchored-ancestor`.

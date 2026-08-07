@@ -170,8 +170,10 @@ pnpm dlx @cheolubak/devkit-cli create my-api --type nest   # 또는 --type next 
 프로젝트에 붙이기" 참고).
 
 세 유형 모두 Claude 기반 코드 리뷰 자산(`/review` 슬래시 커맨드, PR 자동 리뷰
-워크플로, 유형별 리뷰어 에이전트)을 함께 놓는다. CI 워크플로를 실제로 돌리려면
-생성된 저장소에 시크릿 `CLAUDE_CODE_OAUTH_TOKEN`을 등록해야 한다(API key가 아니다).
+워크플로, 유형별 리뷰어 에이전트)과 **자동 머지 워크플로**를 함께 놓는다. 리뷰가
+통과하면 Claude가 승인하고, 승인이 1건 이상이면 PR이 rebase로 머지된다. `no-auto-merge`
+라벨을 붙이면 그 PR은 제외된다. CI 워크플로를 실제로 돌리려면 생성된 저장소에 시크릿
+`CLAUDE_CODE_OAUTH_TOKEN`을 등록해야 한다(API key가 아니다).
 자세한 내용은 [`packages/devkit-cli/README.md`](packages/devkit-cli/README.md).
 
 ---

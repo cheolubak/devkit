@@ -134,6 +134,7 @@ CLI는 실행 전에 `dist/bin.js`가 `src/`보다 새로운지 확인하고, �
 | --- | --- |
 | `templates/_shared/.claude/commands/review.md` | 로컬 `/review` 슬래시 커맨드 |
 | `templates/_shared/.github/workflows/claude-review.yml` | PR 자동 리뷰 워크플로 |
+| `templates/_shared/.github/workflows/auto-merge.yml` | 승인 1건 이상이면 자동 머지 |
 | `templates/nest/.claude/agents/devkit-reviewer.md` | NestJS 리뷰어 |
 | `templates/next/.claude/agents/devkit-reviewer.md` | Next.js + FSD 리뷰어 |
 | `templates/monorepo/.claude/agents/devkit-reviewer.md` | Turborepo 모노레포 리뷰어 |
@@ -149,6 +150,43 @@ CLI는 실행 전에 `dist/bin.js`가 `src/`보다 새로운지 확인하고, �
 ### CI 워크플로를 쓰려면
 
 생성된 저장소에 시크릿 `CLAUDE_CODE_OAUTH_TOKEN`을 등록해야 한다(API key가 아니다). 없으면 워크플로가 동작하지 않는다. **파일이 놓였다는 사실이 리뷰가 동작한다는 뜻은 아니다.**
+
+### 자동 머지
+
+`auto-merge.yml`은 승인이 **1건 이상**이면 PR을 `--rebase --delete-branch`로 머지한다.
+아래 여섯 게이트를 모두 통과해야 한다.
+
+| 게이트 | 통과 조건 |
+| --- | --- |
+| 상태 | PR이 `OPEN` |
+| draft | draft가 아님 |
+| 라벨 | `no-auto-merge` 라벨이 없음 |
+| 변경 요청 | 리뷰어별 **최신** 리뷰에 `CHANGES_REQUESTED`가 없음 |
+| 승인 | 리뷰어별 최신 리뷰 중 `APPROVED`가 1건 이상 |
+| 체크 | 자기 자신을 뺀 모든 체크가 성공(진행 중도 불가) |
+
+게이트에 걸리면 이유를 로그에 남기고 **정상 종료**한다. 조건이 아직 안 갖춰진 것은
+고장이 아니므로 PR 체크를 빨간불로 만들지 않는다.
+
+**트리거가 둘인 이유.** GitHub은 `GITHUB_TOKEN`이 일으킨 이벤트로 새 워크플로 실행을
+만들지 않는다(`workflow_dispatch`·`repository_dispatch`만 예외). `claude-review.yml`은
+`GITHUB_TOKEN`으로 승인하므로 그 승인은 `pull_request_review`를 발화시키지 못한다 —
+그래서 `workflow_run`으로 리뷰 워크플로의 완료를 듣는다. 사람이 UI에서 누른 승인은
+사람 토큰이라 `pull_request_review`가 정상 발화한다. **하나만 두면 두 경로 중 하나가
+아무 신호 없이 죽는다.**
+
+**CI 워크플로를 추가하면 `auto-merge.yml`도 고쳐야 한다.** `on.workflow_run.workflows`
+목록에 그 워크플로 이름을 넣지 않으면, 승인 시점에 그 체크가 진행 중일 때 자동 머지가
+"보류"로 끝난 뒤 다시 깨어날 트리거가 없어 PR이 승인된 채로 멈춘다.
+
+**승인 수는 `reviewDecision`으로 세지 않는다.** 그 값은 브랜치 보호의 required reviews
+설정에 좌우되고, 설정이 없는 저장소에서는 비어 나온다 — 새로 만든 프로젝트는 전부 그
+상태라 쓰면 영원히 머지되지 않는다. 대신 `reviews`를 리뷰어별 최신으로 접어 직접 센다.
+
+**이 워크플로는 PR 코드를 체크아웃하지 않는다.** `workflow_run`·`pull_request_review`는
+base 저장소 컨텍스트에서 시크릿과 쓰기 토큰을 들고 도는 권한 있는 트리거다. head를
+체크아웃해 무언가 실행하면 fork PR이 임의 코드로 그 토큰을 가져갈 수 있다.
+`tests/auto-merge-workflow.test.ts`가 `actions/checkout` 부재를 단언으로 고정한다.
 
 ## `devbak version` — 지금 무엇을 쓰고 있는지 본다
 
@@ -212,9 +250,10 @@ devkit update — demo-api (nest)
   덮어쓰기 (2)
     package.json
     tsconfig.json
-  신규 (9)
+  신규 (10)
     .claude/agents/devkit-reviewer.md
     .claude/commands/review.md
+    .github/workflows/auto-merge.yml
     .github/workflows/claude-review.yml
     .gitignore
     .prettierignore
@@ -232,9 +271,10 @@ devkit update — demo-api (nest)
 $ pnpm devbak update ../demo-api --type nest --only claude,ci --dry-run
 devkit update — demo-api (nest)
 
-  신규 (4)
+  신규 (5)
     .claude/agents/devkit-reviewer.md
     .claude/commands/review.md
+    .github/workflows/auto-merge.yml
     .github/workflows/claude-review.yml
     CLAUDE.md
 ```
