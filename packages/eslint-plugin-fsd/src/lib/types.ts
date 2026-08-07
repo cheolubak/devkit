@@ -1,7 +1,14 @@
+import type { PublicApiUnit } from './layers';
+
 export interface FsdLocation {
   layer: string;
   rank: number;
   sliced: boolean;
+  /**
+   * 이 레이어에서 Public API를 소유하는 **종류**. `unit`이 그 이름이라면
+   * 이쪽은 종류다. `sliced === (unitKind === 'slice')` 불변식이 성립한다.
+   */
+  unitKind: PublicApiUnit;
   slice: string | null;
   segment: string | null;
   /**

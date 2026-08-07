@@ -40,6 +40,7 @@ export function parsePath(absPath: string): FsdLocation | null {
     layer: layer.name,
     rank: layer.rank,
     sliced: layer.sliced,
+    unitKind: layer.publicApi,
     slice,
     segment,
     unit,

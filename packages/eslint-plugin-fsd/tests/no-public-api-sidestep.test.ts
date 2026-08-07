@@ -11,6 +11,12 @@ ruleTester.run('no-public-api-sidestep', rule, {
     { filename: '/proj/src/features/auth/ui/x.ts', code: "import '@/entities/user';" },
     // shared 세그먼트 진입점
     { filename: '/proj/src/features/auth/ui/x.ts', code: "import '@/shared/ui';" },
+    // 슬라이스 레이어의 세그먼트 진입점. RSC에서 서버 전용 api와 클라이언트
+    // ui가 한 배럴로 묶이지 않게 하려면 이쪽도 진입점이어야 한다.
+    { filename: '/proj/src/features/auth/ui/x.ts', code: "import '@/entities/user/ui';" },
+    { filename: '/proj/src/app/page.tsx', code: "import '@/entities/user/api';" },
+    // 세그먼트 배럴이 자기 세그먼트 안을 re-export하는 것도 내부다.
+    { filename: '/proj/src/entities/user/ui/index.ts', code: "export * from './Avatar';" },
     // 같은 슬라이스 내부 깊은 상대 import
     { filename: '/proj/src/features/auth/ui/x.ts', code: "import '../model/store';" },
     // 비-슬라이스 레이어의 내부 import. shared는 슬라이스가 없어 세그먼트가
@@ -23,10 +29,18 @@ ruleTester.run('no-public-api-sidestep', rule, {
     { filename: '/proj/src/app/products/page.tsx', code: "import './loading';" },
   ],
   invalid: [
+    // 세그먼트를 인정해도 그 **안쪽 파일**은 여전히 막힌다. 메시지는 대신
+    // 써야 할 진입점(세그먼트 배럴)을 이름한다.
     {
       filename: '/proj/src/features/auth/ui/x.ts',
       code: "import '@/entities/user/model/store';",
-      errors: [{ messageId: 'sidestep' }],
+      errors: [{ messageId: 'sidestep', data: { target: 'entities/user/model' } }],
+    },
+    // 별칭 레이어(views)에서도 세그먼트까지만 진입점이다.
+    {
+      filename: '/proj/src/features/auth/ui/x.ts',
+      code: "import '@/views/home/ui/Hero';",
+      errors: [{ messageId: 'sidestep', data: { target: 'views/home/ui' } }],
     },
     {
       filename: '/proj/src/features/auth/ui/x.ts',

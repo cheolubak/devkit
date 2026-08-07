@@ -35,3 +35,21 @@ for (const layer of LAYERS) {
 export function lookupLayer(folderName: string): LayerDef | null {
   return BY_FOLDER.get(folderName) ?? null;
 }
+
+/**
+ * FSD 루트 기준으로 Public API(진입점)로 인정되는 최대 경로 깊이.
+ *
+ * 슬라이스 레이어는 슬라이스 배럴(`entities/user`, 2)과 **세그먼트 배럴**
+ * (`entities/user/ui`, 3)을 모두 진입점으로 인정한다. RSC 때문이다 — 한
+ * 슬라이스가 서버 전용 `api`와 클라이언트 `ui`를 함께 가지면 슬라이스 배럴
+ * 하나만 허용하는 순간 그 배럴이 둘을 한 모듈 그래프로 묶어, `"use client"`
+ * 소비자가 서버 전용 의존성을 번들로 끌어온다. 세그먼트 배럴을 인정하면
+ * 클라이언트는 `ui`만, 서버는 `api`만 짚을 수 있다.
+ *
+ * 슬라이스가 없는 레이어는 세그먼트가 이미 진입점이므로 2에서 멈춘다.
+ * `layer` 단위(app)도 2다 — app 내부는 같은 unit이라 임계값에 닿기 전에
+ * 걸러지고, 밖에서 app을 짚는 것은 no-higher-level-imports가 이미 잡는다.
+ */
+export function publicApiDepth(unit: PublicApiUnit): number {
+  return unit === 'slice' ? 3 : 2;
+}

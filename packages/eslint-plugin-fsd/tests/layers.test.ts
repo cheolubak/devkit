@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { lookupLayer, LAYERS } from '../src/lib/layers';
+import { lookupLayer, publicApiDepth, LAYERS } from '../src/lib/layers';
 
 describe('lookupLayer', () => {
   it('정규 레이어명을 조회한다', () => {
@@ -33,6 +33,12 @@ describe('lookupLayer', () => {
     for (const layer of LAYERS) {
       expect(layer.sliced).toBe(layer.publicApi === 'slice');
     }
+  });
+
+  it('슬라이스 레이어만 세그먼트 배럴까지 진입점으로 인정한다', () => {
+    expect(publicApiDepth('slice')).toBe(3);
+    expect(publicApiDepth('segment')).toBe(2);
+    expect(publicApiDepth('layer')).toBe(2);
   });
 
   it('LAYERS는 rank 오름차순', () => {
