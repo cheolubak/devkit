@@ -28,17 +28,33 @@
   `isCrossRepository` 0건). "이 파일을 이렇게 만들어라"는 재구현 지시라 그대로 두면 공급망
   구멍이 재생산된다. 두 embed를 실물과 바이트 단위로 맞췄고, 브리프에 없던 Task 2의
   `claude-review.yml` 스니펫도 같은 이유로 방어 문단을 넣었다.
-- **검증**: TDD — A·B는 수정 전 7건 RED(핵심: `expected 'merge: 승인 1건, 체크 통과' to
-  match /^skip:/`), 수정 후 47/47 GREEN. 두 파일 jq `diff` 출력 없음. ruby YAML 파싱 3파일 OK.
-  계획서 embed는 grep 개수뿐 아니라 **바이트 대조**까지 했다(블록 0·3이 원문과 `===`).
-  `pnpm build`·`typecheck`·`lint:ox`(경고 5, 에러 0)·`lint:es` 전부 그린.
-  - **`pnpm test`는 1건 실패하는데 이번 변경과 무관하다.** `tests/update-plan.test.ts:90`이
+- **검증** (단계별로 나눠 적는다 — 아래 수치는 서로 다른 시점의 실행이라 뭉뚱그리면
+  수정 전/후를 구분할 수 없다):
+  - **수정 전(RED)**: `auto-merge-workflow.test.ts` 7건 실패. 핵심은
+    `expected 'merge: 승인 1건, 체크 통과' to match /^skip:/` — 옛 커밋에 달린 승인이
+    머지를 통과하던 것.
+  - **수정 후(GREEN)**: 같은 파일 47/47. 두 파일 jq `diff` 출력 없음. ruby YAML 파싱
+    3파일 OK. 계획서 embed는 grep 개수뿐 아니라 **바이트 대조**까지 했다.
+    `pnpm build`·`typecheck`·`lint:ox`(경고 5, 에러 0)·`lint:es` 그린.
+  - **`pnpm test` 전체는 1건 실패하는데 이번 변경과 무관하다.** `tests/update-plan.test.ts:90`이
     `'^0.1.0'`을 리터럴로 박아 뒀는데 자동 릴리스 커밋 `563bd5c`가 `DEVKIT_VERSION_RANGE`를
     `^0.2.0`으로 올렸다. `origin/main` **자체가 이미 붉고** 이번 rebase로 딸려 들어왔다.
-    게시 버전이 오를 때마다 다시 깨지는 구조라 별도 판단이 필요하다.
-- **커밋**: `159429e`(보안 수정 + 테스트) · `0e07eac`(계획서·숫자 동기화)
-  · `4a6cec9`(rebase 해시 교정) · 이 문서 커밋. 브랜치 `feature/auto-merge-workflow`,
-  푸시하지 않음(force-push가 필요한 상태라 사용자 결정).
+    관련 파일 셋이 `origin/main`과 바이트 동일함을 확인해 이 브랜치의 결함이 아님을
+    가렸고, 재발 구조까지 적어 이슈 `#6`으로 분리했다.
+- **후속 — CodeRabbit 리뷰(`CHANGES_REQUESTED`)를 반영했다.** 위 F 수정이 계획서의
+  **embed YAML**은 고쳤지만 같은 문서의 **실행 가능한 검증 픽스처**와 설계 문서의 인라인
+  명령 두 곳(`gh pr view --json` 목록, 머지 명령)은 수정 이전 상태로 남겨 뒀다. 픽스처는
+  낡은 정도가 아니라 **따라 하면 실패하는 지시**였다 — 지금 게이트로 돌리면 문서가 적어 둔
+  `merge:`가 아니라 `skip: 승인이 없습니다`가 나온다. 픽스처 3개에 `headRefOid`·`commit.oid`·
+  `authorAssociation`을 넣고 **실제로 돌려 4개 전부 기대 출력과 일치**함을 확인했다.
+  설계에는 5.2.2절(승인을 커밋에 묶는 이유)을 신설하고 5.4·5.6의 명령을 실물과 맞췄다.
+  사용자 문서 세 곳(게이트 표, 승인 집계 설명, 루트 README)에도 커밋 고정 조건을 더했다.
+  - 교훈: **문서 동기화는 "그 파일을 고쳤는가"가 아니라 "그 사실을 말하는 모든 자리를
+    고쳤는가"다.** 같은 사실이 embed·픽스처·인라인 명령·산문 네 형태로 흩어져 있었고
+    첫 수정은 그중 하나만 봤다.
+- **커밋**: `159429e`(보안 수정 + 테스트) · `0e07eac`(계획서 embed) · `4a6cec9`(rebase 해시
+  교정) · `e69bf87`(작업 기록) · `4c53c1d`(설계 10.1절 — 라이브에서만 확인되는 침묵하는
+  실패 셋) · 이 문서 커밋(CodeRabbit 반영). 브랜치 `feature/auto-merge-workflow`, PR `#4`.
 
 ### release 워크플로가 첫 단계에서 죽던 것 — 락파일 드리프트
 - **변경 파일**: `pnpm-lock.yaml`

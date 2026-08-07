@@ -413,7 +413,7 @@ Expected: `skip: 승인이 없습니다`
 승인 1건 + 체크 통과도 확인한다:
 
 ```bash
-echo '{"state":"OPEN","isDraft":false,"labels":[],"reviews":[{"author":{"login":"a"},"state":"APPROVED","submittedAt":"2026-08-07T00:00:00Z"}],"statusCheckRollup":[{"workflowName":"CI","status":"COMPLETED","conclusion":"SUCCESS"}]}' \
+echo '{"state":"OPEN","isDraft":false,"headRefOid":"aaa111","labels":[],"reviews":[{"author":{"login":"a"},"authorAssociation":"OWNER","state":"APPROVED","submittedAt":"2026-08-07T00:00:00Z","commit":{"oid":"aaa111"}}],"statusCheckRollup":[{"workflowName":"CI","status":"COMPLETED","conclusion":"SUCCESS"}]}' \
   | jq -r --arg SELF 'Auto Merge' --arg LABEL 'no-auto-merge' -f /tmp/gate.jq
 ```
 
@@ -422,7 +422,7 @@ Expected: `merge: 승인 1건, 체크 통과`
 자기 자신이 제외되는지도 확인한다 — 이걸 놓치면 데드락이다:
 
 ```bash
-echo '{"state":"OPEN","isDraft":false,"labels":[],"reviews":[{"author":{"login":"a"},"state":"APPROVED","submittedAt":"2026-08-07T00:00:00Z"}],"statusCheckRollup":[{"workflowName":"Auto Merge","name":"merge","status":"IN_PROGRESS","conclusion":null}]}' \
+echo '{"state":"OPEN","isDraft":false,"headRefOid":"aaa111","labels":[],"reviews":[{"author":{"login":"a"},"authorAssociation":"OWNER","state":"APPROVED","submittedAt":"2026-08-07T00:00:00Z","commit":{"oid":"aaa111"}}],"statusCheckRollup":[{"workflowName":"Auto Merge","name":"merge","status":"IN_PROGRESS","conclusion":null}]}' \
   | jq -r --arg SELF 'Auto Merge' --arg LABEL 'no-auto-merge' -f /tmp/gate.jq
 ```
 
@@ -431,7 +431,7 @@ Expected: `merge: 승인 1건, 체크 통과` (진행 중인 자기 자신이 �
 같은 리뷰어가 변경 요청 뒤 승인한 경우:
 
 ```bash
-echo '{"state":"OPEN","isDraft":false,"labels":[],"reviews":[{"author":{"login":"a"},"state":"CHANGES_REQUESTED","submittedAt":"2026-08-07T00:00:00Z"},{"author":{"login":"a"},"state":"APPROVED","submittedAt":"2026-08-07T01:00:00Z"}],"statusCheckRollup":[]}' \
+echo '{"state":"OPEN","isDraft":false,"headRefOid":"aaa111","labels":[],"reviews":[{"author":{"login":"a"},"authorAssociation":"OWNER","state":"CHANGES_REQUESTED","submittedAt":"2026-08-07T00:00:00Z","commit":{"oid":"old999"}},{"author":{"login":"a"},"authorAssociation":"OWNER","state":"APPROVED","submittedAt":"2026-08-07T01:00:00Z","commit":{"oid":"aaa111"}}],"statusCheckRollup":[]}' \
   | jq -r --arg SELF 'Auto Merge' --arg LABEL 'no-auto-merge' -f /tmp/gate.jq
 ```
 

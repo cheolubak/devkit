@@ -167,6 +167,25 @@ concurrency:
 
 **이 절을 완화하려는 다음 사람에게.** 게이트를 느슨하게 만들기 전에 위 전제 1~4 중 무엇이 바뀌었는지 먼저 확인하라. 저장소가 비공개가 되었거나 브랜치 보호가 생겼다면 전제가 달라진다. 아무것도 바뀌지 않았다면 완화는 곧 공급망 경로를 다시 여는 것이다.
 
+### 5.2.2 보안: 그 승인이 어떤 커밋에 대한 것인가
+
+5.2.1절이 "누가 승인할 수 있는가"를 좁혔다. 그것만으로는 부족하다. **신뢰할 수 있는 사람의 승인이라도 그 승인이 겨눈 코드가 지금 머지될 코드와 다를 수 있다.**
+
+전제는 5.2.1절과 겹친다. `main`에 브랜치 보호가 없으므로 GitHub의 "Dismiss stale pull request approvals when new commits are pushed"가 걸려 있지 않고, **새 푸시가 기존 승인을 무효화하지 않는다.** 그리고 `gh pr merge`는 기본적으로 실행 시점의 head를 머지한다.
+
+따라서 커밋 A에 달린 승인이 커밋 B를 머지시킨다. 경합조차 필요 없다 — 승인 뒤에 푸시하면 리뷰 워크플로가 B에 대해 다시 돌고, 그 완료가 `workflow_run`을 발화시켜 A의 승인으로 B가 머지된다.
+
+**따라서 승인을 커밋에 묶는다.** 두 겹으로 막는다.
+
+1. **게이트에서** — `gh pr view --json`에 `headRefOid`를 더하고, 승인으로 세는 조건에 그 리뷰의 `commit.oid`가 `headRefOid`와 같을 것을 AND로 건다. `commit`이 없거나 비면 **승인으로 세지 않는다** — 확인할 수 없으면 막는 쪽이다(fail-closed).
+2. **머지에서** — `gh pr merge --match-head-commit "$HEAD_SHA"`로 GitHub이 서버 측에서 한 번 더 거부하게 한다. 게이트가 읽은 시점과 머지 시점 사이의 잔여 창을 닫는다.
+
+**`CHANGES_REQUESTED`는 커밋을 따지지 않는다.** 어느 커밋에 대한 변경 요청이든 막는다. 막는 쪽은 fail-safe이므로 이전 커밋에 대한 변경 요청도 존중한다 — 잘못 막으면 사람이 지우면 그만이지만 잘못 머지하면 되돌릴 수 없다. 5.2.1절의 신뢰 비대칭과 같은 이유다.
+
+**"승인이 옛 커밋에 달림"은 "승인 없음"과 다른 판정 문자열로 낸다.** 같은 문구로 뭉뚱그리면 승인해 둔 사람이 왜 안 머지되는지 실행 로그만으로 알 수 없다.
+
+이 조건이 정상 경로를 막지 않는다는 것은 실측으로 확인했다 — 이 저장소 과거 PR 4건·리뷰 10건 전부 `commit.oid`가 채워져 있고 봇 리뷰도 포함이다. 다만 `github-actions[bot]`에 대한 확증은 10.1(b)에 남겨 두었다.
+
 ### 5.3 단계 1 — PR 번호 확정
 
 ```bash
@@ -191,8 +210,10 @@ fi
 한 번의 `gh pr view` 호출로 필요한 필드를 모두 가져온다.
 
 ```bash
-gh pr view "$PR" --json isDraft,state,labels,reviews,statusCheckRollup > pr.json
+gh pr view "$PR" --json state,isDraft,headRefOid,labels,reviews,statusCheckRollup > pr.json
 ```
+
+`headRefOid`가 필요한 이유는 5.2.2절에 있다 — 승인을 그 커밋에 묶는다.
 
 | # | 게이트 | 판정 |
 | --- | --- | --- |
@@ -200,8 +221,10 @@ gh pr view "$PR" --json isDraft,state,labels,reviews,statusCheckRollup > pr.json
 | 2 | draft 아닌가 | `.isDraft == false` |
 | 3 | 옵아웃 라벨 없는가 | `.labels[].name`에 `no-auto-merge` 없음 |
 | 4 | 변경 요청 없는가 | 리뷰어별 최신 리뷰에 `CHANGES_REQUESTED` 없음 |
-| 5 | 승인 1개 이상인가 | 리뷰어별 최신 리뷰 중 `APPROVED` 개수 >= 1 |
+| 5 | 승인 1개 이상인가 | 리뷰어별 최신 리뷰 중 **신뢰할 수 있고 현재 head에 달린** `APPROVED` 개수 >= 1 |
 | 6 | 체크가 전부 성공인가 | 5.5절 |
+
+이 저장소판에는 게이트가 하나 더 있다 — fork PR이면 jq에 닿기 전에 셸에서 막는다(5.2.1절). 그 검사를 jq **바깥**에 두는 것은 두 파일의 jq 프로그램을 글자 그대로 같게 유지하기 위해서다(9절의 동일성 관문).
 
 **승인 집계 (게이트 4·5).** `reviewDecision` 필드를 쓰지 않는다. 그 값은 브랜치 보호 규칙의 "required approving reviews" 설정에 좌우되며, 설정이 없는 저장소에서는 빈 값이 된다. 생성되는 프로젝트는 브랜치 보호가 없는 상태로 시작하므로 이 필드에 의존하면 항상 머지되지 않는다.
 
@@ -217,6 +240,10 @@ gh pr view "$PR" --json isDraft,state,labels,reviews,statusCheckRollup > pr.json
 - `COMMENTED`는 제외한다. 승인 후 코멘트를 하나 더 남긴 리뷰어를 "승인 취소"로 오판하지 않기 위해서다.
 - `DISMISSED`는 집계 대상에 포함하되 승인으로 세지 않는다. 승인이 철회된 사실이 최신 상태로 반영되어야 한다.
 - 리뷰어별 `submittedAt` 최댓값 하나만 남긴다. 같은 사람이 변경 요청 후 승인하면 승인이 이긴다.
+
+접은 뒤 `APPROVED`에만 두 조건을 더 건다 — **신뢰할 수 있는 작성자**(5.2.1절)이고 **현재 head에 달린 승인**(5.2.2절)일 것. `CHANGES_REQUESTED`에는 둘 다 걸지 않는다. 그 비대칭이 의도인 이유는 각 절에 있다.
+
+**접기가 커밋 판정보다 먼저다.** 어떤 리뷰어의 *최신* 리뷰가 옛 커밋에 달렸으면 그 사람의 승인은 빠진다. "A를 승인 → B 푸시"에서 그 사람의 판단은 B에 대한 것이 아니므로 옳다. "A에 변경 요청 → B에 승인"은 최신이 승인이고 그것이 head에 달렸으므로 정상 집계된다.
 
 ### 5.5 게이트 6 — 체크 상태
 
@@ -243,10 +270,13 @@ gh pr view "$PR" --json isDraft,state,labels,reviews,statusCheckRollup > pr.json
 ### 5.6 단계 3 — 머지
 
 ```bash
-gh pr merge "$PR" --rebase --delete-branch
+HEAD_SHA=$(jq -r '.headRefOid' pr.json)
+gh pr merge "$PR" --rebase --delete-branch --match-head-commit "$HEAD_SHA"
 ```
 
 `--rebase`다. merge commit을 만들지 않는다. `--squash`도 쓰지 않는다 — 커밋 메시지 접두(`feat:`/`fix:`)로 릴리스 버전을 판정하는 저장소에서 squash는 그 입력을 뭉갠다.
+
+`--match-head-commit`은 5.2.2절의 두 번째 겹이다. 게이트가 이미 승인을 head에 묶었지만, 그 판정과 이 명령 사이에 새 커밋이 들어올 창이 남는다. 이 플래그를 주면 GitHub이 head 불일치를 서버 측에서 거부한다. `HEAD_SHA`는 게이트가 읽은 것과 **같은 `pr.json`**에서 꺼낸다 — 다시 조회하면 그 사이의 변화를 도리어 받아들이게 된다.
 
 ## 6. C. 이 저장소의 auto-merge.yml
 
