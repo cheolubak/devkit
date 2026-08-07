@@ -2,6 +2,16 @@
 
 ## 2026-08-07
 
+### `no-public-api-sidestep`이 자기가 요구하는 배럴을 스스로 금지하던 것
+- **변경 파일**: `packages/eslint-plugin-fsd/src/lib/{layers,types,parse-path}.ts` · `src/rules/no-public-api-sidestep.ts` · `tests/{layers,parse-path,no-public-api-sidestep}.test.ts` · `packages/eslint-plugin-fsd/README.md` · `work-log.md`
+- **내용**: 규칙이 "같은 슬라이스 내부면 통과"라는 예외를 `from.slice != null && from.slice === to.slice`로 판정했는데, `parsePath`는 **비-슬라이스 레이어(`app`·`shared`)의 `slice`를 구조적으로 항상 `null`** 로 둔다. `!= null` 가드에서 걸려 예외가 아예 성립하지 않으므로 그 두 레이어 내부의 상대 import가 전부 "Public API 우회"로 오탐됐다. 가장 나쁜 사례는 **`shared/ui/index.ts`가 `./Button`을 re-export하는 것** — 규칙이 요구하는 진입점 배럴 자체를 규칙이 금지한다. 즉 위반을 고치려면 다른 위반을 만들어야 해서 빠져나갈 길이 없었다. Next.js App Router에서는 `src/app/layout.tsx → './providers/Theme'`, `src/app/products/page.tsx → './loading'` 같은 표준 코드도 전부 걸렸다.
+  - **원인은 조건문이 아니라 모델의 결손이었다.** "Public API를 누가 소유하는가"는 레이어의 속성인데 `LayerDef`엔 `sliced` 불리언밖에 없었고, 규칙이 그 빈자리를 `slice`로 대신 메우다 무너졌다. `PublicApiUnit = 'slice' | 'segment' | 'layer'`를 레이어 모델에 명시하고(`app`→`layer`, `shared`→`segment`, 나머지 4개→`slice`), `FsdLocation.unit`으로 그 단위의 이름을 실어, 규칙은 `from.unit === to.unit`만 본다. FSD 명세의 "슬라이스가 없는 레이어에서는 세그먼트가 진입점을 소유한다"를 코드가 그대로 말하게 한 것이다.
+  - **`app`만 `segment`가 아니라 `layer`인 이유**: 세그먼트 단위로 하면 `app/layout.tsx → './providers/Theme'`가 여전히 에러다(`layout.tsx`와 `providers`는 다른 세그먼트로 파싱된다 — 파서는 fs를 안 보므로 파일과 폴더를 구분하지 못한다). 반면 `app`은 최상위라 **아무도 legally import할 수 없고**(`no-higher-level-imports`가 막는다) 넘을 Public API 경계 자체가 없다. 잃는 검출력은 0, 없애는 오탐은 실코드 전량이라 판단이 명확했다.
+  - **`shared`는 세그먼트 단위를 유지했다** — 느슨하게 풀지 않았다. `shared/ui/Card.tsx → '../lib/cn'`은 여전히 에러다. 기존 invalid 테스트(`@/shared/ui/Button`)가 이미 그 엄격함을 계약으로 박아두고 있어, 이번 수정으로 계약이 바뀌면 안 된다.
+- **검증**: RED 먼저 — 오탐 4건을 valid 케이스로 넣어 `4 failed | 5 passed` 실측 후 수정. 반대 방향(과하게 느슨해짐)을 잠그는 invalid 3건과 `sliced === (publicApi === 'slice')` 불변식 테스트를 추가. 플러그인 76개, 워크스페이스 전체 `pnpm test` 7태스크 그린, `pnpm lint`(에러 0, oxlint 경고 5건은 기존과 동일), `pnpm typecheck`, `pnpm build` 통과.
+  - **RuleTester 그린으로 끝내지 않았다.** RuleTester는 `filename`을 문자열로 받을 뿐 파일이 없어도 되고 flat config 조립·`ignores`를 전혀 거치지 않는다. 저장소 **밖** 스크래치패드에 실제 FSD 디렉토리를 만들어 빌드된 `dist`의 `configs.recommended`로 ESLint를 돌려, 오탐 4건이 조용하고 진짜 위반 5건이 그대로 잡히는 것을 확인했다(검증용 생성물을 저장소 안에 만들면 자동 훅이 커밋해버리는 사고가 이전에 4회 있었다).
+- **커밋**: 브랜치 `worktree-lexical-bubbling-bee`(`origin/main` 기준 rebase 후 작업). main 미머지.
+
 ### 앵커된 `.claude` 조상 줄이 부정 패턴을 무력화하던 것과, 릴리스가 다음 릴리스를 깨던 스냅샷 수정
 - **변경 파일**: `packages/devkit-cli/src/ops/merge-ignore.ts` · `templates/_shared/_gitignore` · `tests/merge-ignore.test.ts` · `tests/merge-ignore-git.test.ts` · `tests/recipe-{nest,next,monorepo}.test.ts` · `tests/__snapshots__/recipe-{nest,next,monorepo}.test.ts.snap` · `work-log.md`
 - **내용**: 두 가지를 고쳤다. 브랜치 `fix/gitignore-anchored-ancestor`.
