@@ -1,15 +1,27 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { mergeIgnore } from '../src/ops/merge-ignore.js';
+import {
+  DEVKIT_BLOCK_END,
+  DEVKIT_BLOCK_START,
+  mergeIgnore,
+} from '../src/ops/merge-ignore.js';
 
 // 문자열 toContain 은 "그 줄이 있다/없다"만 본다 — git 이 실제로 그 파일을
 // 추적하는지는 다른 질문이다(최종 리뷰 Minor 3). 여기서는 mergeIgnore 의
 // 출력을 진짜 git 저장소에 놓고 git 자신에게 판정을 묻는다.
 
 const BLOCK = ['.claude/*', '!.claude/agents/', '!.claude/commands/'];
+
+/** 실제로 배포되는 템플릿의 devkit 블록. 손으로 옮겨 적으면 템플릿이 바뀔 때 갈라진다. */
+const SHIPPED_BLOCK = ((): string[] => {
+  const lines = readFileSync(new URL('../templates/_shared/_gitignore', import.meta.url), 'utf8')
+    .replace(/\n$/, '')
+    .split('\n');
+  return lines.slice(lines.indexOf(DEVKIT_BLOCK_START) + 1, lines.indexOf(DEVKIT_BLOCK_END));
+})();
 
 const created: string[] = [];
 afterEach(() => {
@@ -54,6 +66,28 @@ describe('mergeIgnore 결과의 실제 git 판정 (git check-ignore)', () => {
     expect(isIgnored(dir, '.claude/commands/review.md')).toBe(false);
     expect(isIgnored(dir, '.claude/settings.local.json')).toBe(true);
   });
+
+  // 조상 줄은 네 가지로 쓸 수 있고 넷 다 `.claude` 디렉토리 자체를 제외한다.
+  // 리딩 슬래시(앵커)와 트레일링 슬래시는 표기만 다를 뿐, 루트 .gitignore
+  // 에서는 부정 패턴을 죽이는 효과가 같다. 블록은 손으로 적지 않고 실제로
+  // 배포되는 템플릿에서 읽는다 — 템플릿과 테스트가 갈라지지 않게 한다.
+  it.each(['.claude/', '.claude', '/.claude/', '/.claude'])(
+    '기존 줄 %s 가 어떤 표기든 리뷰 자산은 추적되고 개인 스크래치는 무시된다',
+    (existing) => {
+      const dir = makeGitRepo();
+      writeFileSync(join(dir, '.gitignore'), mergeIgnore(`${existing}\n`, [], SHIPPED_BLOCK));
+
+      mkdirSync(join(dir, '.claude', 'agents'), { recursive: true });
+      writeFileSync(join(dir, '.claude', 'agents', 'devkit-reviewer.md'), '# reviewer\n');
+      mkdirSync(join(dir, '.claude', 'commands'), { recursive: true });
+      writeFileSync(join(dir, '.claude', 'commands', 'review.md'), '# review\n');
+      writeFileSync(join(dir, '.claude', 'settings.local.json'), '{}\n');
+
+      expect(isIgnored(dir, '.claude/agents/devkit-reviewer.md')).toBe(false);
+      expect(isIgnored(dir, '.claude/commands/review.md')).toBe(false);
+      expect(isIgnored(dir, '.claude/settings.local.json')).toBe(true);
+    },
+  );
 
   it('조상 제외 줄이 없는 대상은 그대로 — 블록만으로도 같은 판정이다', () => {
     // 회귀 방지: 조상 스트립이 "있을 때만" 동작하고, 없을 때 엉뚱한 줄을
