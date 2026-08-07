@@ -2,6 +2,16 @@
 
 ## 2026-08-07
 
+### release 워크플로가 첫 단계에서 죽던 것 — 락파일 드리프트
+- **변경 파일**: `pnpm-lock.yaml`
+- **내용**: main의 release 워크플로([run 31154322380](https://github.com/cheolubak/devkit/actions/runs/31154322380))가 `pnpm install --frozen-lockfile`에서 `ERR_PNPM_OUTDATED_LOCKFILE`로 실패했다. 원인은 워크플로가 아니라 **직전 머지(PR #3, `78f42c5`)가 남긴 락파일 드리프트**다 — `packages/vitest-config/package.json`의 vitest peer 범위를 `^2.1.0 || ^3.0.0 || ^4.0.0`으로 넓히면서 `pnpm-lock.yaml`을 재생성하지 않았다.
+  - **peer 범위 수정이 락파일을 건드리는 이유**: 이 저장소는 `autoInstallPeers: true`라 `peerDependencies`도 락파일 `importers`에 기록되고, 락파일은 해결된 버전뿐 아니라 **선언된 specifier 문자열 자체**를 담는다. 그래서 설치되는 버전이 그대로여도 범위 문자열만 바뀌면 frozen 검사가 불일치로 죽는다.
+  - 실제 변경은 **specifier 한 줄뿐**이고 해결 버전은 `2.1.9` 그대로다 — 루트 devDependency가 `vitest@^2.1.0`으로 잡고 있어 범위를 넓혀도 4.x로 올라가지 않는다. 즉 이 수정에 업그레이드 리스크가 없다.
+  - **워크플로를 `--no-frozen-lockfile`로 완화하지 않았다.** 그건 락파일이 무의미해지는 증상 덮기이고, CI가 커밋된 락파일과 다른 트리로 게시하게 된다.
+  - **남은 구멍(이번 범위 밖)**: `.github/workflows/`에 워크플로가 `release.yml` **하나뿐**이라 PR 단계 CI가 없다. PR #3이 락파일 드리프트를 그대로 main에 밀어넣고 릴리스에서야 터진 게 그 결과다.
+- **검증**: `pnpm install --frozen-lockfile`이 "Lockfile is up to date"로 통과. CI 검증 단계와 같은 `pnpm build`·`pnpm test`(531건)·`pnpm typecheck`·`pnpm lint:ox`(경고 5건, 에러 0)·`pnpm lint:es` 전부 그린. `pnpm test:e2e`는 돌리지 않았다 — 실패 지점이 install이라 e2e는 애초에 실행되지 않았고 이 변경이 닿지 않는다.
+- **커밋**: `92a076d`
+
 ### PR #3 리뷰(CodeRabbit) 4건 처리 — 3건 반영, 1건은 진단이 거꾸로였다
 - **변경 파일**: `packages/eslint-plugin-fsd/src/lib/layers.ts`·`src/rules/no-public-api-sidestep.ts`·`tests/{layers,no-public-api-sidestep}.test.ts` · `packages/devkit-cli/tests/workspace-root.test.ts` · `packages/vitest-config/README.md` · `work-log.md`
 - **내용**:
