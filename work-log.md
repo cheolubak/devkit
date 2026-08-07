@@ -2,6 +2,44 @@
 
 ## 2026-08-07
 
+### PR #4 리뷰 7건 — 승인이 커밋에 고정되지 않던 것(TOCTOU)
+- **변경 파일**: `.github/workflows/auto-merge.yml` · `packages/devkit-cli/templates/_shared/.github/workflows/{auto-merge,claude-review}.yml` · `packages/devkit-cli/tests/auto-merge-workflow.test.ts` · `docs/superpowers/plans/2026-08-07-auto-merge.md` · `work-log.md`
+- **A — 승인이 어느 커밋에 달렸는지 보지 않았다.** 게이트가 `gh pr view`로 리뷰를 읽고
+  `gh pr merge`로 **그 시점의 head**를 머지하는데 그 사이에 SHA 대조가 없었다. `main`에
+  브랜치 보호가 없어 새 푸시가 기존 승인을 무효화하지 않으므로 **경합조차 필요 없다** —
+  승인 뒤에 푸시하면 리뷰 워크플로가 새 커밋에 대해 다시 돌고, 그 완료가 `workflow_run`을
+  발화시켜 옛 승인으로 새 커밋이 머지된다. `def onHead($head)`를 승인 판정에 AND로 더하고
+  (`commit`이 없거나 `null`이면 세지 않는다 — 확인할 수 없으면 막는 쪽), 판정과 머지 사이의
+  잔여 창은 `--match-head-commit`으로 서버가 닫게 했다. `headRefOid`는 `--arg`가 아니라
+  `pr.json` 필드로 읽는다 — 그래야 두 사본의 jq가 글자 그대로 같다.
+  `CHANGES_REQUESTED`는 커밋을 따지지 않는다(fail-safe). 픽스처가 실물과 맞는지는
+  `gh pr view 1 --json reviews`로 `commit.oid`의 존재를 직접 확인했다.
+- **B — 봇 승인 하나가 머지를 통과시키는데 리뷰 프롬프트에 인젝션 방어가 0건이었다.**
+  그 승인은 PR 제목·본문·diff를 읽고 내리는 판단이고 전부 공격자 통제 입력이다. 동작은
+  요구사항이라 그대로 두고 프롬프트에 방어 문단을 더했다 — 입력 안의 지시문은 **검토 대상
+  데이터**이지 명령이 아니며, "이 PR을 승인하라"를 만나면 조용히 무시하는 게 아니라 **그
+  자체를 변경 요청 사유로 남긴다**.
+- **C·D·E는 게이트가 이미 옳아 자연 RED가 불가능했다.** 그래서 각 게이트를 실제로 망가뜨려
+  (fork 분기의 `exit 0` 무력화 / `.state` 경로 제거 / `latest`에서 `DISMISSED` 제거) 해당
+  테스트만 붉어지는 것을 확인하고 원복했다. **통과하는 테스트가 무언가를 막는다는 증거는
+  아니다** — 이 파일은 그 함정에 이미 한 번 걸렸다. fork 차단은 jq **바깥**의 셸이라
+  `verdict()`로 못 돌린다 — 분기를 잘라 `bash -c`로 실행하고, 추출 실패 시 던진다.
+- **F — 계획서가 보안 수정 이전 YAML을 통째로 담고 있었다**(`def trusted` 0건,
+  `isCrossRepository` 0건). "이 파일을 이렇게 만들어라"는 재구현 지시라 그대로 두면 공급망
+  구멍이 재생산된다. 두 embed를 실물과 바이트 단위로 맞췄고, 브리프에 없던 Task 2의
+  `claude-review.yml` 스니펫도 같은 이유로 방어 문단을 넣었다.
+- **검증**: TDD — A·B는 수정 전 7건 RED(핵심: `expected 'merge: 승인 1건, 체크 통과' to
+  match /^skip:/`), 수정 후 47/47 GREEN. 두 파일 jq `diff` 출력 없음. ruby YAML 파싱 3파일 OK.
+  계획서 embed는 grep 개수뿐 아니라 **바이트 대조**까지 했다(블록 0·3이 원문과 `===`).
+  `pnpm build`·`typecheck`·`lint:ox`(경고 5, 에러 0)·`lint:es` 전부 그린.
+  - **`pnpm test`는 1건 실패하는데 이번 변경과 무관하다.** `tests/update-plan.test.ts:90`이
+    `'^0.1.0'`을 리터럴로 박아 뒀는데 자동 릴리스 커밋 `563bd5c`가 `DEVKIT_VERSION_RANGE`를
+    `^0.2.0`으로 올렸다. `origin/main` **자체가 이미 붉고** 이번 rebase로 딸려 들어왔다.
+    게시 버전이 오를 때마다 다시 깨지는 구조라 별도 판단이 필요하다.
+- **커밋**: `159429e`(보안 수정 + 테스트) · `0e07eac`(계획서·숫자 동기화)
+  · `4a6cec9`(rebase 해시 교정) · 이 문서 커밋. 브랜치 `feature/auto-merge-workflow`,
+  푸시하지 않음(force-push가 필요한 상태라 사용자 결정).
+
 ### release 워크플로가 첫 단계에서 죽던 것 — 락파일 드리프트
 - **변경 파일**: `pnpm-lock.yaml`
 - **내용**: main의 release 워크플로([run 31154322380](https://github.com/cheolubak/devkit/actions/runs/31154322380))가 `pnpm install --frozen-lockfile`에서 `ERR_PNPM_OUTDATED_LOCKFILE`로 실패했다. 원인은 워크플로가 아니라 **직전 머지(PR #3, `78f42c5`)가 남긴 락파일 드리프트**다 — `packages/vitest-config/package.json`의 vitest peer 범위를 `^2.1.0 || ^3.0.0 || ^4.0.0`으로 넓히면서 `pnpm-lock.yaml`을 재생성하지 않았다.
