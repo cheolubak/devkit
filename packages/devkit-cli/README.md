@@ -162,11 +162,45 @@ CLI는 실행 전에 `dist/bin.js`가 `src/`보다 새로운지 확인하고, �
 | draft | draft가 아님 |
 | 라벨 | `no-auto-merge` 라벨이 없음 |
 | 변경 요청 | 리뷰어별 **최신** 리뷰에 `CHANGES_REQUESTED`가 없음 |
-| 승인 | 리뷰어별 최신 리뷰 중 `APPROVED`가 1건 이상 |
+| 승인 | 리뷰어별 최신 리뷰 중 **신뢰할 수 있는** `APPROVED`가 1건 이상 |
 | 체크 | 자기 자신을 뺀 모든 체크가 성공(진행 중도 불가) |
 
 게이트에 걸리면 이유를 로그에 남기고 **정상 종료**한다. 조건이 아직 안 갖춰진 것은
 고장이 아니므로 PR 체크를 빨간불로 만들지 않는다.
+
+**`no-auto-merge` 라벨은 기본 제공되지 않는다.** GitHub이 새 저장소에 만들어 주는
+라벨 9개에 없으므로, 탈출구를 실제로 쓰려면 먼저 만들어야 한다.
+
+```bash
+gh label create no-auto-merge --description "이 PR 은 자동 머지하지 않는다"
+```
+
+라벨이 없어도 워크플로는 정상 동작한다 — 다만 붙일 라벨이 없어 **탈출구가 없는
+상태**가 된다.
+
+### 누가 승인할 수 있는가
+
+**공개 저장소에서는 읽기 권한만 있는 임의의 GitHub 사용자가 승인 리뷰를 제출할 수
+있다.** 그리고 `pull_request_review`는 fork에서 온 PR에 대해서도 **base 저장소
+컨텍스트에서 쓰기 토큰을 들고 도는** 권한 있는 트리거다. 승인 집계가 신원을 보지
+않으면, 계정 하나로 fork PR을 열고 다른 계정으로 승인을 남기는 것만으로 인터넷의
+아무나가 `main` 머지에 도달한다.
+
+그래서 승인은 아래 둘 중 하나를 만족하는 리뷰만 센다.
+
+- `authorAssociation`이 `OWNER` / `MEMBER` / `COLLABORATOR`
+- 리뷰 작성자 로그인이 `github-actions[bot]`
+
+봇 로그인을 허용해도 안전하다. fork에서 온 PR에 대해 `pull_request` 트리거의
+`GITHUB_TOKEN`은 읽기 전용으로 강등되므로 `claude-review.yml`이 fork PR을 승인하는
+것 **자체가 불가능하다** — 봇 승인이 존재한다는 사실이 곧 same-repo PR이라는 뜻이다.
+
+**`CHANGES_REQUESTED`는 작성자를 가리지 않는다.** 비대칭은 의도다. 막는 쪽은
+fail-safe이므로 외부인의 변경 요청도 존중한다 — 잘못 막으면 사람이 지우면 그만이지만
+잘못 머지하면 되돌릴 수 없다.
+
+`tests/auto-merge-workflow.test.ts`가 jq 게이트를 픽스처에 실제로 돌려 이 판정을
+단언한다. 첫 케이스가 "외부인의 승인은 승인으로 세지 않는다"이다.
 
 **트리거가 둘인 이유.** GitHub은 `GITHUB_TOKEN`이 일으킨 이벤트로 새 워크플로 실행을
 만들지 않는다(`workflow_dispatch`·`repository_dispatch`만 예외). `claude-review.yml`은
@@ -178,6 +212,13 @@ CLI는 실행 전에 `dist/bin.js`가 `src/`보다 새로운지 확인하고, �
 **CI 워크플로를 추가하면 `auto-merge.yml`도 고쳐야 한다.** `on.workflow_run.workflows`
 목록에 그 워크플로 이름을 넣지 않으면, 승인 시점에 그 체크가 진행 중일 때 자동 머지가
 "보류"로 끝난 뒤 다시 깨어날 트리거가 없어 PR이 승인된 채로 멈춘다.
+
+**그런데 그 편집을 `devbak update`가 되돌린다.** `.github/workflows/**`는 `ci`
+카테고리의 **통째 덮어쓰기** 대상이라, 편집한 프로젝트에 `devbak update --only ci`를
+돌리면 사용자 편집이 말없이 사라진다. 되돌아간 뒤의 증상이 하필 바로 위 문단의 그
+침묵하는 증상이다 — PR이 승인된 채로 멈추고, 무엇이 바뀌었는지 알려 주는 신호가 없다.
+`--only`에서 `ci`를 빼거나, update 후 편집을 다시 얹어야 한다. `--dry-run`이 덮어쓸
+파일 목록을 먼저 보여 주므로 실행 전에 확인할 수 있다.
 
 **승인 수는 `reviewDecision`으로 세지 않는다.** 그 값은 브랜치 보호의 required reviews
 설정에 좌우되고, 설정이 없는 저장소에서는 비어 나온다 — 새로 만든 프로젝트는 전부 그
@@ -250,12 +291,14 @@ devkit update — demo-api (nest)
   덮어쓰기 (2)
     package.json
     tsconfig.json
-  신규 (10)
+  신규 (12)
+    .claude/agents/devkit-implementer.md
     .claude/agents/devkit-reviewer.md
     .claude/commands/review.md
     .github/workflows/auto-merge.yml
     .github/workflows/claude-review.yml
     .gitignore
+    .npmrc
     .prettierignore
     CLAUDE.md
     eslint.config.mjs
@@ -271,7 +314,8 @@ devkit update — demo-api (nest)
 $ pnpm devbak update ../demo-api --type nest --only claude,ci --dry-run
 devkit update — demo-api (nest)
 
-  신규 (5)
+  신규 (6)
+    .claude/agents/devkit-implementer.md
     .claude/agents/devkit-reviewer.md
     .claude/commands/review.md
     .github/workflows/auto-merge.yml

@@ -840,13 +840,17 @@ base 저장소 컨텍스트에서 시크릿과 쓰기 토큰을 들고 도는 �
 
 ```bash
 cd /Users/dabot/Documents/develop/eslint
-pnpm format:check
+pnpm lint:root
 grep -c "auto-merge.yml" README.md packages/devkit-cli/README.md
 ```
 
-Expected: `format:check` PASS. 루트 README 0건(파일명을 쓰지 않고 설명만 넣었다),
+Expected: `lint:root` PASS. 루트 README 0건(파일명을 쓰지 않고 설명만 넣었다),
 devkit-cli README 5건(표 1 + 트리 2 + 본문 2).
-`format:check`가 실패하면 `pnpm format`을 돌린다.
+
+이 저장소에는 `format:check` 스크립트가 **없다**. 루트 스크립트는
+`build typecheck test test:e2e lint lint:root lint:ox lint:es lint:fix devbak publish:packages`
+뿐이고, 포맷을 검사하는 스크립트는 아예 없다(`lint:root`는 `eslint .`다). 마크다운
+포맷은 검사 대상이 아니므로 이 단계는 링크·표·개수 확인만 한다.
 
 - [ ] **Step 6: work-log 를 쓴다**
 

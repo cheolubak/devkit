@@ -171,8 +171,12 @@ pnpm dlx @cheolubak/devkit-cli create my-api --type nest   # 또는 --type next 
 
 세 유형 모두 Claude 기반 코드 리뷰 자산(`/review` 슬래시 커맨드, PR 자동 리뷰
 워크플로, 유형별 리뷰어 에이전트)과 **자동 머지 워크플로**를 함께 놓는다. 리뷰가
-통과하면 Claude가 승인하고, 승인이 1건 이상이면 PR이 rebase로 머지된다. `no-auto-merge`
-라벨을 붙이면 그 PR은 제외된다. CI 워크플로를 실제로 돌리려면 생성된 저장소에 시크릿
+통과하면 Claude가 승인하고, **신뢰할 수 있는** 승인이 1건 이상이면 PR이 rebase로
+머지된다 — 승인은 `authorAssociation`이 `OWNER`/`MEMBER`/`COLLABORATOR`이거나 작성자가
+`github-actions[bot]`인 것만 센다. 공개 저장소에서는 읽기 권한만 있는 아무나가 승인
+리뷰를 남길 수 있기 때문이다. `no-auto-merge` 라벨을 붙이면 그 PR은 제외되지만,
+**이 라벨은 기본 제공되지 않는다** — `gh label create no-auto-merge`로 먼저 만들어야
+쓸 수 있다. CI 워크플로를 실제로 돌리려면 생성된 저장소에 시크릿
 `CLAUDE_CODE_OAUTH_TOKEN`을 등록해야 한다(API key가 아니다).
 자세한 내용은 [`packages/devkit-cli/README.md`](packages/devkit-cli/README.md).
 

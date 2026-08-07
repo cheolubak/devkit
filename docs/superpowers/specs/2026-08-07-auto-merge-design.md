@@ -139,6 +139,34 @@ concurrency:
 
 이 워크플로는 **체크아웃 단계를 갖지 않는다.** `gh` CLI 호출만 한다. 이후 이 파일을 수정할 때도 `actions/checkout`을 추가해서는 안 된다.
 
+### 5.2.1 보안: 누가 승인할 수 있는가
+
+체크아웃을 빼는 것은 토큰 **탈취**를 막는다. 그것만으로는 부족하다. 토큰을 정당하게 쥔 잡이 공격자의 코드를 `main`에 넣어 주는 경로가 따로 열려 있다.
+
+전제 네 가지가 함께 성립한다.
+
+1. **공개 저장소에서는 읽기 권한만 있는 임의의 GitHub 사용자가 승인 리뷰를 제출할 수 있다.** 승인은 쓰기 권한을 요구하지 않는다.
+2. 이 저장소는 공개(`"visibility":"PUBLIC"`)이고 `main`에 **브랜치 보호가 없다**(`branches/main/protection` → 404).
+3. `pull_request_review`는 fork에서 온 PR에 대해서도 **base 저장소 컨텍스트에서 쓰기 토큰으로** 돈다. 2절의 `GITHUB_TOKEN` 제약은 여기 적용되지 않는다 — 승인을 남긴 것이 **사람 토큰**이면 이벤트는 정상 발화한다.
+4. 이 저장소의 머지는 곧바로 `release.yml` 디스패치를 거쳐 `pnpm -r publish`(`packages: write`)로 이어진다. 즉 **머지 = 패키지 게시**다.
+
+연쇄는 이렇게 된다. 계정 A가 fork에서 PR을 연다 → 계정 B(같은 사람)가 `--approve`를 남긴다 → 게이트 전부 통과 → `gh pr merge --rebase`로 임의 코드가 `main`에 들어간다 → `release.yml`이 그 코드를 체크아웃해 빌드·테스트를 돌리고 게시한다. 인터넷의 임의 사용자가 `@cheolubak/*` 게시까지 도달한다.
+
+**따라서 승인 집계는 신원을 판정한다.** 아래 둘 중 하나를 만족하는 리뷰만 `APPROVED`로 센다.
+
+- `authorAssociation`이 `OWNER` / `MEMBER` / `COLLABORATOR`
+- 리뷰 작성자 로그인이 `github-actions[bot]`
+
+`gh pr view --json reviews`가 주는 리뷰 객체는 `authorAssociation`을 이미 포함한다(`author`, `authorAssociation`, `body`, `commit`, `id`, `includesCreatedEdit`, `reactionGroups`, `state`, `submittedAt`). `--json` 목록에 따로 더할 필요가 없다.
+
+봇 로그인을 허용해도 안전하다. fork에서 온 PR에 대해 `pull_request` 트리거의 `GITHUB_TOKEN`은 **읽기 전용으로 강등**되므로 `claude-review.yml`이 fork PR을 승인하는 것 자체가 불가능하다. 봇 승인이 존재한다는 사실 자체가 same-repo PR임을 뜻한다.
+
+**`CHANGES_REQUESTED`는 신뢰를 따지지 않는다.** 작성자를 가리지 않고 그대로 센다. 비대칭은 의도다 — 막는 쪽은 fail-safe이므로 외부인의 변경 요청도 존중하는 것이 맞다. 잘못 막으면 사람이 라벨을 붙이거나 리뷰를 지우면 그만이지만, 잘못 머지하면 되돌릴 수 없다.
+
+`.author`가 `null`인 경우(삭제된 계정)에도 크래시하지 않아야 한다. `(.author.login // "")`로 받는다.
+
+**이 절을 완화하려는 다음 사람에게.** 게이트를 느슨하게 만들기 전에 위 전제 1~4 중 무엇이 바뀌었는지 먼저 확인하라. 저장소가 비공개가 되었거나 브랜치 보호가 생겼다면 전제가 달라진다. 아무것도 바뀌지 않았다면 완화는 곧 공급망 경로를 다시 여는 것이다.
+
 ### 5.3 단계 1 — PR 번호 확정
 
 ```bash
@@ -265,6 +293,24 @@ gh workflow run release.yml --ref main
 
 그때는 이 파일에 `workflow_run` 트리거를 추가하고 그 워크플로 이름을 나열해야 한다. 이 조건과 대응을 파일 상단 주석에 적는다. 조용히 멈추는 것보다 문서화된 한계가 낫다.
 
+### 6.5 fork PR을 아예 제외한다
+
+5.2.1절의 신뢰 판정에 더해, 이 저장소판은 `isCrossRepository`가 `true`면 판정 전에 종료한다.
+
+```bash
+gh pr view "$PR" --repo "$REPO" --json state,isDraft,isCrossRepository,labels,reviews,statusCheckRollup > pr.json
+if [ "$(jq -r '.isCrossRepository' pr.json)" = 'true' ]; then
+  echo "skip: fork 에서 온 PR 입니다"
+  exit 0
+fi
+```
+
+**한 겹 더 두는 이유.** 여기서는 머지가 곧 패키지 게시다(5.2.1절 전제 4). 신뢰 판정이 틀리더라도 공급망 경로가 결정적으로 닫히도록 한다. CLAUDE.md 워크플로상 이 저장소의 PR은 전부 same-repo 브랜치이므로 실사용 손해가 없다.
+
+**템플릿에는 넣지 않는다.** 생성물은 오픈소스일 수 있고 fork 기여를 자동 머지하고 싶을 수 있다. 거기서는 5.2.1절의 신뢰 판정만으로 충분하다.
+
+**이 검사는 게이트 jq 프로그램 바깥에 둔다.** 그 프로그램은 두 사본에서 글자 그대로 같아야 하고(9.4절), 안에 넣으면 동일성이 깨진다.
+
 ## 7. 데이터 흐름
 
 ```
@@ -325,15 +371,31 @@ gh workflow run release.yml --ref main
 ### 9.1 기존 테스트가 자동으로 커버하는 것
 
 - `overlay-coverage.test.ts` — 모든 템플릿 파일이 카테고리에 매칭되는지 단언한다. 새 파일이 `ci`에 걸리지 않으면 즉시 실패한다.
-- `recipe-*.test.ts` 스냅샷 — `copyOverlay('_shared')`의 plan 결과에 새 파일이 나타난다. 스냅샷을 갱신한다.
+- `recipe-*.test.ts` 스냅샷 — **변하지 않는다.** `copyOverlay`의 `describe()`는 파일 목록이 아니라 오버레이 이름만 담으므로, `_shared`에 파일을 더해도 스냅샷에 나타나지 않는다. 갱신할 것이 없다.
 
 ### 9.2 e2e
 
 `tests/e2e`가 실제 생성물의 파일 목록을 단언한다면 조정이 필요하다. 구현 시 확인한다.
 
-### 9.3 테스트하지 않는 것
+`packed.e2e.test.ts`는 tarball에 `templates/_shared/.github/workflows/auto-merge.yml`이 실리는지도 단언한다. 워크플로는 점으로 시작하는 **디렉토리** 아래에 있어 npm의 dot-file 필터링이나 `files` 목록 변경에 조용히 빠질 수 있는데, 빠져도 `create`는 성공하므로 생성물에서 CI가 사라진 채 발견되지 않는다.
 
-이 저장소의 `.github/workflows/auto-merge.yml`은 `devkit-cli` 패키지의 테스트 범위 밖이다. 템플릿 자산이 아니라 이 저장소의 운영 설정이다. 별도 테스트를 만들지 않는다.
+### 9.3 문자열 단언만으로는 부족하다 — 게이트를 실제로 돌린다
+
+위 표는 전부 `toContain`/`not.toContain`이다. `--rebase`라는 **글자**가 있는지는 보지만, 승인 0건일 때 막는지·실패한 체크가 있을 때 막는지·리뷰어별 최신 접기가 맞는지는 하나도 보지 않는다. 실제로 5.2.1절의 결함은 이 단언들을 전부 통과한 채 존재했고, 발견한 것도 테스트가 아니라 사람이 jq를 손으로 돌려서였다.
+
+그래서 `tests/auto-merge-workflow.test.ts`는 템플릿 YAML에서 jq 게이트 구간을 문자열로 잘라 내 픽스처 JSON에 **실제 `jq`로 돌리고 판정 문자열을 단언한다**(`jq`는 macOS와 `ubuntu-latest`에 기본 설치돼 있다). 추출이 실패하면 **던진다** — 빈 프로그램을 조용히 돌리면 모든 단언이 공허해지기 때문이다.
+
+첫 케이스가 5.2.1절 회귀 방어다: `authorAssociation: "NONE"`인 승인 1건은 `skip:`으로 끝나야 한다.
+
+### 9.4 두 사본의 드리프트를 막는다
+
+이 저장소의 `.github/workflows/auto-merge.yml`은 `devkit-cli` 패키지의 **동작** 테스트 범위 밖이다. 템플릿 자산이 아니라 운영 설정이다. 그러나 게이트 jq는 두 파일에 **글자 그대로 같은 사본**으로 존재한다 — 템플릿은 다른 저장소로 복사되므로 이 저장소의 composite action을 참조할 수 없어, 중복이 의도다.
+
+손으로 옮기는 사본은 어긋난다. 실제로 한 번의 구현 세션 안에서 주석 한 단어가 어긋났고, 다음에 어긋나는 것은 `isbad` 목록이나 `pending` 조건일 수 있다. 그리고 그쪽 사본이 바로 패키지를 게시하는 저장소의 것이다.
+
+따라서 테스트는 두 파일에서 jq 구간을 각각 뽑아 `toBe`로 비교한다. **"저장소판을 테스트한다"가 아니라 "템플릿과 같은지만 본다"**이므로 위 범위 구분과 충돌하지 않는다. 저장소판 파일이 없으면 던진다.
+
+이 관문이 있으므로 두 사본에서 달라야 하는 것(6.5절의 fork 제외, 6.3절의 릴리스 디스패치)은 반드시 jq 구간 **바깥**에 두어야 한다.
 
 ## 10. 검증 방법
 
@@ -353,6 +415,9 @@ gh workflow run release.yml --ref main
 | 머지 트리거 | 별도 워크플로 + 승인 직접 카운트 | GITHUB_TOKEN 제약(2.1절)을 `workflow_run`으로 우회. 브랜치 보호 설정 없이 동작 |
 | 승인 집계 | `reviews`를 리뷰어별 최신으로 접음 | `reviewDecision`은 브랜치 보호 설정에 좌우돼 빈 값이 됨 |
 | 머지 게이트 | 승인>=1, CHANGES_REQUESTED 없음, 체크 전부 성공, draft 제외, 라벨 옵아웃 | 사용자 선택 |
+| 승인자 신뢰 판정 | `authorAssociation`이 OWNER/MEMBER/COLLABORATOR 이거나 `github-actions[bot]` | 공개 저장소에서는 읽기 권한만으로 승인할 수 있다(5.2.1절) |
+| 변경 요청 신뢰 판정 | 하지 않음 — 누구 것이든 센다 | 막는 쪽은 fail-safe. 잘못 막으면 되돌릴 수 있지만 잘못 머지하면 못 되돌린다 |
+| 이 저장소의 fork PR | `isCrossRepository`로 아예 제외 | 머지가 곧 패키지 게시라 한 겹 더 둔다(6.5절). 템플릿에는 넣지 않는다 |
 | 머지 방식 | `--rebase --delete-branch` | CLAUDE.md의 merge commit 금지. squash는 릴리스 판정 입력을 뭉갬 |
 | 이 저장소 범위 | auto-merge만 (리뷰 워크플로 없음) | 사용자 선택 |
 | 릴리스 재기동 | `gh workflow run release.yml` | `workflow_dispatch`는 GITHUB_TOKEN 제약의 명시적 예외. PAT 불필요 |

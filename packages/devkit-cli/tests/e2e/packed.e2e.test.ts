@@ -51,6 +51,12 @@ describe('게시본(tarball) 으로 실행하기', () => {
     expect(existsSync(join(root, 'templates', 'monorepo'))).toBe(true);
     // _npmrc 는 npm 이 dot-file 을 거르므로 밑줄 이름으로 실린다.
     expect(existsSync(join(root, 'templates', '_shared', '_npmrc'))).toBe(true);
+    // 워크플로는 점으로 시작하는 **디렉토리** 아래에 있다. npm 의 dot-file
+    // 필터링 규칙이 바뀌거나 files 목록이 좁아지면 조용히 빠질 수 있는데,
+    // 빠져도 create 는 성공하므로 생성물에서 CI 가 사라진 채 발견되지 않는다.
+    expect(
+      existsSync(join(root, 'templates', '_shared', '.github', 'workflows', 'auto-merge.yml')),
+    ).toBe(true);
     // src 가 실리면 assertDistFresh 가 게시본에서도 돌아 레이아웃 판별이 깨진다.
     expect(existsSync(join(root, 'src'))).toBe(false);
   });

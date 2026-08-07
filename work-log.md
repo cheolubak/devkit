@@ -56,13 +56,65 @@
   - **RuleTester 그린으로 끝내지 않았다.** RuleTester는 `filename`을 문자열로 받을 뿐 파일이 없어도 되고 flat config 조립·`ignores`를 전혀 거치지 않는다. 저장소 **밖** 스크래치패드에 실제 FSD 디렉토리를 만들어 빌드된 `dist`의 `configs.recommended`로 ESLint를 돌려, 오탐 4건이 조용하고 진짜 위반 5건이 그대로 잡히는 것을 확인했다(검증용 생성물을 저장소 안에 만들면 자동 훅이 커밋해버리는 사고가 이전에 4회 있었다).
 - **커밋**: 브랜치 `worktree-lexical-bubbling-bee`(`origin/main` 기준 rebase 후 작업). main 미머지.
 
+### 자동 머지가 아무나의 승인을 받아들이던 것 (최종 리뷰 fix wave)
+- **변경 파일**: `.github/workflows/auto-merge.yml` · `packages/devkit-cli/templates/_shared/.github/workflows/auto-merge.yml` · `packages/devkit-cli/tests/auto-merge-workflow.test.ts` · `packages/devkit-cli/tests/e2e/packed.e2e.test.ts` · `README.md` · `packages/devkit-cli/README.md` · `docs/superpowers/specs/2026-08-07-auto-merge-design.md` · `docs/superpowers/plans/2026-08-07-auto-merge.md` · `work-log.md`
+- **C1 — 승인자 신원을 검증하지 않았다.** 이 브랜치가 배선한 게이트는 `APPROVED`를
+  세기만 하고 **누가** 남겼는지 보지 않았다. 전제 네 가지가 동시에 성립해 있었다:
+  (1) 공개 저장소에서는 읽기 권한만 있는 임의의 GitHub 사용자가 승인 리뷰를 제출할
+  수 있고, (2) 이 저장소는 공개이며 `main`에 브랜치 보호가 없고(`branches/main/protection`
+  → 404), (3) `pull_request_review`는 fork PR에 대해서도 base 저장소 컨텍스트에서
+  쓰기 토큰으로 도는데 — 승인을 남긴 것이 **사람 토큰**이면 GITHUB_TOKEN 제약이
+  적용되지 않아 이벤트가 정상 발화하고, (4) 머지가 곧바로 `gh workflow run release.yml`
+  로 이어져 `pnpm -r publish`(`packages: write`)까지 간다. 즉 계정 둘로 fork PR을 열고
+  승인만 남기면 인터넷의 임의 사용자가 `@cheolubak/*` 게시에 도달했다. 체크아웃을 뺀
+  것은 토큰 **탈취**를 막았지만, 토큰을 정당하게 쥔 잡이 공격자 코드를 `main`에 넣어
+  주는 경로는 그대로 열려 있었다. 승인은 `authorAssociation`이
+  `OWNER`/`MEMBER`/`COLLABORATOR`이거나 작성자가 `github-actions[bot]`인 것만 세도록
+  고쳤다(봇 허용이 안전한 이유: fork PR에 대해 `pull_request`의 GITHUB_TOKEN은 읽기
+  전용으로 강등돼 `claude-review.yml`이 fork PR을 승인하는 것 자체가 불가능하다 —
+  봇 승인의 존재가 곧 same-repo PR이라는 뜻이다). `CHANGES_REQUESTED`는 의도적으로
+  작성자를 가리지 않는다(fail-safe). 이 저장소판은 `isCrossRepository`로 fork PR을
+  한 겹 더 제외하되, 두 사본의 jq 동일성을 지키려 그 검사를 jq **바깥**에 두었다.
+- **왜 테스트가 못 잡았나.** 기존 단언 13개가 전부 `toContain`이라 `--rebase`라는
+  **글자**만 봤다. C1을 찾은 것도 테스트가 아니라 사람이 jq를 손으로 돌려서였다.
+  그래서 템플릿 YAML에서 jq 구간을 잘라 픽스처에 실제로 돌리고 판정 문자열을 단언하는
+  테스트 17건을 추가했다(추출 실패 시 **던진다** — 빈 프로그램을 조용히 돌리면 모든
+  단언이 공허해진다). 첫 케이스가 C1 회귀 방어다.
+- **드리프트가 이미 나 있었다.** 두 사본의 주석 한 단어가 어긋나 있었다(`안 갖췄다`
+  vs `안 갖춰졌다`) — **한 번의 구현 세션 안에서 손으로 옮기다** 생긴 것이다. 다음엔
+  `isbad` 목록이나 `pending` 조건일 수 있고, 그쪽 사본이 바로 패키지를 게시하는
+  저장소의 것이다. 두 파일의 jq 구간을 `toBe`로 비교하는 관문을 더했다.
+- **문서 결함도 함께 고쳤다.** 템플릿이 소비자에게 "CI를 추가하면 `workflows:` 목록에
+  넣어라"고 **지시**하는데 `.github/workflows/**`는 `ci` 카테고리 통째 덮어쓰기
+  대상이라 `devbak update`가 그 편집을 말없이 되돌린다 — 되돌아간 증상이 하필 그
+  파일이 스스로 경고한 침묵하는 증상이다(PR이 승인된 채로 멈춘다). 이를 주석과
+  README 양쪽에 명시. README dry-run 예시 2건이 실물과 달라 실제로 돌려 고쳤고
+  (`--type nest` 신규 12 + 덮어쓰기 2, `--only claude,ci` 신규 6 — 둘 다
+  `.claude/agents/devkit-implementer.md`가 빠져 있었다), `no-auto-merge` 라벨이 기본
+  제공되지 않는다는 사실(`gh label create` 필요)을 양쪽 README에 적었다. 설계 문서에는
+  "누가 승인할 수 있는가" 절(5.2.1)을 신설했다 — 5.2절이 "권한 있는 트리거"를 다루면서
+  체크아웃만 본 것이 C1의 뿌리다.
+- **검증**: TDD — 수정 전 C1 케이스만 RED(`expected 'merge: 승인 1건, 체크 통과' to
+  match /^skip:/`), 수정 후 31/31 GREEN. 두 파일 jq 구간 `diff` 출력 없음. ruby YAML
+  파싱 양쪽 OK. `pnpm test` 51파일/529건(devkit-cli 34파일/437건) · `pnpm typecheck` · `pnpm lint:ox` ·
+  `pnpm lint:es` 전부 PASS. e2e는 돌리지 않았다(`GITHUB_TOKEN` 필요) — 단언만 더했다.
+- **함정 하나 더**: 처음 쓴 `trusted` 정의가 `["OWNER",...] | index(.authorAssociation)`
+  였는데, jq 파이프 안에서는 `.`이 **그 배열**이 되어 `Cannot index array with string`
+  으로 죽었다. 테스트를 실제로 돌리지 않았으면 게이트 전체가 런타임에 고장난 채
+  머지됐을 것이다 — 문자열 단언은 이것도 잡지 못한다.
+- **커밋**: `fda0c45`(보안 수정 + 게이트 실행 테스트 + 드리프트 관문) · 이 문서 커밋
+  (문서 일괄 — 자기 해시를 적을 수 없다)
+
 ### 자동 승인·자동 머지 워크플로
 - **변경 파일**:
   - `packages/devkit-cli/templates/_shared/.github/workflows/auto-merge.yml` (신규)
   - `packages/devkit-cli/templates/_shared/.github/workflows/claude-review.yml`
   - `packages/devkit-cli/tests/auto-merge-workflow.test.ts` (신규)
+  - `packages/devkit-cli/tests/plan-ops.test.ts`
   - `.github/workflows/auto-merge.yml` (신규)
-  - `README.md`, `packages/devkit-cli/README.md`
+  - `README.md`, `packages/devkit-cli/README.md`, `work-log.md`
+  - `docs/superpowers/specs/2026-08-07-auto-merge-design.md` (신규)
+  - `docs/superpowers/plans/2026-08-07-auto-merge.md` (신규)
 - **내용**: 승인이 1건 이상이면 PR을 rebase 머지하는 워크플로를 템플릿과 이 저장소에
   더했다. 설계를 지배한 제약은 **GITHUB_TOKEN이 일으킨 이벤트는 새 워크플로 실행을
   만들지 않는다**는 것이다 — Claude가 GITHUB_TOKEN으로 남긴 승인은
