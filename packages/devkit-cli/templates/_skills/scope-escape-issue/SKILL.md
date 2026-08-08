@@ -82,6 +82,7 @@ gh issue create --title "<명령형 한 줄>" --body-file -
 본문은 아래 형식을 그대로 따른다. 이 구획이 `issue-to-pr` 과의 계약이다.
 
 <!-- ISSUE-BODY-CONTRACT:START -->
+```markdown
 ## 무엇을
 
 한 문장. 무엇을 바꿔야 하는가.
@@ -103,6 +104,7 @@ gh issue create --title "<명령형 한 줄>" --body-file -
 ## 무엇으로 다 됐다고 판단하나
 
 확인 방법. 테스트·명령·관찰 가능한 결과.
+```
 <!-- ISSUE-BODY-CONTRACT:END -->
 
 본문 맨 끝에 서명 한 줄을 남긴다.
