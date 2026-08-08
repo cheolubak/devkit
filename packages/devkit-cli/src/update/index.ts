@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { parseOnly, type Category } from '../lib/categories.js';
 import { classifyFiles, formatChangeList } from '../lib/classify.js';
@@ -10,6 +10,7 @@ import { pathExists } from '../ops/path-exists.js';
 import type { Ctx } from '../types.js';
 import { findCommonJsFiles } from './cjs-scan.js';
 import { buildPlan, effectiveCategories } from './plan.js';
+import { retiredTargets, type RetiredFile } from './retired.js';
 import { resolveType } from './resolve-type.js';
 
 export interface UpdateOptions {
@@ -79,6 +80,14 @@ export async function runUpdate(options: UpdateOptions): Promise<void> {
   warnClobbered(classified, planned, hadMarker, log);
   await warnTypeModule(targetDir, packageJson, planned, log);
 
+  // 은퇴 파일은 계획(PlannedFile)이 아니라 삭제라 변경 목록과 따로 낸다.
+  // 조용히 지우면 update 가 사용자 파일을 없앴다는 사실이 어디에도 남지 않는다.
+  const retired = await retiredTargets(targetDir, categories);
+  if (retired.length > 0) {
+    log(`\n  지움 (${retired.length})`);
+    for (const file of retired) log(`    ${file.relPath} — ${file.reason}`);
+  }
+
   const writes = classified.filter((item) => item.kind !== 'unchanged');
 
   // 6. --dry-run 은 확인 프롬프트조차 거치지 않는다. 보여주는 것이 전부다.
@@ -87,7 +96,7 @@ export async function runUpdate(options: UpdateOptions): Promise<void> {
     return;
   }
 
-  if (writes.length === 0) {
+  if (writes.length === 0 && retired.length === 0) {
     log('\n변경할 것이 없습니다.');
     return;
   }
@@ -106,6 +115,8 @@ export async function runUpdate(options: UpdateOptions): Promise<void> {
     writes.map((item) => item.relPath),
     log,
   );
+
+  await removeRetired(targetDir, retired, log);
 
   // 10. 설치
   const touchedDeps =
@@ -290,5 +301,18 @@ async function writeAll(
     // oxlint-disable-next-line no-await-in-loop -- 위와 같은 이유
     await writeFile(full, file.content);
     log(`  씀: ${file.relPath}`);
+  }
+}
+
+async function removeRetired(
+  targetDir: string,
+  retired: readonly RetiredFile[],
+  log: (message: string) => void,
+): Promise<void> {
+  for (const file of retired) {
+    const full = join(targetDir, ...file.relPath.split('/'));
+    // oxlint-disable-next-line no-await-in-loop -- 부분 실패 시 어디까지 지웠는지가 로그 순서로 드러나야 한다
+    await rm(full, { force: true });
+    log(`  지움: ${file.relPath}`);
   }
 }

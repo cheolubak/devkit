@@ -59,7 +59,12 @@ describe('게시본(tarball) 으로 실행하기', () => {
     // 필터링 규칙이 바뀌거나 files 목록이 좁아지면 조용히 빠질 수 있는데,
     // 빠져도 create 는 성공하므로 생성물에서 CI 가 사라진 채 발견되지 않는다.
     expect(
-      existsSync(join(root, 'templates', '_shared', '.github', 'workflows', 'auto-merge.yml')),
+      existsSync(join(root, 'templates', '_shared', '.github', 'workflows', 'claude-review.yml')),
+    ).toBe(true);
+    // 스크립트도 같은 dot-디렉토리 아래다. 빠지면 생성물의 머지 경로가 통째로
+    // 사라지는데 create 는 그대로 성공한다.
+    expect(
+      existsSync(join(root, 'templates', '_shared', '.github', 'scripts', 'wait-and-merge.sh')),
     ).toBe(true);
     // src 가 실리면 assertDistFresh 가 게시본에서도 돌아 레이아웃 판별이 깨진다.
     expect(existsSync(join(root, 'src'))).toBe(false);

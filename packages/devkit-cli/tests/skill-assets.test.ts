@@ -390,7 +390,8 @@ describe.each(ALL_TYPES)('%s 리뷰어의 스킬 배선', (type) => {
 
   it('가리키는 스킬이 전부 그 유형에 실제로 배포된다', async () => {
     // 없는 스킬을 가리키면 리뷰어는 실패하지 않는다 — 근거 없이 기본
-    // 판단으로 리뷰하고 승인까지 찍는다. 자동 머지가 그 승인을 게이트로 읽는다.
+    // 판단으로 리뷰하고 통과 신호(Commit Status)를 남긴다.
+    // wait-and-merge.sh 가 그것을 게이트로 읽는다.
     const doc = await readFile(reviewerPath, 'utf8');
     const available = new Set(SKILL_SETS[type]);
     const referenced = [...doc.matchAll(/\.claude\/skills\/([a-z0-9-]+)/g)].map((m) => m[1]);

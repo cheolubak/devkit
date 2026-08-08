@@ -105,7 +105,7 @@ describe('mergeIgnore 결과의 실제 git 판정 (git check-ignore)', () => {
     // devkit-reviewer.md 와 claude-review.yml 이 `.claude/skills/<name>` 을
     // 판정 근거로 가리킨다. 스킬이 무시되면 로컬 디스크에만 있고 clone·CI 에는
     // 없어서, CI 리뷰가 근거 문서를 못 읽은 채 기본 판단으로 리뷰하고 통과
-    // 신호를 남긴다 — 자동 머지가 그것을 게이트로 읽는다.
+    // 신호를 남긴다 — wait-and-merge.sh 가 그것을 게이트로 읽는다.
     //
     // 조상 줄이 있는 경우로 확인한다. 그것이 가장 약한 고리다(부정 패턴을
     // 죽이는 표기).

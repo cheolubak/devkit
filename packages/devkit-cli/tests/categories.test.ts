@@ -46,6 +46,10 @@ describe('categoryOf', () => {
     expect(categoryOf(relPath)).toBe(expected);
   });
 
+  it('.github/scripts 아래는 ci 다', () => {
+    expect(categoryOf('.github/scripts/wait-and-merge.sh')).toBe('ci');
+  });
+
   it('devkit이 소유하지 않는 경로는 null을 반환한다', () => {
     expect(categoryOf('README.md')).toBeNull();
     expect(categoryOf('docs/guide.md')).toBeNull();
