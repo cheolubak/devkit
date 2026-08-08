@@ -196,6 +196,41 @@ describe('유형별 커맨드', () => {
   });
 });
 
+describe('devkit-stack 의 게이트 주장', () => {
+  it('레시피가 심지 않는 린터를 CI 게이트로 주장하지 않는다', async () => {
+    // 대조 대상은 문서가 아니라 실물이다. 존재하지 않는 게이트를 근거로
+    // 봉인하면 리뷰어는 아무도 검사하지 않는 결함을 보고도 "CI 가 이미
+    // 잡는다"며 침묵한다. devkit-stack 은 충돌 시 이기는 문서라 이 거짓이
+    // 다른 모든 근거를 덮는다.
+    //
+    // 이 가드는 devkit-stack 한 문서만 본다. 에이전트 문서 6 개까지 함께
+    // 보는 일반 가드는 별도 작업(gate-claims)의 몫이다.
+    const declared = new Set<string>();
+    for (const recipe of [nestRecipe, nextRecipe, monorepoRecipe]) {
+      for (const step of recipe({ skipInstall: true })) {
+        const detail = step.describe() as {
+          patch?: { devDependencies?: Record<string, unknown>; dependencies?: Record<string, unknown> };
+          packages?: readonly string[];
+        };
+        for (const name of Object.keys(detail.patch?.devDependencies ?? {})) declared.add(name);
+        for (const name of Object.keys(detail.patch?.dependencies ?? {})) declared.add(name);
+        for (const name of detail.packages ?? []) declared.add(name);
+      }
+    }
+
+    // 전제부터 실물로 고정한다. 레시피가 oxlint 를 심게 되면 아래 단언은
+    // 공허해지므로, 그때는 이 테스트가 먼저 붉어져 다시 판단하게 한다.
+    expect(declared.has('oxlint'), '레시피가 oxlint 를 심기 시작했다 — 문서 주장을 다시 판단한다').toBe(
+      false,
+    );
+
+    // 심지 않는 도구는 이 문서에서 이름을 꺼낼 이유가 없다. steiger 와 달리
+    // oxlint 는 "쓰지 않는다"고 배제하는 대상도 아니다(애초에 없었다).
+    const doc = await readFile(`${POOL_DIR}devkit-stack/SKILL.md`, 'utf8');
+    expect(doc).not.toContain('oxlint');
+  });
+});
+
 const ALL_TYPES = ['nest', 'next', 'monorepo'] as const;
 
 describe.each(ALL_TYPES)('%s 리뷰어의 스킬 배선', (type) => {

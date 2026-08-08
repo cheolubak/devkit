@@ -24,8 +24,12 @@ description: "이 프로젝트가 @cheolubak/* devkit 툴킷으로 이미 결정
 `@cheolubak:registry=https://npm.pkg.github.com`을 가리키므로 `GITHUB_TOKEN`
 환경변수가 없으면 `pnpm install`이 실패한다 — **공개 패키지도 마찬가지다.**
 
-기계 검증은 네 겹이며 CI에서 이미 돈다: `prettier`(포맷) · `oxlint`(비타입
-correctness) · ESLint(타입 인식 규칙) · `tsc --noEmit`(타입).
+기계 검증으로 무엇이 도는지는 **이 프로젝트의 `package.json` 의 `scripts` 를
+직접 읽어 판단한다.** 여기에 목록을 적어두지 않는 이유는, 그 목록이 유형마다
+다르고(예: `typecheck` 스크립트는 Next.js·모노레포에만 있다) 문서에 박아두면
+실물과 조용히 갈라지기 때문이다. "CI 가 이미 잡는다"는 판단은 실제로 도는
+명령을 확인한 뒤에만 한다 — 없는 게이트를 근거로 침묵하면 아무도 검사하지
+않는 결함이 그대로 통과한다.
 
 ## 우선순위
 
