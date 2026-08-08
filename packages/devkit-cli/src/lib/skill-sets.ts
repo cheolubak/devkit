@@ -17,6 +17,7 @@ const COMMON = [
   'tdd',
   'clean-code',
   'verify-implementation',
+  'scope-escape-issue',
 ] as const;
 
 const NEST = [
