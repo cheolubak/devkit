@@ -137,6 +137,65 @@ describe('유형별 스킬 선택', () => {
   });
 });
 
+const COMMANDS_BY_TYPE: Readonly<Record<string, readonly string[]>> = {
+  nest: ['module', 'api-test'],
+  next: ['slice', 'a11y'],
+  monorepo: ['module', 'api-test', 'slice', 'a11y'],
+};
+
+describe('유형별 커맨드', () => {
+  it('_shared 가 verify 커맨드를 갖는다', async () => {
+    const doc = await readFile(`${TEMPLATES_DIR}_shared/.claude/commands/verify.md`, 'utf8');
+    expect(doc).toContain('---');
+    expect(doc).toContain('pnpm lint');
+  });
+
+  it('유형별 커맨드 파일이 전부 존재한다', async () => {
+    const missing: string[] = [];
+    for (const [type, names] of Object.entries(COMMANDS_BY_TYPE)) {
+      for (const name of names) {
+        // oxlint-disable-next-line no-await-in-loop -- 실패 시 순서대로 드러나는 편이 낫다
+        const doc = await readFile(`${TEMPLATES_DIR}${type}/.claude/commands/${name}.md`, 'utf8').catch(() => null);
+        if (doc === null) missing.push(`${type}/${name}.md`);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('커맨드가 가리키는 스킬 경로가 그 유형에 실재한다', async () => {
+    // 끊긴 경로를 가리키면 커맨드는 실패하지 않는다 — 근거 없이 기본
+    // 판단으로 일한 뒤 성공을 보고한다. review-assets 가 REVIEWER_PATH 를
+    // 고정하는 것과 같은 이유다.
+    const dangling: string[] = [];
+    for (const [type, names] of Object.entries(COMMANDS_BY_TYPE)) {
+      const available = new Set(SKILL_SETS[type as keyof typeof SKILL_SETS]);
+      for (const name of names) {
+        // oxlint-disable-next-line no-await-in-loop -- 위와 같은 이유
+        const doc = await readFile(`${TEMPLATES_DIR}${type}/.claude/commands/${name}.md`, 'utf8');
+        for (const [, skill] of doc.matchAll(/\.claude\/skills\/([a-z0-9-]+)/g)) {
+          if (!available.has(skill)) dangling.push(`${type}/${name}.md → ${skill}`);
+        }
+      }
+    }
+    expect(dangling).toEqual([]);
+  });
+
+  it('커맨드가 최소 하나의 스킬 경로를 가리킨다', async () => {
+    // 위 단언은 경로가 0개면 공허하게 통과한다. 커맨드는 판정 기준을
+    // 자기 안에 복제하지 않고 스킬을 가리키는 얇은 래퍼여야 한다.
+    for (const [type, names] of Object.entries(COMMANDS_BY_TYPE)) {
+      for (const name of names) {
+        // oxlint-disable-next-line no-await-in-loop -- 위와 같은 이유
+        const doc = await readFile(`${TEMPLATES_DIR}${type}/.claude/commands/${name}.md`, 'utf8');
+        expect(
+          [...doc.matchAll(/\.claude\/skills\/[a-z0-9-]+/g)].length,
+          `${type}/${name}.md 가 스킬을 가리키지 않는다`,
+        ).toBeGreaterThan(0);
+      }
+    }
+  });
+});
+
 describe('레시피의 copySkills 배선', () => {
   it('세 레시피가 각각 자기 유형의 목록으로 copySkills 를 부른다', () => {
     const cases = [

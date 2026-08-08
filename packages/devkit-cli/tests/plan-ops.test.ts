@@ -27,13 +27,14 @@ describe('copyOverlay.plan', () => {
     const paths = changes.map((c) => (c.kind === 'file' ? c.relPath : c.file)).sort();
     expect(paths).toEqual([
       '.claude/commands/review.md',
+      '.claude/commands/verify.md',
       '.github/workflows/auto-merge.yml',
       '.github/workflows/claude-review.yml',
       '.gitignore',
       '.npmrc',
     ]);
-    // .gitignore 는 병합 대상이라 kind 가 다르다 — 나머지 넷은 그대로 file 이다.
-    expect(changes.filter((c) => c.kind === 'file')).toHaveLength(4);
+    // .gitignore 는 병합 대상이라 kind 가 다르다 — 나머지 다섯은 그대로 file 이다.
+    expect(changes.filter((c) => c.kind === 'file')).toHaveLength(5);
     expect(changes.find((c) => c.kind === 'ignore')?.file).toBe('.gitignore');
   });
 

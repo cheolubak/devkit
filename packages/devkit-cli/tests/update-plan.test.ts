@@ -86,7 +86,10 @@ describe('buildPlan', () => {
       [
         '.claude/agents/devkit-implementer.md',
         '.claude/agents/devkit-reviewer.md',
+        '.claude/commands/api-test.md',
+        '.claude/commands/module.md',
         '.claude/commands/review.md',
+        '.claude/commands/verify.md',
         'CLAUDE.md',
       ].sort(),
     );
@@ -225,7 +228,12 @@ describe('buildPlan', () => {
       [
         '.claude/agents/devkit-implementer.md',
         '.claude/agents/devkit-reviewer.md',
+        '.claude/commands/a11y.md',
+        '.claude/commands/api-test.md',
+        '.claude/commands/module.md',
         '.claude/commands/review.md',
+        '.claude/commands/slice.md',
+        '.claude/commands/verify.md',
         'apps/web/CLAUDE.md',
         'CLAUDE.md',
       ].sort(),
