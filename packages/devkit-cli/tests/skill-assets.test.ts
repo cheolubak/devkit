@@ -272,6 +272,23 @@ describe('유형별 커맨드', () => {
     expect(doc).toContain('pnpm lint');
   });
 
+  it('_shared 가 이슈 커맨드 두 개를 갖고 각자 자기 스킬을 가리킨다', async () => {
+    // 커맨드는 판정 기준을 자기 안에 복제하지 않고 스킬을 가리키는 얇은
+    // 래퍼여야 한다. 끊긴 경로를 가리키면 근거 없이 일하고 성공을 보고한다.
+    const issue = await readFile(`${TEMPLATES_DIR}_shared/.claude/commands/issue.md`, 'utf8');
+    expect(issue).toContain('.claude/skills/scope-escape-issue');
+
+    const issueWork = await readFile(`${TEMPLATES_DIR}_shared/.claude/commands/issue-work.md`, 'utf8');
+    expect(issueWork).toContain('.claude/skills/issue-to-pr');
+  });
+
+  it('issue-work 커맨드가 이슈 번호를 인자로 받는다', async () => {
+    // 인자를 받는 것이 이 커맨드가 스킬과 별개로 존재하는 유일한 이유다.
+    // 인자가 없으면 /issue-to-pr 로 스킬을 직접 부르는 것과 다를 게 없다.
+    const doc = await readFile(`${TEMPLATES_DIR}_shared/.claude/commands/issue-work.md`, 'utf8');
+    expect(doc).toContain('$ARGUMENTS');
+  });
+
   it('유형별 커맨드 파일이 전부 존재한다', async () => {
     const missing: string[] = [];
     for (const [type, names] of Object.entries(COMMANDS_BY_TYPE)) {
