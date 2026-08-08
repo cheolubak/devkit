@@ -39,6 +39,10 @@ async function packageJsonPatches(recipe: Recipe): Promise<JsonObject[]> {
 
   for (const { step, ctx } of flattenSteps(recipe({ skipInstall: true }), CTX)) {
     if (step.plan === undefined) continue;
+    // 프로덕션(update/plan.ts)이 같은 이유로 순차로 돈다 — "순서가 의미를
+    // 만든다: monorepo 는 package.json 을 놓은 뒤 그 파일을 패치한다".
+    // 여기서 병렬로 돌리면 실제 계획과 다른 순서의 결과를 검사하게 된다.
+    // oxlint-disable-next-line no-await-in-loop -- 위 이유로 병렬화할 수 없다
     const changes = await step.plan(ctx);
 
     for (const change of changes) {
