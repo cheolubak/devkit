@@ -26,6 +26,23 @@ NestJS API. devkit 표준 툴킷으로 생성됨.
 리뷰 기준은 같은 디렉토리의 `devkit-reviewer.md`다. 둘은 같은 관점을 작성
 시점과 리뷰 시점에서 각각 본 것이므로, 한쪽을 고치면 다른 쪽도 함께 본다.
 
+## 스킬과 커맨드
+
+`.claude/skills/` 에 이 스택에 해당하는 스킬이 놓여 있다. 판단이 필요할 때
+그 문서를 읽는다.
+
+**`.claude/skills/devkit-stack` 을 먼저 읽는다.** 나머지 스킬은 외부에서 그대로
+가져온 것이라 이 프로젝트가 이미 정한 것과 어긋나는 지점이 있다 —
+`nestjs-validation`·`nestjs-crud` 는 `class-validator` 를 가르치지만 이 프로젝트는
+zod 를 쓴다. `devkit-stack` 이 그 우선순위를 정의한다.
+
+슬래시 커맨드:
+
+- `/review` — 변경분을 devkit 기준으로 리뷰
+- `/verify` — 린트·빌드·테스트 게이트
+- `/module <이름>` — 모듈 한 벌 배치
+- `/api-test <경로>` — e2e 스펙 작성
+
 ## devkit 의존
 
 `package.json`의 `@cheolubak/*`는 GitHub Packages에서 설치된다(`"^0.1.0"`처럼
