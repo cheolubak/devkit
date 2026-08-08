@@ -23,4 +23,8 @@ out/
 .claude/*
 !.claude/agents/
 !.claude/commands/
+# 스킬도 추적한다. devkit-reviewer.md 와 claude-review.yml 이 판정 근거로
+# `.claude/skills/<name>` 을 가리키므로, 무시하면 CI 리뷰가 근거 문서를 못
+# 읽은 채 기본 판단으로 리뷰하고 통과 신호를 남긴다.
+!.claude/skills/
 # <<< devkit <<<
