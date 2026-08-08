@@ -43,6 +43,31 @@ packages/       공유 패키지 (필요할 때 추가)
 
 두 문서 모두 **저장소 루트에만** 있다. `apps/web` 하위에는 없는 것이 정상이다.
 
+## 스킬과 커맨드
+
+`.claude/skills/` 에 이 스택에 해당하는 스킬이 놓여 있다. 판단이 필요할 때
+그 문서를 읽는다.
+
+**`.claude/skills/devkit-stack` 을 먼저 읽는다.** 나머지 스킬은 외부에서 그대로
+가져온 것이라 이 프로젝트가 이미 정한 것과 어긋나는 지점이 있다 —
+`fsd-architecture` 는 `steiger` 를 전제로 쓰였지만 이 프로젝트는
+`@cheolubak/eslint-plugin-fsd` 로 경계를 강제하고, FSD 의 `pages` 레이어를
+`views` 로 쓴다. `nestjs-validation`·`nestjs-crud` 는 `class-validator` 를
+가르치지만 이 프로젝트는 zod 를 쓴다. `devkit-stack` 이 그 우선순위를 정의한다.
+
+스킬은 **저장소 루트에만** 놓인다. `apps/web/.claude/` 는 생성 과정에서 지워진다 —
+리뷰와 스킬은 저장소 단위이고, 앱 하위에 같은 것이 또 있으면 어느 쪽이 진실인지
+알 수 없게 된다.
+
+슬래시 커맨드:
+
+- `/review` — 변경분을 devkit 기준으로 리뷰
+- `/verify` — 린트·빌드·테스트 게이트
+- `/slice <레이어>/<이름>` — FSD 슬라이스와 Public API 배럴
+- `/a11y` — 변경된 컴포넌트의 접근성 점검
+- `/module <이름>` — 모듈 한 벌 배치
+- `/api-test <경로>` — e2e 스펙 작성
+
 ## 모듈 타입 — 루트는 CJS, apps/web은 ESM (의도된 비대칭)
 
 루트 `package.json`에는 `"type"`이 없고(CJS) `apps/web/package.json`에는

@@ -1,7 +1,8 @@
 import type { Recipe, Step } from '../types.js';
 import { markerPatch } from '../lib/marker.js';
+import { SKILL_SETS } from '../lib/skill-sets.js';
 import { devkitVersion } from '../lib/version.js';
-import { copyOverlay, delegate, registryDeps, makeDirs, mergeJson, removeFiles, scaffold } from '../ops/index.js';
+import { copyOverlay, copySkills, delegate, registryDeps, makeDirs, mergeJson, removeFiles, scaffold } from '../ops/index.js';
 
 /**
  * NestJS API 레시피. 설계 5.1절.
@@ -47,6 +48,10 @@ export const nestRecipe: Recipe = (options = {}) => {
     // 워크플로. 유형별 리뷰어 에이전트(.claude/agents/)는 위 오버레이가 이미
     // 넣었고, 이 둘만 세 유형이 공유한다.
     copyOverlay('_shared'),
+
+    // 유형별 Claude 스킬. 리뷰어·구현자 에이전트와 커맨드가 판정 근거로
+    // 가리키는 문서들이다(설계 3.4절). 풀에 없는 이름을 만나면 던진다.
+    copySkills(SKILL_SETS.nest),
 
     mergeJson(
       {

@@ -160,6 +160,24 @@ describe('devkit create --type nest', () => {
     expect(claude).not.toContain('__NAME__');
     const eslintConfig = readFileSync(join(dir, 'eslint.config.mjs'), 'utf8');
     expect(eslintConfig).toContain('@cheolubak/eslint-config-nest');
+
+    // 스킬은 디스크 검사만으로는 부족하다 — create 가 실제로 복사했는지,
+    // 그리고 유형에 맞는 것만 갔는지를 함께 본다.
+    expect(readFileSync(join(dir, '.claude/skills/devkit-stack/SKILL.md'), 'utf8')).toContain(
+      'name: devkit-stack',
+    );
+    expect(readFileSync(join(dir, '.claude/skills/nestjs-validation/SKILL.md'), 'utf8')).toContain(
+      'name: nestjs-validation',
+    );
+    // next 전용 스킬은 오면 안 된다 — 없는 구조를 가정한 코드를 유도한다.
+    expect(existsSync(join(dir, '.claude/skills/fsd-architecture'))).toBe(false);
+    // 커맨드는 판정 기준을 복제하지 않고 스킬을 가리키는 얇은 래퍼다.
+    expect(readFileSync(join(dir, '.claude/commands/module.md'), 'utf8')).toContain('.claude/skills/');
+    expect(existsSync(join(dir, '.claude/commands/verify.md'))).toBe(true);
+    // 생성물은 git 저장소가 아니므로(`--skip-git`) 여기서는 줄이 실렸는지만
+    // 본다. git 이 실제로 그 판정을 내리는지는 merge-ignore-git.test.ts 가
+    // 진짜 저장소에서 check-ignore 로 확인한다.
+    expect(gitignore).toContain('!.claude/skills/');
   });
 
   it('eslint-plugin-prettier가 남아 있지 않다', () => {

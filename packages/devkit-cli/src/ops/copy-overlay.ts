@@ -22,7 +22,7 @@ export function templateFileName(name: string): string {
  * 루트를 찾아 거기서 잡는다 — 번들되면 이 파일이 dist/chunk-*.js 가 되어
  * 깊이가 달라지므로, 깊이를 세는 방식은 레이아웃마다 후보를 늘려야 한다.
  */
-function templatesRoot(): string {
+export function templatesRoot(): string {
   const root = join(packageRoot(fileURLToPath(import.meta.url)), 'templates');
   if (!existsSync(root)) {
     throw new Error(`templates 디렉토리를 찾지 못했습니다 (확인한 경로: ${root}).`);
@@ -52,6 +52,20 @@ function splitIgnoreTemplate(content: string): { lines: string[]; block: string[
   };
 }
 
+export interface CollectTreeOptions {
+  /**
+   * 파일명을 원문 그대로 쓴다(`_foo` → `.foo` 변환을 끈다).
+   *
+   * `_` 접두 규칙은 templates 트리가 자기 `.gitignore`·`.npmrc` 를 git 에
+   * 삼켜지지 않게 하려는 **이스케이프**지, 트리에 담긴 내용의 규칙이 아니다.
+   * 스킬 풀(`_skills/`)의 계약은 "바이트 그대로"이므로 그 이스케이프를 적용하면
+   * 안 된다 — 예를 들어 react-best-practices 는 자기 README 가 이름으로
+   * 참조하는 `rules/_template.md` 를 갖는데, `.template.md` 로 바뀌면 복사도
+   * 성공하고 파일 개수도 맞은 채 그 참조만 조용히 깨진다.
+   */
+  literalNames?: boolean;
+}
+
 /**
  * 템플릿 트리를 읽어 (상대경로, 최종 내용) 목록으로 만든다. **쓰지 않는다.**
  *
@@ -59,20 +73,21 @@ function splitIgnoreTemplate(content: string): { lines: string[]; block: string[
  * 쓰였고(categoryOf 가 스스로 정규화하긴 하지만), 변경 목록 출력도 플랫폼과
  * 무관해야 스냅샷이 안정적이다.
  */
-async function collectTree(
+export async function collectTree(
   from: string,
   relDir: string,
   vars: Record<string, string>,
+  options: CollectTreeOptions = {},
 ): Promise<PlannedChange[]> {
   const entries = await readdir(from, { withFileTypes: true });
 
   const nested = await Promise.all(
     entries.map(async (entry): Promise<PlannedChange[]> => {
-      const name = templateFileName(entry.name);
+      const name = options.literalNames ? entry.name : templateFileName(entry.name);
       const rel = relDir === '' ? name : posix.join(relDir, name);
 
       if (entry.isDirectory()) {
-        return await collectTree(join(from, entry.name), rel, vars);
+        return await collectTree(join(from, entry.name), rel, vars, options);
       }
 
       let content = await readFile(join(from, entry.name), 'utf8');

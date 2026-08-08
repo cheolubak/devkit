@@ -4,6 +4,7 @@ export { removeFiles, assertInside } from './remove-files.js';
 export type { RemoveFilesOptions } from './remove-files.js';
 export { pathExists } from './path-exists.js';
 export { copyOverlay, templateFileName } from './copy-overlay.js';
+export { copySkills, SKILL_POOL_DIR } from './copy-skills.js';
 export { makeDirs } from './make-dirs.js';
 export { registryDeps, DEVKIT_VERSION_RANGE } from './registry-deps.js';
 export type { RegistryDepsOptions } from './registry-deps.js';

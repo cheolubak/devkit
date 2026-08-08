@@ -51,6 +51,36 @@ exports[`nest 레시피 > 단계 목록이 스냅샷과 일치한다 1`] = `
   },
   {
     "detail": {
+      "skills": [
+        "devkit-stack",
+        "eslint",
+        "prettier",
+        "oxlint-eslint-hybrid",
+        "typescript-patterns",
+        "tdd",
+        "clean-code",
+        "verify-implementation",
+        "nestjs-auth",
+        "nestjs-caching",
+        "nestjs-config",
+        "nestjs-crud",
+        "nestjs-database",
+        "nestjs-deployment",
+        "nestjs-error-handling",
+        "nestjs-queue",
+        "nestjs-security",
+        "nestjs-semantic-search",
+        "nestjs-swagger",
+        "nestjs-testing",
+        "nestjs-validation",
+        "clean-architecture",
+        "backend-verify-loop",
+      ],
+    },
+    "kind": "copySkills",
+  },
+  {
+    "detail": {
       "file": "package.json",
       "patch": {
         "dependencies": {

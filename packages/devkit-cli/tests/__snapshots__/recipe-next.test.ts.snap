@@ -53,6 +53,39 @@ exports[`next 레시피 > 단계 목록이 스냅샷과 일치한다 1`] = `
   },
   {
     "detail": {
+      "skills": [
+        "devkit-stack",
+        "eslint",
+        "prettier",
+        "oxlint-eslint-hybrid",
+        "typescript-patterns",
+        "tdd",
+        "clean-code",
+        "verify-implementation",
+        "fsd-architecture",
+        "react-best-practices",
+        "nextjs-a11y",
+        "nextjs-auth",
+        "nextjs-deployment",
+        "nextjs-i18n",
+        "nextjs-seo",
+        "nextjs-shadcn",
+        "nextjs-testing",
+        "cache-components",
+        "server-actions",
+        "tanstack-query",
+        "zustand-patterns",
+        "react-hook-form",
+        "tailwind-patterns",
+        "framer-motion",
+        "e2e-mcp",
+        "frontend-verify-loop",
+      ],
+    },
+    "kind": "copySkills",
+  },
+  {
+    "detail": {
       "file": "package.json",
       "patch": {
         "devDependencies": {

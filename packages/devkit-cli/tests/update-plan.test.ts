@@ -3,9 +3,29 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CATEGORIES, type Category } from '../src/lib/categories.js';
+import { SKILL_SETS } from '../src/lib/skill-sets.js';
 import { DEVKIT_VERSION_RANGE } from '../src/ops/registry-deps.js';
 import type { Ctx } from '../src/types.js';
 import { buildPlan, effectiveCategories } from '../src/update/plan.js';
+
+const SKILLS_PREFIX = '.claude/skills/';
+
+/**
+ * 계획을 "스킬"과 "그 밖"으로 가른다.
+ *
+ * 스킬은 파일이 200개가 넘어 완전 열거가 읽히지 않는다. 대신 그 밖은 그대로
+ * 완전 열거로 남기고(카테고리 필터가 엉뚱한 파일을 들이지 않는지 보는 것이
+ * 원래 목적이다), 스킬은 **이름 집합**으로 본다 — 스킬 안의 파일 구성이
+ * 상류에서 바뀌어도 흔들리지 않으면서, 유형별 목록과 어긋나면 잡는다.
+ */
+function splitSkills(paths: readonly string[]): { skills: Set<string>; rest: string[] } {
+  return {
+    skills: new Set(
+      paths.filter((p) => p.startsWith(SKILLS_PREFIX)).map((p) => p.slice(SKILLS_PREFIX.length).split('/')[0]),
+    ),
+    rest: paths.filter((p) => !p.startsWith(SKILLS_PREFIX)).sort(),
+  };
+}
 
 const created: string[] = [];
 afterEach(() => {
@@ -52,7 +72,7 @@ describe('buildPlan', () => {
     expect(plan.map((f) => f.relPath)).toContain('src/main.ts');
   });
 
-  it('--only claude면 리뷰 자산만 낸다', async () => {
+  it('--only claude면 리뷰 자산과 스킬만 낸다', async () => {
     const plan = await buildPlan({
       type: 'nest',
       ctx: makeTarget(),
@@ -60,14 +80,22 @@ describe('buildPlan', () => {
       marker: null,
     });
 
-    expect(plan.map((f) => f.relPath).sort()).toEqual(
+    const { skills, rest } = splitSkills(plan.map((f) => f.relPath));
+
+    expect(rest).toEqual(
       [
         '.claude/agents/devkit-implementer.md',
         '.claude/agents/devkit-reviewer.md',
+        '.claude/commands/api-test.md',
+        '.claude/commands/module.md',
         '.claude/commands/review.md',
+        '.claude/commands/verify.md',
         'CLAUDE.md',
       ].sort(),
     );
+    // 스킬이 이 카테고리에 걸리지 않으면 update --only claude 가 스킬을
+    // 영영 갱신하지 않으면서 성공을 보고한다.
+    expect(skills).toEqual(new Set(SKILL_SETS.nest));
   });
 
   it('package.json은 패치가 합쳐진 한 파일로 나온다', async () => {
@@ -194,15 +222,26 @@ describe('buildPlan', () => {
     // apps/web 쪽 에이전트 문서는 목록에 없다 — monorepo 레시피가
     // apps/web/.claude 를 통째로 지우고 루트 1벌만 남기기 때문이다.
     // apps/web/CLAUDE.md 는 .claude 밖이라 그 제거에 걸리지 않는다.
-    expect(plan.map((f) => f.relPath).sort()).toEqual(
+    const { skills, rest } = splitSkills(plan.map((f) => f.relPath));
+
+    expect(rest).toEqual(
       [
         '.claude/agents/devkit-implementer.md',
         '.claude/agents/devkit-reviewer.md',
+        '.claude/commands/a11y.md',
+        '.claude/commands/api-test.md',
+        '.claude/commands/module.md',
         '.claude/commands/review.md',
+        '.claude/commands/slice.md',
+        '.claude/commands/verify.md',
         'apps/web/CLAUDE.md',
         'CLAUDE.md',
       ].sort(),
     );
+    // 합성된 next 레시피가 apps/web 에 놓은 스킬도 같은 제거에 걸리므로,
+    // 남는 것은 루트 1벌뿐이다. rest 에 apps/web/.claude/ 가 없는 것과
+    // 같은 이유다.
+    expect(skills).toEqual(new Set(SKILL_SETS.monorepo));
   });
 
   it('next는 CLAUDE.md를 정상적으로 놓는다 — 지운 뒤 놓는 순서다', async () => {

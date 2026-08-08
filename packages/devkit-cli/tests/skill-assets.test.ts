@@ -1,0 +1,304 @@
+import { execFile } from 'node:child_process';
+import { readdir, readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+import { describe, expect, it } from 'vitest';
+import { SKILL_SETS } from '../src/lib/skill-sets.js';
+import { monorepoRecipe } from '../src/recipes/monorepo.js';
+import { nestRecipe } from '../src/recipes/nest.js';
+import { nextRecipe } from '../src/recipes/next.js';
+
+const execFileAsync = promisify(execFile);
+
+const TEMPLATES_DIR = fileURLToPath(new URL('../templates/', import.meta.url));
+const POOL_DIR = `${TEMPLATES_DIR}_skills/`;
+
+describe('devkit-stack 스킬', () => {
+  it('frontmatter의 name이 devkit-stack 이다', async () => {
+    const doc = await readFile(`${POOL_DIR}devkit-stack/SKILL.md`, 'utf8');
+    expect(doc).toMatch(/^---\n(?:.*\n)*?name: devkit-stack\n/);
+  });
+
+  it('검증이 zod 임을 명시하고 class-validator 를 이름으로 배제한다', async () => {
+    // 원본 nestjs-validation·nestjs-crud 가 class-validator 를 가르치고,
+    // devkit-reviewer 는 그 지적을 금지한다. 이 봉인이 없으면 아무도 못 잡는다.
+    const doc = await readFile(`${POOL_DIR}devkit-stack/SKILL.md`, 'utf8');
+    expect(doc).toContain('zod');
+    expect(doc).toContain('class-validator');
+    expect(doc).toContain('nestjs-validation');
+  });
+
+  it('린트 설정 출처가 @cheolubak/eslint-config-nest 임을 명시한다', async () => {
+    // 원본 eslint 스킬은 @eslint/js·eslint-config-prettier 직접 설치를
+    // 가르치는데, recipes/nest.ts 는 그 둘을 null 로 제거한다.
+    const doc = await readFile(`${POOL_DIR}devkit-stack/SKILL.md`, 'utf8');
+    expect(doc).toContain('@cheolubak/eslint-config-nest');
+    expect(doc).toContain('@eslint/js');
+  });
+
+  it('FSD 강제가 eslint-plugin-fsd 임을 명시하고 steiger 를 배제한다', async () => {
+    const doc = await readFile(`${POOL_DIR}devkit-stack/SKILL.md`, 'utf8');
+    expect(doc).toContain('@cheolubak/eslint-plugin-fsd');
+    expect(doc).toContain('steiger');
+  });
+
+  it('우선순위 선언을 갖는다 — 다른 스킬과 어긋나면 이 문서가 이긴다', async () => {
+    const doc = await readFile(`${POOL_DIR}devkit-stack/SKILL.md`, 'utf8');
+    expect(doc).toContain('## 우선순위');
+  });
+});
+
+describe('스킬 풀 무결성', () => {
+  it('풀에 43개 스킬이 있다', async () => {
+    // 개수를 박는다. 원본이 하나 빠지면 유형별 목록(SKILL_SETS)과
+    // 어긋나기 전에 여기서 먼저 드러난다.
+    const entries = await readdir(POOL_DIR, { withFileTypes: true });
+    const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+    expect(dirs).toHaveLength(43);
+  });
+
+  it('모든 스킬이 SKILL.md 를 갖고 frontmatter name 이 디렉토리명과 같다', async () => {
+    // 이름이 어긋나면 Claude 가 스킬을 로드하지 못한다. 파일은 있으므로
+    // 복사 자체는 성공하고, 소비자만 조용히 스킬 없이 일하게 된다.
+    const entries = await readdir(POOL_DIR, { withFileTypes: true });
+    const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+
+    const broken: string[] = [];
+    for (const name of dirs) {
+      // oxlint-disable-next-line no-await-in-loop -- 실패 시 어느 스킬인지 순서대로 드러나는 편이 낫다
+      const doc = await readFile(`${POOL_DIR}${name}/SKILL.md`, 'utf8').catch(() => null);
+      if (doc === null) {
+        broken.push(`${name} — SKILL.md 가 없다`);
+        continue;
+      }
+      if (!new RegExp(`^---\\n(?:.*\\n)*?name: ${name}\\n`).test(doc)) {
+        broken.push(`${name} — frontmatter 의 name 이 디렉토리명과 다르다`);
+      }
+    }
+
+    expect(broken).toEqual([]);
+  });
+
+  it('풀의 모든 파일이 git 에 추적된다', async () => {
+    // 디스크는 초록불인데 clone·CI·게시본에는 없는 상태를 막는다
+    // (2026-08-06 devkit-implementer.md 전례).
+    const { stdout } = await execFileAsync('git', ['ls-files', '-z', '--', 'templates/_skills'], {
+      cwd: fileURLToPath(new URL('..', import.meta.url)),
+    });
+    const tracked = stdout.split('\0').filter((p) => p.length > 0);
+    expect(tracked.length).toBeGreaterThan(43);
+  });
+});
+
+describe('유형별 스킬 선택', () => {
+  it('유형별 개수가 설계와 일치한다', () => {
+    expect(SKILL_SETS.nest).toHaveLength(23);
+    expect(SKILL_SETS.next).toHaveLength(26);
+    expect(SKILL_SETS.monorepo).toHaveLength(43);
+  });
+
+  it('선택된 이름이 전부 풀에 실재한다', async () => {
+    // 오타 하나로 스킬이 조용히 빠지는 것을 막는다. copySkills 는 실행 시
+    // 던지지만, 그때는 이미 사용자가 create 를 돌린 뒤다.
+    const entries = await readdir(POOL_DIR, { withFileTypes: true });
+    const pool = new Set(entries.filter((e) => e.isDirectory()).map((e) => e.name));
+
+    const missing: string[] = [];
+    for (const [type, names] of Object.entries(SKILL_SETS)) {
+      for (const name of names) {
+        if (!pool.has(name)) missing.push(`${type}/${name}`);
+      }
+    }
+
+    expect(missing).toEqual([]);
+  });
+
+  it('풀의 모든 스킬이 최소 한 유형에 선택된다', async () => {
+    // 아무 유형도 쓰지 않는 스킬은 게시 패키지 용량만 먹는다.
+    const entries = await readdir(POOL_DIR, { withFileTypes: true });
+    const pool = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+    const selected = new Set(Object.values(SKILL_SETS).flat());
+
+    expect(pool.filter((name) => !selected.has(name))).toEqual([]);
+  });
+
+  it('유형별 목록에 중복이 없다', () => {
+    // 공통 목록과 유형별 목록이 겹치면 copySkills 가 같은 파일을 두 번 쓴다.
+    for (const [type, names] of Object.entries(SKILL_SETS)) {
+      expect(new Set(names).size, `${type} 에 중복이 있다`).toBe(names.length);
+    }
+  });
+
+  it('devkit-stack 이 세 유형 모두에 있다', () => {
+    // 스택 충돌 봉인은 유형과 무관하다.
+    expect(SKILL_SETS.nest).toContain('devkit-stack');
+    expect(SKILL_SETS.next).toContain('devkit-stack');
+    expect(SKILL_SETS.monorepo).toContain('devkit-stack');
+  });
+});
+
+const COMMANDS_BY_TYPE: Readonly<Record<string, readonly string[]>> = {
+  nest: ['module', 'api-test'],
+  next: ['slice', 'a11y'],
+  monorepo: ['module', 'api-test', 'slice', 'a11y'],
+};
+
+describe('유형별 커맨드', () => {
+  it('_shared 가 verify 커맨드를 갖는다', async () => {
+    const doc = await readFile(`${TEMPLATES_DIR}_shared/.claude/commands/verify.md`, 'utf8');
+    expect(doc).toContain('---');
+    expect(doc).toContain('pnpm lint');
+  });
+
+  it('유형별 커맨드 파일이 전부 존재한다', async () => {
+    const missing: string[] = [];
+    for (const [type, names] of Object.entries(COMMANDS_BY_TYPE)) {
+      for (const name of names) {
+        // oxlint-disable-next-line no-await-in-loop -- 실패 시 순서대로 드러나는 편이 낫다
+        const doc = await readFile(`${TEMPLATES_DIR}${type}/.claude/commands/${name}.md`, 'utf8').catch(() => null);
+        if (doc === null) missing.push(`${type}/${name}.md`);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('커맨드가 가리키는 스킬 경로가 그 유형에 실재한다', async () => {
+    // 끊긴 경로를 가리키면 커맨드는 실패하지 않는다 — 근거 없이 기본
+    // 판단으로 일한 뒤 성공을 보고한다. review-assets 가 REVIEWER_PATH 를
+    // 고정하는 것과 같은 이유다.
+    const dangling: string[] = [];
+    for (const [type, names] of Object.entries(COMMANDS_BY_TYPE)) {
+      const available = new Set(SKILL_SETS[type as keyof typeof SKILL_SETS]);
+      for (const name of names) {
+        // oxlint-disable-next-line no-await-in-loop -- 위와 같은 이유
+        const doc = await readFile(`${TEMPLATES_DIR}${type}/.claude/commands/${name}.md`, 'utf8');
+        for (const [, skill] of doc.matchAll(/\.claude\/skills\/([a-z0-9-]+)/g)) {
+          if (!available.has(skill)) dangling.push(`${type}/${name}.md → ${skill}`);
+        }
+      }
+    }
+    expect(dangling).toEqual([]);
+  });
+
+  it('커맨드가 최소 하나의 스킬 경로를 가리킨다', async () => {
+    // 위 단언은 경로가 0개면 공허하게 통과한다. 커맨드는 판정 기준을
+    // 자기 안에 복제하지 않고 스킬을 가리키는 얇은 래퍼여야 한다.
+    for (const [type, names] of Object.entries(COMMANDS_BY_TYPE)) {
+      for (const name of names) {
+        // oxlint-disable-next-line no-await-in-loop -- 위와 같은 이유
+        const doc = await readFile(`${TEMPLATES_DIR}${type}/.claude/commands/${name}.md`, 'utf8');
+        expect(
+          [...doc.matchAll(/\.claude\/skills\/[a-z0-9-]+/g)].length,
+          `${type}/${name}.md 가 스킬을 가리키지 않는다`,
+        ).toBeGreaterThan(0);
+      }
+    }
+  });
+});
+
+describe('devkit-stack 의 게이트 주장', () => {
+  it('레시피가 심지 않는 린터를 CI 게이트로 주장하지 않는다', async () => {
+    // 대조 대상은 문서가 아니라 실물이다. 존재하지 않는 게이트를 근거로
+    // 봉인하면 리뷰어는 아무도 검사하지 않는 결함을 보고도 "CI 가 이미
+    // 잡는다"며 침묵한다. devkit-stack 은 충돌 시 이기는 문서라 이 거짓이
+    // 다른 모든 근거를 덮는다.
+    //
+    // 이 가드는 devkit-stack 한 문서만 본다. 에이전트 문서 6 개까지 함께
+    // 보는 일반 가드는 별도 작업(gate-claims)의 몫이다.
+    const declared = new Set<string>();
+    for (const recipe of [nestRecipe, nextRecipe, monorepoRecipe]) {
+      for (const step of recipe({ skipInstall: true })) {
+        const detail = step.describe() as {
+          patch?: { devDependencies?: Record<string, unknown>; dependencies?: Record<string, unknown> };
+          packages?: readonly string[];
+        };
+        for (const name of Object.keys(detail.patch?.devDependencies ?? {})) declared.add(name);
+        for (const name of Object.keys(detail.patch?.dependencies ?? {})) declared.add(name);
+        for (const name of detail.packages ?? []) declared.add(name);
+      }
+    }
+
+    // 전제부터 실물로 고정한다. 레시피가 oxlint 를 심게 되면 아래 단언은
+    // 공허해지므로, 그때는 이 테스트가 먼저 붉어져 다시 판단하게 한다.
+    expect(declared.has('oxlint'), '레시피가 oxlint 를 심기 시작했다 — 문서 주장을 다시 판단한다').toBe(
+      false,
+    );
+
+    // 심지 않는 도구는 이 문서에서 이름을 꺼낼 이유가 없다. steiger 와 달리
+    // oxlint 는 "쓰지 않는다"고 배제하는 대상도 아니다(애초에 없었다).
+    const doc = await readFile(`${POOL_DIR}devkit-stack/SKILL.md`, 'utf8');
+    expect(doc).not.toContain('oxlint');
+  });
+});
+
+const ALL_TYPES = ['nest', 'next', 'monorepo'] as const;
+
+describe.each(ALL_TYPES)('%s 리뷰어의 스킬 배선', (type) => {
+  const reviewerPath = `${TEMPLATES_DIR}${type}/.claude/agents/devkit-reviewer.md`;
+
+  it('frontmatter 에 skills 목록을 갖는다', async () => {
+    const doc = await readFile(reviewerPath, 'utf8');
+    const frontmatter = doc.slice(0, doc.indexOf('\n---', 4));
+    expect(frontmatter).toContain('skills:');
+  });
+
+  it('frontmatter 의 name 이 devkit-reviewer 로 유지된다', async () => {
+    // skills: 를 더하면서 name 줄이 밀리면 review-assets.test.ts 의
+    // 정규식이 깨진다. 여기서 함께 고정한다.
+    const doc = await readFile(reviewerPath, 'utf8');
+    expect(doc).toMatch(/^---\n(?:.*\n)*?name: devkit-reviewer\n/);
+  });
+
+  it('가리키는 스킬이 전부 그 유형에 실제로 배포된다', async () => {
+    // 없는 스킬을 가리키면 리뷰어는 실패하지 않는다 — 근거 없이 기본
+    // 판단으로 리뷰하고 승인까지 찍는다. 자동 머지가 그 승인을 게이트로 읽는다.
+    const doc = await readFile(reviewerPath, 'utf8');
+    const available = new Set(SKILL_SETS[type]);
+    const referenced = [...doc.matchAll(/\.claude\/skills\/([a-z0-9-]+)/g)].map((m) => m[1]);
+
+    expect(referenced.length, '스킬 경로를 하나도 가리키지 않는다').toBeGreaterThan(0);
+    expect(referenced.filter((name) => !available.has(name))).toEqual([]);
+  });
+
+  it('판정 근거 경로가 "보는 것" 절 안에 있다', async () => {
+    // 금지 목록에만 있으면 리뷰어는 근거 문서를 읽을 이유를 못 찾는다.
+    const doc = await readFile(reviewerPath, 'utf8');
+    const observed = doc.slice(doc.indexOf('## 보는 것'));
+    expect(observed).toContain('.claude/skills/');
+  });
+
+  it('devkit-stack 우선순위를 금지 목록에 명시한다', async () => {
+    // 원본 스킬과 스택이 어긋나는 지점을 리뷰어가 지적 근거로 삼으면
+    // 모든 PR 에서 잘못된 지적이 나온다.
+    const doc = await readFile(reviewerPath, 'utf8');
+    const forbidden = doc.slice(doc.indexOf('## 지적하지 않는 것'), doc.indexOf('## 보는 것'));
+    expect(forbidden).toContain('devkit-stack');
+  });
+});
+
+describe('CI 워크플로의 스킬 배선', () => {
+  it('프롬프트가 .claude/skills/ 와 devkit-stack 우선순위를 안내한다', async () => {
+    // 워크플로는 리뷰어를 서브에이전트로 호출하지 않고 문서로 읽게 한다.
+    // frontmatter 의 skills: 는 그 경로에서 해석되지 않으므로, 프롬프트가
+    // 직접 말하지 않으면 CI 리뷰에는 스킬이 붙지 않는다.
+    const doc = await readFile(`${TEMPLATES_DIR}_shared/.github/workflows/claude-review.yml`, 'utf8');
+    expect(doc).toContain('.claude/skills/');
+    expect(doc).toContain('devkit-stack');
+  });
+});
+
+describe('레시피의 copySkills 배선', () => {
+  it('세 레시피가 각각 자기 유형의 목록으로 copySkills 를 부른다', () => {
+    const cases = [
+      ['nest', nestRecipe] as const,
+      ['next', nextRecipe] as const,
+      ['monorepo', monorepoRecipe] as const,
+    ];
+
+    for (const [type, recipe] of cases) {
+      const step = recipe({ skipInstall: true }).find((s) => s.kind === 'copySkills');
+      expect(step, `${type} 레시피에 copySkills 단계가 없다`).toBeDefined();
+      expect(step?.describe()).toEqual({ skills: [...SKILL_SETS[type]] });
+    }
+  });
+});

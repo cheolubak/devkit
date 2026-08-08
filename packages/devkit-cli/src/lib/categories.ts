@@ -42,7 +42,12 @@ export const DEFAULT_EXCLUDED_CATEGORIES: readonly Category[] = ['scaffold'];
  * 매칭해야 오버레이 커버리지와 실제 소비자 경로가 함께 걸린다.
  */
 const FILE_PATTERNS: ReadonlyArray<readonly [RegExp, Category]> = [
-  [/^\.claude\/(?:agents|commands)\/.+/, 'claude'],
+  // 에이전트·커맨드·스킬은 한 카테고리다. 셋이 서로를 경로 문자열로
+  // 가리키므로(리뷰어 → 스킬, 커맨드 → 스킬) 따로 갱신되면 결합이 끊긴다.
+  // `skills` 가 빠져 있으면 두 겹으로 샌다: 오버레이 커버리지 테스트가
+  // 실패하고, 그것을 우회하면 `update --only claude` 가 스킬을 영원히
+  // 갱신하지 않으면서 성공을 보고한다.
+  [/^\.claude\/(?:agents|commands|skills)\/.+/, 'claude'],
   [/^CLAUDE\.md$/, 'claude'],
   [/^\.github\/workflows\/.+/, 'ci'],
   [/^eslint\.config\.mjs$/, 'lint'],
