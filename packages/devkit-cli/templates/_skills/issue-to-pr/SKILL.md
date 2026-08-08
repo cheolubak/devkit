@@ -50,7 +50,12 @@ gh issue view <N> --json title,body,state,url,comments
 
 `발견 좌표` 의 커밋을 그대로 믿지 않는다.
 
+먼저 원격을 가져온다. 이것을 빼면 **"origin 에 살아 있지만 아직 안 가져온 커밋"**
+이 아래에서 "사라진 커밋"으로 잘못 분류된다 — 갓 클론한 저장소나 얕은 클론에서
+이슈 처리를 시작하면 실제로 그렇게 된다.
+
 ```bash
+git fetch origin
 git cat-file -e <발견SHA>
 ```
 
