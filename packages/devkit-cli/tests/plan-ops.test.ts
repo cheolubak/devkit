@@ -23,7 +23,7 @@ describe('copyOverlay.plan', () => {
     const changes = await step.plan!(makeCtx());
 
     // _gitignore 는 Task 4부터 _shared 에 있다 — 세 유형이 같은 처리를 받는다.
-    // auto-merge.yml 은 auto-merge 계획 Task 1부터 _shared 에 있다.
+    // wait-and-merge.sh 는 머지 판정이 워크플로에서 스크립트로 옮겨오며 들어왔다.
     const paths = changes.map((c) => (c.kind === 'file' ? c.relPath : c.file)).sort();
     expect(paths).toEqual([
       '.claude/commands/issue-work.md',
@@ -31,13 +31,12 @@ describe('copyOverlay.plan', () => {
       '.claude/commands/review.md',
       '.claude/commands/verify.md',
       '.github/scripts/wait-and-merge.sh',
-      '.github/workflows/auto-merge.yml',
       '.github/workflows/claude-review.yml',
       '.gitignore',
       '.npmrc',
     ]);
-    // .gitignore 는 병합 대상이라 kind 가 다르다 — 나머지 여덟은 그대로 file 이다.
-    expect(changes.filter((c) => c.kind === 'file')).toHaveLength(8);
+    // .gitignore 는 병합 대상이라 kind 가 다르다 — 나머지 일곱은 그대로 file 이다.
+    expect(changes.filter((c) => c.kind === 'file')).toHaveLength(7);
     expect(changes.find((c) => c.kind === 'ignore')?.file).toBe('.gitignore');
   });
 

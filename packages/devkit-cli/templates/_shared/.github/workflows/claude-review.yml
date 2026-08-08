@@ -1,4 +1,16 @@
 name: 'Claude Code Review'
+
+# PR 마다 Claude 가 리뷰하고, 통과 여부를 **Commit Status**(context:
+# claude-review)로 남긴다. `.github/scripts/wait-and-merge.sh` 가 그 status 를
+# 게이트로 읽어 머지한다.
+#
+# 승인(--approve)을 쓰지 않는 이유는 아래 github_token 주석에 있다 — Actions
+# 토큰으로는 GitHub 이 승인을 거부한다.
+#
+# 머지 판정은 GitHub 에 있지 않다. 이 워크플로가 status 를 남기면 끝이고,
+# 그것을 기다렸다 머지하는 것은 사람이 부르는 스크립트다. 그래서 이 파일의
+# name: 값을 다른 워크플로가 이름으로 참조하지 않는다 — 예전에는
+# auto-merge.yml 의 workflow_run 목록과 글자 그대로 같아야 했다.
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
@@ -10,9 +22,10 @@ on:
 # 읽지 않은 코드를 통과시켰겠지만, 이 경로에는 그 창이 없다.
 #
 # 그래도 취소하는 이유는 낭비를 줄이기 위해서다. 이미 지나간 커밋을 리뷰하는
-# 실행은 토큰과 시간을 쓰고 아무것도 결정하지 못한다. 취소된 실행의
-# workflow_run.conclusion 은 'cancelled' 라 auto-merge.yml 의 잡 if 조건
-# (conclusion == 'success')도 통과하지 못한다.
+# 실행은 토큰과 시간을 쓰고 아무것도 결정하지 못한다. 취소된 실행은 Commit
+# Status 를 남기지 못한 채 끝난다. 게이트는 그 커밋에서 claude-review 를
+# 찾지 못해 wait: 로 남고, 새 커밋에 대한 실행이 status 를 남기는 순간 그때
+# 판정된다.
 concurrency:
   group: claude-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -79,15 +92,15 @@ jobs:
               실제 코드 변경 내용에만 근거합니다
 
             리뷰를 마치면 반드시 아래 둘 중 하나를 **실행**합니다.
-            코멘트만 남기고 끝내지 않습니다 — 이 Commit Status 가 자동 머지
-            (.github/workflows/auto-merge.yml)의 게이트라, 남기지 않으면 PR 이
-            판정을 못 받고 멈춘 채로 남습니다.
+            코멘트만 남기고 끝내지 않습니다 — 이 Commit Status 가 머지 게이트
+            (.github/scripts/wait-and-merge.sh)가 읽는 유일한 통과 신호라,
+            남기지 않으면 PR 이 판정을 못 받고 멈춘 채로 남습니다.
 
             - 심각한 문제가 없으면:
               `gh api repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }} -f state=success -f context=claude-review -f description="리뷰 통과"`
 
               그리고 **이전에 당신이 남긴 변경 요청이 있으면 반드시 철회합니다.**
-              자동 머지의 변경 요청 판정은 커밋을 가리지 않는데(막는 쪽은
+              머지 게이트의 변경 요청 판정은 커밋을 가리지 않는데(막는 쪽은
               fail-safe 다) 통과 신호는 커밋에 묶입니다. 철회하지 않으면 한 번
               지적받은 PR 은 그 지적이 해소돼도 영원히 머지되지 않습니다.
 
@@ -99,7 +112,7 @@ jobs:
 
               출력이 비어 있으면 철회할 것이 없으니 넘어갑니다.
 
-              최신 1건만 철회하지 않습니다. 자동 머지 게이트는 리뷰어별 최신
+              최신 1건만 철회하지 않습니다. 머지 게이트는 리뷰어별 최신
               리뷰만 보므로 판정에는 차이가 없지만, 철회되지 않은 변경 요청이
               PR 화면에 남아 "왜 아직 빨간가"를 읽는 사람을 혼란시킵니다.
             - 심각한 문제가 있으면 **둘 다** 실행합니다:
