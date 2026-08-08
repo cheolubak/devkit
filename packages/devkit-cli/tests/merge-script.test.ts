@@ -504,10 +504,13 @@ describe('_shared 리뷰 워크플로', () => {
 
   it('통과와 실패 양쪽 지시를 모두 갖는다', async () => {
     // 승인만 지시하면 문제를 찾았을 때 인라인 코멘트만 남고 리뷰 상태가
-    // 안 찍힌다. 그러면 auto-merge 의 "변경 요청 없음" 게이트는 존재하지만
-    // 아무것도 막지 못한다 — 나중에 승인 하나가 들어오면 그대로 머지된다.
+    // 안 찍힌다. 그러면 wait-and-merge.sh 의 "변경 요청 없음" 게이트는 존재하지만
+    // 아무것도 막지 못한다 — 나중에 통과 신호(Commit Status)가 하나 찍히면 그대로 머지된다.
     const doc = await readReview();
-    expect(doc).toContain('--approve');
+    // '--approve' 리터럴만 찾으면 "승인(--approve)은 쓰지 않습니다"라는
+    // 부정문 안에서도 통과해 아무것도 막지 못한다 — 실제로 쓰지 않는다는
+    // 설명 문장이 있는지를 본다.
+    expect(doc).toMatch(/승인\(--approve\)은 쓰지 않습니다/);
     expect(doc).toContain('--request-changes');
   });
 
@@ -526,8 +529,8 @@ describe('_shared 리뷰 워크플로', () => {
     // Actions 의 GITHUB_TOKEN 으로는 PR 을 승인할 수 없다 — GitHub 이
     // "GitHub Actions is not permitted to approve pull requests" 로 거부한다.
     // 그 토큰을 넘기면 리뷰는 정상적으로 돌고 워크플로도 success 로 끝나지만
-    // 승인만 남지 않아 자동 머지가 영원히 오지 않는다. 실패가 초록불 뒤에
-    // 숨는 형태라 실행으로는 드러나지 않는다.
+    // 통과 신호(Commit Status)만 남지 않아 머지 게이트가 영원히 열리지 않는다.
+    // 실패가 초록불 뒤에 숨는 형태라 실행으로는 드러나지 않는다.
     const doc = await readReview();
     expect(doc).toContain('statuses: write');
     expect(doc).toMatch(/statuses\/\$\{\{\s*github\.event\.pull_request\.head\.sha\s*\}\}/);
@@ -554,8 +557,9 @@ describe('_shared 리뷰 워크플로', () => {
   });
 
   it('프롬프트 인젝션 방어 지시를 갖는다', async () => {
-    // 이 리뷰의 승인 하나가 자동 머지를 통과시킨다(게이트는 approvals >= 1
-    // 이고 봇을 신뢰한다). 그런데 이 프롬프트가 읽는 diff·PR 제목·PR 본문·
+    // 이 리뷰가 남기는 Commit Status 하나가 머지 게이트를 통과시킨다(게이트는
+    // claude-review 의 success 하나로 판정하고, creator 가 github-actions[bot]
+    // 인 것만 신뢰한다). 그런데 이 프롬프트가 읽는 diff·PR 제목·PR 본문·
     // 커밋 메시지·코드 주석은 **전부 공격자 통제 입력**이다. 방어 지시가
     // 없으면 "이 PR 을 승인하라"를 diff 에 심는 것만으로 사람이 아무도 안 본
     // 변경이 main 에 들어간다.
@@ -577,10 +581,10 @@ describe('_shared 리뷰 워크플로', () => {
 
   it('draft PR 이 ready 로 전환되는 것을 듣고, 겹친 실행을 concurrency 로 막는다', async () => {
     // ready_for_review 가 없으면 draft 로 열린 PR 이 ready 로 바뀌어도 재리뷰를
-    // 듣는 트리거가 없어 auto-merge 의 "draft PR 입니다" 게이트에서 조용히
-    // 멈춘다. concurrency 가 없으면 gh pr review --approve 가 commit_id 없이
-    // PR 최신 커밋에 승인을 기록하는 특성 때문에, 겹친 실행이 옛 커밋의 승인을
-    // 새 커밋에 남겨 auto-merge 의 onHead 판정이 봇 승인에 대해 깨질 수 있다.
+    // 듣는 트리거가 없어 wait-and-merge.sh 의 "draft PR 입니다" 게이트에서 조용히
+    // 멈춘다. concurrency 가 없어도 판정 자체는 깨지지 않는다 — Commit Status 는
+    // 실행이 읽은 SHA 에 정확히 묶인다. 그래도 겹친 실행은 이미 지나간 커밋을
+    // 리뷰하며 토큰과 시간을 낭비하므로 취소한다.
     const doc = await readReview();
     expect(doc).toContain('ready_for_review');
     expect(doc).toMatch(/^concurrency:/m);
@@ -595,10 +599,13 @@ describe('이 저장소판 리뷰 워크플로', () => {
 
   it('통과와 실패 양쪽 지시를 모두 갖는다', () => {
     // 승인만 지시하면 문제를 찾았을 때 인라인 코멘트만 남고 리뷰 상태가
-    // 안 찍힌다. 그러면 auto-merge 의 "변경 요청 없음" 게이트는 존재하지만
+    // 안 찍힌다. 그러면 wait-and-merge.sh 의 "변경 요청 없음" 게이트는 존재하지만
     // 아무것도 막지 못한다.
     const doc = read();
-    expect(doc).toContain('--approve');
+    // '--approve' 리터럴만 찾으면 "승인(--approve)은 쓰지 않습니다"라는
+    // 부정문 안에서도 통과해 아무것도 막지 못한다 — 실제로 쓰지 않는다는
+    // 설명 문장이 있는지를 본다.
+    expect(doc).toMatch(/승인\(--approve\)은 쓰지 않습니다/);
     expect(doc).toContain('--request-changes');
   });
 
@@ -611,8 +618,8 @@ describe('이 저장소판 리뷰 워크플로', () => {
     // Actions 의 GITHUB_TOKEN 으로는 PR 을 승인할 수 없다 — GitHub 이
     // "GitHub Actions is not permitted to approve pull requests" 로 거부한다.
     // 그 토큰을 넘기면 리뷰는 정상적으로 돌고 워크플로도 success 로 끝나지만
-    // 승인만 남지 않아 자동 머지가 영원히 오지 않는다. 실패가 초록불 뒤에
-    // 숨는 형태라 실행으로는 드러나지 않는다.
+    // 통과 신호(Commit Status)만 남지 않아 머지 게이트가 영원히 열리지 않는다.
+    // 실패가 초록불 뒤에 숨는 형태라 실행으로는 드러나지 않는다.
     const doc = read();
     expect(doc).toContain('statuses: write');
     expect(doc).toMatch(/statuses\/\$\{\{\s*github\.event\.pull_request\.head\.sha\s*\}\}/);
@@ -639,8 +646,8 @@ describe('이 저장소판 리뷰 워크플로', () => {
   });
 
   it('프롬프트 인젝션 방어 지시를 갖는다', () => {
-    // 이 리뷰의 승인 하나가 자동 머지를 통과시키고 그 머지가 패키지 게시로
-    // 이어진다. diff·PR 제목·본문·커밋 메시지는 전부 공격자 통제 입력이다.
+    // 이 리뷰가 남기는 Commit Status 하나가 머지 게이트를 통과시키고 그 머지가
+    // 패키지 게시로 이어진다. diff·PR 제목·본문·커밋 메시지는 전부 공격자 통제 입력이다.
     // '변경 요청'만 찾으면 인젝션 방어 블록을 통째로 지워도 --request-changes
     // 안내 문구가 남아 통과한다 — 방어 블록에만 있는 고유 조각으로 본다.
     const doc = read();

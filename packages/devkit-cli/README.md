@@ -134,7 +134,8 @@ CLI는 실행 전에 `dist/bin.js`가 `src/`보다 새로운지 확인하고, �
 | --- | --- |
 | `templates/_shared/.claude/commands/review.md` | 로컬 `/review` 슬래시 커맨드 |
 | `templates/_shared/.github/workflows/claude-review.yml` | PR 자동 리뷰 워크플로 |
-| `templates/_shared/.github/workflows/auto-merge.yml` | 승인 1건 이상이면 자동 머지 |
+| `templates/_shared/.github/scripts/wait-and-merge.sh` | 리뷰 결과를 폴링해 전부 통과하면 머지 |
+| `templates/_shared/.claude/commands/merge.md` | `/merge` — 위 스크립트를 부른다 |
 | `templates/nest/.claude/agents/devkit-reviewer.md` | NestJS 리뷰어 |
 | `templates/next/.claude/agents/devkit-reviewer.md` | Next.js + FSD 리뷰어 |
 | `templates/monorepo/.claude/agents/devkit-reviewer.md` | Turborepo 모노레포 리뷰어 |
@@ -151,96 +152,50 @@ CLI는 실행 전에 `dist/bin.js`가 `src/`보다 새로운지 확인하고, �
 
 생성된 저장소에 시크릿 `CLAUDE_CODE_OAUTH_TOKEN`을 등록해야 한다(API key가 아니다). 없으면 워크플로가 동작하지 않는다. **파일이 놓였다는 사실이 리뷰가 동작한다는 뜻은 아니다.**
 
-### 자동 머지
+### 머지
 
-`auto-merge.yml`은 승인이 **1건 이상**이면 PR을 `--rebase --delete-branch`로 머지한다.
-아래 여섯 게이트를 모두 통과해야 한다.
+`.github/scripts/wait-and-merge.sh` 가 PR 을 폴링해 판정한다. GitHub Actions 는
+관여하지 않는다 — 리뷰만 돌고, 머지는 사람이 부른 세션에서 일어난다.
 
-| 게이트 | 통과 조건 |
+```bash
+bash .github/scripts/wait-and-merge.sh <PR번호>
+```
+
+판정은 세 갈래다.
+
+| 접두 | 뜻 | 행동 |
+| --- | --- | --- |
+| `merge:` | 조건 충족 | `--rebase --delete-branch` 로 머지, 종료 코드 0 |
+| `wait:` | 더 기다리면 해소될 수 있음 | 기본 20초 뒤 다시 폴링 |
+| `stop:` | 기다려도 안 됨 | 사유 출력, 종료 코드 1 |
+
+머지 조건은 넷이다.
+
+| 조건 | 내용 |
 | --- | --- |
-| 상태 | PR이 `OPEN` |
-| draft | draft가 아님 |
-| 라벨 | `no-auto-merge` 라벨이 없음 |
-| 변경 요청 | 리뷰어별 **최신** 리뷰에 `CHANGES_REQUESTED`가 없음 |
-| 승인 | 리뷰어별 최신 리뷰 중 **신뢰할 수 있고 현재 head 커밋에 달린** `APPROVED`가 1건 이상 |
-| 체크 | 자기 자신을 뺀 모든 체크가 성공(진행 중도 불가) |
+| 상태 | PR 이 열려 있고 draft 가 아님 |
+| 리뷰 | 철회되지 않은 변경 요청이 없음 |
+| 통과 신호 | `claude-review` Commit Status 가 `success` 이고 생성자가 `github-actions[bot]` |
+| 체크 | 다른 체크가 전부 완료·성공 |
 
-게이트에 걸리면 이유를 로그에 남기고 **정상 종료**한다. 조건이 아직 안 갖춰진 것은
-고장이 아니므로 PR 체크를 빨간불로 만들지 않는다.
+`claude-review` 는 **context 와 creator 를 둘 다** 본다. context 만 보면 외부 CI
+의 초록불 하나로 머지되고, creator 를 안 보면 `statuses:write` 를 가진 임의의
+앱이 같은 이름으로 `success` 를 심어 리뷰 없이 게이트를 뚫는다.
+
+기본 타임아웃은 1800초다. `--timeout`·`--interval` 로 바꾼다. `--dry-run` 은
+판정까지만 하고 머지하지 않는다.
 
 **`no-auto-merge` 라벨은 기본 제공되지 않는다.** GitHub이 새 저장소에 만들어 주는
-라벨 9개에 없으므로, 탈출구를 실제로 쓰려면 먼저 만들어야 한다.
+기본 라벨에 없으므로, 쓰려면 먼저 만들어야 한다.
 
 ```bash
 gh label create no-auto-merge --description "이 PR 은 자동 머지하지 않는다"
 ```
 
-라벨이 없어도 워크플로는 정상 동작한다 — 다만 붙일 라벨이 없어 **탈출구가 없는
-상태**가 된다.
-
-### 누가 승인할 수 있는가
-
-**공개 저장소에서는 읽기 권한만 있는 임의의 GitHub 사용자가 승인 리뷰를 제출할 수
-있다.** 그리고 `pull_request_review`는 fork에서 온 PR에 대해서도 **base 저장소
-컨텍스트에서 쓰기 토큰을 들고 도는** 권한 있는 트리거다. 승인 집계가 신원을 보지
-않으면, 계정 하나로 fork PR을 열고 다른 계정으로 승인을 남기는 것만으로 인터넷의
-아무나가 `main` 머지에 도달한다.
-
-그래서 승인은 아래 둘 중 하나를 만족하는 리뷰만 센다.
-
-- `authorAssociation`이 `OWNER` / `MEMBER` / `COLLABORATOR`
-- 리뷰 작성자 로그인이 `github-actions[bot]`
-
-봇 로그인을 허용해도 안전하다. fork에서 온 PR에 대해 `pull_request` 트리거의
-`GITHUB_TOKEN`은 읽기 전용으로 강등되므로 `claude-review.yml`이 fork PR을 승인하는
-것 **자체가 불가능하다** — 봇 승인이 존재한다는 사실이 곧 same-repo PR이라는 뜻이다.
-
-**`CHANGES_REQUESTED`는 작성자를 가리지 않는다.** 비대칭은 의도다. 막는 쪽은
-fail-safe이므로 외부인의 변경 요청도 존중한다 — 잘못 막으면 사람이 지우면 그만이지만
-잘못 머지하면 되돌릴 수 없다.
-
-`tests/auto-merge-workflow.test.ts`가 jq 게이트를 픽스처에 실제로 돌려 이 판정을
-단언한다. 첫 케이스가 "외부인의 승인은 승인으로 세지 않는다"이다.
-
-**트리거가 둘인 이유.** GitHub은 `GITHUB_TOKEN`이 일으킨 이벤트로 새 워크플로 실행을
-만들지 않는다(`workflow_dispatch`·`repository_dispatch`만 예외). `claude-review.yml`은
-`GITHUB_TOKEN`으로 승인하므로 그 승인은 `pull_request_review`를 발화시키지 못한다 —
-그래서 `workflow_run`으로 리뷰 워크플로의 완료를 듣는다. 사람이 UI에서 누른 승인은
-사람 토큰이라 `pull_request_review`가 정상 발화한다. **하나만 두면 두 경로 중 하나가
-아무 신호 없이 죽는다.**
-
-**CI 워크플로를 추가하면 `auto-merge.yml`도 고쳐야 한다.** `on.workflow_run.workflows`
-목록에 그 워크플로 이름을 넣지 않으면, 승인 시점에 그 체크가 진행 중일 때 자동 머지가
-"보류"로 끝난 뒤 다시 깨어날 트리거가 없어 PR이 승인된 채로 멈춘다.
-
-**그런데 그 편집을 `devbak update`가 되돌린다.** `.github/workflows/**`는 `ci`
-카테고리의 **통째 덮어쓰기** 대상이라, 편집한 프로젝트에 `devbak update --only ci`를
-돌리면 사용자 편집이 말없이 사라진다. 되돌아간 뒤의 증상이 하필 바로 위 문단의 그
-침묵하는 증상이다 — PR이 승인된 채로 멈추고, 무엇이 바뀌었는지 알려 주는 신호가 없다.
-`--only`에서 `ci`를 빼거나, update 후 편집을 다시 얹어야 한다. `--dry-run`이 덮어쓸
-파일 목록을 먼저 보여 주므로 실행 전에 확인할 수 있다.
-
-**승인 수는 `reviewDecision`으로 세지 않는다.** 그 값은 브랜치 보호의 required reviews
-설정에 좌우되고, 설정이 없는 저장소에서는 비어 나온다 — 새로 만든 프로젝트는 전부 그
-상태라 쓰면 영원히 머지되지 않는다. 대신 `reviews`를 리뷰어별 최신으로 접어 직접 센다.
-
-**승인은 그것이 달린 커밋에 묶인다.** 접은 뒤 `APPROVED`로 세는 것은 그 리뷰의
-`commit.oid`가 `headRefOid`와 같을 때뿐이다. `commit`을 확인할 수 없으면 세지 않는다
-— 확인 불가는 막는 쪽이다. 브랜치 보호가 없는 저장소에서는 새 푸시가 기존 승인을
-무효화하지 않으므로, 이 조건이 없으면 **커밋 A에 달린 승인이 커밋 B를 머지시킨다.**
-머지 명령에도 `--match-head-commit`을 넘겨 GitHub이 서버 측에서 한 번 더 거부하게 한다.
-
-접기가 커밋 판정보다 먼저다. 어떤 리뷰어의 *최신* 리뷰가 옛 커밋에 달렸으면 그 사람의
-승인은 빠진다 — 그 판단은 지금 머지될 코드에 대한 것이 아니기 때문이다. 반대로 옛
-커밋에 변경 요청을 남긴 뒤 현재 head를 승인했다면 정상 집계된다.
-
-`CHANGES_REQUESTED`는 커밋을 따지지 않는다. 어느 커밋에 대한 것이든 막는다 — 막는
-쪽은 fail-safe이므로 잘못 막으면 사람이 지우면 그만이지만, 잘못 머지하면 되돌릴 수 없다.
-
-**이 워크플로는 PR 코드를 체크아웃하지 않는다.** `workflow_run`·`pull_request_review`는
-base 저장소 컨텍스트에서 시크릿과 쓰기 토큰을 들고 도는 권한 있는 트리거다. head를
-체크아웃해 무언가 실행하면 fork PR이 임의 코드로 그 토큰을 가져갈 수 있다.
-`tests/auto-merge-workflow.test.ts`가 `actions/checkout` 부재를 단언으로 고정한다.
+**CI 워크플로를 추가해도 고칠 것이 없다.** 스크립트는 `statusCheckRollup` 을
+통째로 집계하므로 새 체크가 자동으로 판정에 들어온다. 예전 `auto-merge.yml` 은
+`on.workflow_run.workflows` 목록에 이름을 손으로 넣어야 했고, 빠뜨리면 PR 이
+승인된 채로 조용히 멈췄다 — 이벤트로 깨어나지 않게 되면서 그 함정이 사라졌다.
 
 ## `devbak version` — 지금 무엇을 쓰고 있는지 본다
 
@@ -304,12 +259,13 @@ devkit update — demo-api (nest)
   덮어쓰기 (2)
     package.json
     tsconfig.json
-  신규 (91)
+  신규 (92)
     .claude/agents/devkit-implementer.md
     .claude/agents/devkit-reviewer.md
     .claude/commands/api-test.md
     .claude/commands/issue-work.md
     .claude/commands/issue.md
+    .claude/commands/merge.md
     .claude/commands/module.md
     .claude/commands/review.md
     .claude/commands/verify.md
@@ -387,7 +343,7 @@ devkit update — demo-api (nest)
     .claude/skills/tdd/references/workflow.md
     .claude/skills/typescript-patterns/SKILL.md
     .claude/skills/verify-implementation/SKILL.md
-    .github/workflows/auto-merge.yml
+    .github/scripts/wait-and-merge.sh
     .github/workflows/claude-review.yml
     .gitignore
     .npmrc
@@ -406,12 +362,13 @@ devkit update — demo-api (nest)
 $ pnpm devbak update ../demo-api --type nest --only claude,ci --dry-run
 devkit update — demo-api (nest)
 
-  신규 (85)
+  신규 (86)
     .claude/agents/devkit-implementer.md
     .claude/agents/devkit-reviewer.md
     .claude/commands/api-test.md
     .claude/commands/issue-work.md
     .claude/commands/issue.md
+    .claude/commands/merge.md
     .claude/commands/module.md
     .claude/commands/review.md
     .claude/commands/verify.md
@@ -489,7 +446,7 @@ devkit update — demo-api (nest)
     .claude/skills/tdd/references/workflow.md
     .claude/skills/typescript-patterns/SKILL.md
     .claude/skills/verify-implementation/SKILL.md
-    .github/workflows/auto-merge.yml
+    .github/scripts/wait-and-merge.sh
     .github/workflows/claude-review.yml
     CLAUDE.md
 ```
