@@ -71,12 +71,12 @@ while [ $# -gt 0 ]; do
           exit 2
           ;;
       esac
-      # --timeout 과 달리 0 을 허용하지 않는다. --interval 0 이면 아래 재시도
-      # 경로와 폴링 루프 끝의 `sleep "$INTERVAL"` 이 `sleep 0` 이 되어 지연
-      # 없이 돈다 — 타임아웃까지 gh API 를 쉬지 않고 두들기는 바쁜 루프가
-      # 된다. `--timeout 0` 은 반대로 "한 번만 확인하고 끝낸다"는 뜻이 있어
-      # (첫 폴링 뒤 데드라인 검사에 곧바로 걸린다) 0 을 허용해도 된다 — 두
-      # 옵션의 하한이 다른 것은 실수가 아니다.
+      # --timeout 과 달리 0 을 허용하지 않는다. --interval 0 이면 폴링이
+      # 잠드는 유일한 지점인 sleep_or_timeout 의 `sleep "$INTERVAL"` 이
+      # `sleep 0` 이 되어 지연 없이 돈다 — 타임아웃까지 gh API 를 쉬지 않고
+      # 두들기는 바쁜 루프가 된다. `--timeout 0` 은 반대로 "한 번만 확인하고
+      # 끝낸다"는 뜻이 있어(첫 폴링 뒤 데드라인 검사에 곧바로 걸린다) 0 을
+      # 허용해도 된다 — 두 옵션의 하한이 다른 것은 실수가 아니다.
       if [ "$INTERVAL" -eq 0 ]; then
         echo "--interval 은 1 이상의 정수여야 합니다: $INTERVAL" >&2
         exit 2
@@ -239,6 +239,32 @@ trap 'rm -rf "$WORK"' EXIT
 DEADLINE=$(($(date +%s) + TIMEOUT))
 LAST=''
 HEAD_SHA=''
+# 조회가 실패한 폴링에서는 판정까지 못 간다. 그래도 아래 타임아웃 메시지가
+# 이 값을 읽으므로 set -u 아래에서 죽지 않도록 미리 비워 둔다.
+VERDICT=''
+
+# 다음 폴링까지 기다린다. 잠들기 전에 데드라인을 본다.
+#
+# 검사가 함수로 나와 있는 것은 재시도 경로 때문이다. 아래 루프에는 조회가
+# 실패했을 때 `continue` 로 되돌아가는 갈래가 둘 있는데, 검사를 루프 끝에만
+# 두면 그 갈래들이 검사를 건너뛴다 — `--timeout` 이 조회가 성공한 폴링에서만
+# 지켜진다. 재시도 상한(FAILS)이 그 초과를 3회분으로 묶어 주기는 하지만 그것은
+# 우연이고, 성공과 실패가 번갈아 카운터를 되돌리면 상한도 듣지 않는다.
+#
+# `continue` 직전에 검사를 복제하지 않는 것은 재시도 경로가 늘 때마다 같은
+# 검사를 또 복제해야 하고, 빠뜨리면 조용히 같은 결함이 재발하기 때문이다.
+#
+# 루프 맨 앞으로 옮기지 않는 것은 `--timeout 0` 때문이다. 그 값은 "한 번만
+# 확인한다"는 뜻이므로(위 --interval 주석 참고) 첫 조회 앞에 검사가 놓이면
+# 아무것도 확인하지 않고 끝난다. 잠들기 직전은 두 계약이 함께 성립하는 유일한
+# 지점이다 — 모든 갈래가 반드시 지나가고, 확인은 이미 한 번 했다.
+sleep_or_timeout() {
+  if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+    echo "타임아웃(${TIMEOUT}초) — 마지막 상태: ${VERDICT:-조회에 실패해 판정에 이르지 못했습니다}" >&2
+    exit 1
+  fi
+  sleep "$INTERVAL"
+}
 
 # 기본값으로 최대 90회 폴링 × 호출 2건, 약 180회의 gh 호출이 오간다.
 # set -euo pipefail 아래에서는 그중 한 번의 502·rate limit·네트워크 순단이
@@ -256,7 +282,7 @@ while :; do
       echo "중단: PR 조회(gh pr view)가 연속 3회 실패했습니다 — 게이트가 막은 것이 아닙니다." >&2
       exit 1
     fi
-    sleep "$INTERVAL"
+    sleep_or_timeout
     continue
   fi
 
@@ -285,7 +311,7 @@ while :; do
       echo "중단: gh api …/statuses 가 연속 3회 실패했습니다 — 게이트가 막은 것이 아닙니다." >&2
       exit 1
     fi
-    sleep "$INTERVAL"
+    sleep_or_timeout
     continue
   fi
   jq --slurpfile s "$WORK/statuses.json" '. + {commitStatuses: $s[0]}' "$WORK/pr.json" \
@@ -314,12 +340,7 @@ while :; do
     stop:*) exit 1 ;;
   esac
 
-  if [ "$(date +%s)" -ge "$DEADLINE" ]; then
-    echo "타임아웃(${TIMEOUT}초) — 마지막 상태: $VERDICT" >&2
-    exit 1
-  fi
-
-  sleep "$INTERVAL"
+  sleep_or_timeout
 done
 
 if [ "$DRY_RUN" = true ]; then
