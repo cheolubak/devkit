@@ -18,6 +18,7 @@ const COMMON = [
   'clean-code',
   'verify-implementation',
   'scope-escape-issue',
+  'issue-to-pr',
 ] as const;
 
 const NEST = [
