@@ -41,10 +41,24 @@ on:
   # PR 과 무관한 커밋에서도 돌지만 아래 PR 번호 확정이 즉시 걸러낸다.
   status:
 
+# `permissions:` 를 한 번이라도 명시하면 **나열되지 않은 스코프는 전부 none**
+# 이 된다. 아래 셋 중 하나만 빠져도 첫 `gh pr view --json statusCheckRollup` 이
+# GraphQL "Resource not accessible by integration" 으로 죽고, `set -euo pipefail`
+# 아래라 "판정하고 머지" 스텝 전체가 exit 1 로 끝난다.
+#
+# 공개 저장소에서는 이 데이터가 스코프 없이도 읽혀 **증상이 전혀 없다**. 그래서
+# 이 결함은 비공개 저장소에서만 드러났고, 공개인 툴킷 저장소에서는 초록불이었다.
+# 스코프를 빼도 되는지 실행으로 판단하지 말 것.
 permissions:
   contents: write # 머지
   pull-requests: write # 머지 API·브랜치 삭제
-  checks: read # statusCheckRollup 조회
+  checks: read # statusCheckRollup 의 CheckRun 노드
+  statuses: read # statusCheckRollup 의 StatusContext 노드 + REST /commits/{sha}/statuses
+  # CheckRun 의 checkSuite.workflowRun 을 읽는 데 필요하다. 아래 게이트가 자기
+  # 자신을 집계에서 뺄 때 쓰는 `.workflowName` 이 정확히 거기서 온다 — 없으면
+  # 그 값이 null 이 되어 자기 체크가 집계에 남고, 그 체크는 항상 IN_PROGRESS
+  # 이므로 영원히 머지되지 않는다.
+  actions: read
 
 # 세 트리거가 **같은 키**를 만들어야 한다. 한쪽을 PR 번호로 잡으면 같은 PR 의
 # 여러 실행이 서로 다른 그룹에 들어가 동시에 머지를 시도한다.

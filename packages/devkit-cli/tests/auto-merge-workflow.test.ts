@@ -38,6 +38,40 @@ function workflowName(yaml: string): string {
   return matched[1].trim().replace(/^['"]|['"]$/g, '');
 }
 
+/**
+ * 워크플로 최상위 `permissions:` 블록을 스코프 → 값 맵으로 읽는다.
+ *
+ * 부분 문자열(`toContain('statuses: read')`)로 보지 않는 것이 요구다. 이 파일의
+ * 주석은 어느 스코프가 왜 필요한지를 설명하며 그 문자열을 **언급**하는데,
+ * 부분 문자열 단언은 주석만 있어도 통과해 버린다 — 실제로 선언되지 않은 권한을
+ * 선언됐다고 보고하는, 이 파일이 이미 여러 번 당한 형태의 공허한 단언이다.
+ * 값까지 돌려주는 이유는 read/write 를 가리지 않기 위해서다 — write 는 read 를
+ * 포함하므로 `actions: write` 인 사본도 통과해야 한다.
+ *
+ * 던지는 것이 요구다 — 블록을 못 찾았을 때 빈 맵을 돌려주면 "권한이 없다"와
+ * "파싱에 실패했다"가 구분되지 않는다.
+ */
+function permissionsOf(yaml: string, source: string): Record<string, string> {
+  const lines = yaml.split('\n');
+  const start = lines.findIndex((line) => /^permissions:[ \t]*$/.test(line));
+  if (start === -1) throw new Error(`${source}: 최상위 permissions: 블록이 없다`);
+
+  const scopes: Record<string, string> = {};
+  for (const line of lines.slice(start + 1)) {
+    // 블록 안의 주석 줄은 건너뛴다. 여기서 멈추면 스코프마다 이유를 적을수록
+    // 뒤쪽 스코프가 파서에게 보이지 않게 되어, 선언돼 있는데도 "없다"고
+    // 보고한다 — 이 파서가 실제로 그렇게 틀렸다.
+    if (/^ {2}#/.test(line)) continue;
+    const entry = /^ {2}([\w-]+):[ \t]*([\w-]+)/.exec(line);
+    if (entry === null) break;
+    scopes[entry[1]] = entry[2];
+  }
+  if (Object.keys(scopes).length === 0) {
+    throw new Error(`${source}: permissions: 블록이 비어 있다`);
+  }
+  return scopes;
+}
+
 async function readAutoMerge(): Promise<string> {
   return readFile(AUTO_MERGE, 'utf8');
 }
@@ -118,6 +152,38 @@ describe('_shared 자동 머지 워크플로', () => {
     expect(doc).toContain('contents: write');
     expect(doc).toContain('pull-requests: write');
     expect(doc).toContain('checks: read');
+  });
+
+  it('statusCheckRollup 이 실제로 요구하는 스코프를 전부 선언한다', async () => {
+    // 비공개 저장소에서 실측한 결함이다. `permissions:` 를 한 번이라도 명시하면
+    // 나열되지 않은 스코프는 전부 none 이 되는데, `gh pr view --json
+    // statusCheckRollup` 의 GraphQL 은 checks 만으로는 다 읽지 못한다.
+    // my-blog-tech PR #2 의 실패 로그가 어느 노드가 막히는지 그대로 알려 준다:
+    //
+    //   Resource not accessible by integration
+    //     (...statusCheckRollup.contexts.nodes.2)                  → StatusContext
+    //     (...statusCheckRollup.contexts.nodes.0.checkSuite.workflowRun) → CheckRun
+    //
+    // 앞쪽은 statuses, 뒤쪽은 actions 다. 셋 중 하나만 빠져도 `set -euo
+    // pipefail` 아래에서 "판정하고 머지" 스텝 전체가 exit 1 로 죽는다.
+    //
+    // 공개 저장소에서는 이 데이터가 스코프 없이도 읽혀 **아무 증상이 없다** —
+    // 툴킷 저장소가 공개라 여기서는 초록불이었고, 비공개인 소비자 저장소에서만
+    // 드러났다. 그래서 실행이 아니라 이 단언이 관문이어야 한다.
+    const perms = permissionsOf(await readAutoMerge(), 'templates/_shared');
+    expect(perms.statuses, 'statuses 스코프가 없다 — StatusContext 를 못 읽는다').toBeDefined();
+    expect(perms.actions, 'actions 스코프가 없다 — checkSuite.workflowRun 을 못 읽는다').toBeDefined();
+  });
+
+  it('.workflowName 을 읽는 데 필요한 actions 권한이 있다', async () => {
+    // 위 단언과 겹쳐 보이지만 지키는 사실이 다르다. 게이트의 others 는
+    // `.workflowName != $SELF` 로 **자기 자신을 집계에서 뺀다**. 그 필드의
+    // 출처가 정확히 checkSuite.workflowRun 이라, actions 가 없으면 설령 GraphQL
+    // 에러를 넘기더라도 workflowName 이 null 로 와 자기 체크가 집계에 남는다 —
+    // 그 체크는 항상 IN_PROGRESS 이므로 영원히 머지되지 않는 데드락이다.
+    const doc = await readAutoMerge();
+    expect(doc).toContain('.workflowName');
+    expect(permissionsOf(doc, 'templates/_shared').actions).toBeDefined();
   });
 
   it('자기 자신을 workflowName 으로 체크 집계에서 뺀다', async () => {
@@ -879,6 +945,18 @@ describe('두 auto-merge.yml 사본의 게이트 동일성', () => {
     const doc = readFileSync(REPO_AUTO_MERGE, 'utf8');
     expect(doc).toMatch(/--json [^\n]*headRefOid/);
     expect(doc).toMatch(/gh pr merge .*--match-head-commit/);
+  });
+
+  it('이 저장소판도 statusCheckRollup 이 요구하는 스코프를 전부 선언한다', () => {
+    // 이 저장소는 공개라 스코프가 빠져도 증상이 없다 — 그래서 실행으로는 절대
+    // 드러나지 않는다. 비공개로 바뀌거나 이 파일을 다른 곳으로 옮기는 순간
+    // "판정하고 머지" 스텝이 통째로 죽는다. 템플릿과 같은 기준을 여기에도 건다.
+    //
+    // 값은 보지 않는다 — 이 사본은 머지 후 release.yml 을 깨워야 해서
+    // `actions: write` 이고, write 는 read 를 포함한다.
+    const perms = permissionsOf(readFileSync(REPO_AUTO_MERGE, 'utf8'), '.github/workflows');
+    expect(perms.statuses).toBeDefined();
+    expect(perms.actions).toBeDefined();
   });
 
   it('이 저장소판과 템플릿판의 jq 프로그램이 글자 그대로 같다', () => {
