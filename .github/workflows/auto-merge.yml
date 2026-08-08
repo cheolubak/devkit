@@ -2,23 +2,47 @@ name: Auto Merge
 
 # 승인이 1건 이상이면 PR 을 rebase 로 머지하고, 그 뒤 release.yml 을 깨운다.
 #
-# 트리거가 pull_request_review 하나인 이유. 이 저장소에는 Claude 리뷰
-# 워크플로가 없어 workflow_run 으로 들을 대상이 없다. 승인은 사람이 하고,
-# 사람 토큰이 만든 이벤트는 정상적으로 워크플로를 트리거한다.
+# 트리거가 셋인 이유. 승인과 체크는 서로 다른 세 경로로 도착하고, 각 경로는
+# 자기만의 트리거로만 깨울 수 있다.
 #
-# 알려진 한계 — PR 에서 도는 CI 워크플로를 나중에 추가하면 이 파일도 고쳐야
-# 한다. 승인 시점에 그 체크가 진행 중이면 아래 게이트가 "보류"로 끝나는데,
-# 다시 깨워 줄 트리거가 없어 PR 이 승인된 채로 멈춘다. 그때는 여기에
+#   1. 사람이 UI 에서 누른 승인 → pull_request_review
+#   2. claude-review.yml 의 통과 신호, 그리고 외부 앱(CodeRabbit 등)의 체크
+#      → status
+#      Claude 는 PR 을 승인하지 않는다 — Actions 토큰으로는 GitHub 이 승인을
+#      거부하므로 통과 여부를 Commit Status(context: claude-review)로 남긴다.
+#      statusCheckRollup 에는 두 형태가 섞여 온다 — Actions 가 만드는 CheckRun
+#      과 Commit Status API 가 만드는 StatusContext 다. 후자의 전환은
+#      workflow_run 으로 들을 수 없다. CodeRabbit 은 리뷰를 체크보다 **먼저**
+#      제출하므로, 이 트리거가 없으면 "통과는 됐는데 체크 진행 중" 상태에서
+#      깨워 줄 것이 없어 PR 이 조용히 멈춘다.
+#   3. 리뷰 워크플로의 완료 → workflow_run (안전망)
+#      GITHUB_TOKEN 이 일으킨 이벤트는 새 워크플로 실행을 만들지 않지만
+#      workflow_run 은 그 규칙의 예외다. 리뷰가 status 를 남기지 못하고
+#      끝났을 때에도 게이트를 한 번 돌려 판정을 로그에 남긴다.
 #
-#   workflow_run:
-#     workflows: ['<그 워크플로의 name>']
-#     types: [completed]
+# 하나라도 빠지면 그 경로가 아무 신호 없이 죽는다.
 #
-# 을 더하고, 잡의 if 에 workflow_run 성공 조건을 넣어야 한다
-# (templates/_shared/.github/workflows/auto-merge.yml 이 그 형태다).
+# 알려진 한계 — PR 에서 도는 새 CI 워크플로(Actions)를 추가하면 그 name 을
+# 위 workflow_run.workflows: 목록에도 넣어야 한다. 외부 앱의 체크는 status 가
+# 이미 덮지만, Actions 워크플로의 CheckRun 완료는 workflow_run 으로만 들을 수
+# 있다. 승인 시점에 그 체크가 진행 중인데 목록에 없으면 아래 게이트가
+# "보류"로 끝나는데, 다시 깨워 줄 트리거가 없어 PR 이 승인된 채로 멈춘다.
+#
+# 주의 — workflow_run 과 status 는 **기본 브랜치에 있는 워크플로 파일만**
+# 실행한다. 이 파일을 고치는 PR 에서는 두 트리거가 동작하지 않는다. 그 PR 은
+# 사람이 승인해 pull_request_review 경로로 머지해야 하며, 새 트리거는 머지된
+# 다음 PR 부터 확인된다.
 on:
   pull_request_review:
     types: [submitted]
+  workflow_run:
+    workflows: ['Claude Code Review']
+    types: [completed]
+  # types 도 브랜치 필터도 받지 않는다 — 모든 커밋 상태 변경에 발화한다.
+  # PR 과 무관한 커밋에서도 돌지만 아래 PR 번호 확정이 즉시 걸러낸다.
+  # 이 워크플로 자신은 CheckRun 을 만들지 Commit Status 를 만들지 않으므로
+  # 자기 이벤트로 자기를 깨우는 순환은 없다.
+  status:
 
 permissions:
   contents: write # 머지
@@ -27,11 +51,18 @@ permissions:
   actions: write # 머지 후 release.yml 을 workflow_dispatch 로 깨운다
 
 concurrency:
-  group: auto-merge-${{ github.event.pull_request.head.sha }}
+  group: auto-merge-${{ github.event.workflow_run.head_sha || github.event.sha || github.event.pull_request.head.sha }}
   cancel-in-progress: false
 
 jobs:
   merge:
+    # 리뷰 워크플로가 실패했으면 머지를 시도할 이유가 없다. status 를
+    # success 로 좁히는 것은 낭비를 줄이기 위해서다 — pending·failure 에서
+    # 돌아도 게이트가 막지만 그때는 어차피 머지할 수 없다.
+    if: >-
+      github.event_name == 'pull_request_review'
+      || github.event.workflow_run.conclusion == 'success'
+      || github.event.state == 'success'
     runs-on: ubuntu-latest
     # 체크아웃 단계가 없다. pull_request_review 는 base 저장소 컨텍스트에서
     # 시크릿과 쓰기 토큰을 들고 도는 **권한 있는 트리거**다 — PR 의 head 를
@@ -42,9 +73,33 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       REPO: ${{ github.repository }}
     steps:
-      - name: 판정하고 머지
+      - name: PR 번호 확정
+        id: pr
         env:
-          PR: ${{ github.event.pull_request.number }}
+          EVENT: ${{ github.event_name }}
+          PR_FROM_REVIEW: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.event.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = 'pull_request_review' ]; then
+            NUMBER="$PR_FROM_REVIEW"
+          else
+            # workflow_run.pull_requests[] 를 쓰지 않는다 — fork 에서 온 PR 에
+            # 대해 비어 있고, 비면 이 워크플로가 **에러 없이** 아무것도 하지
+            # 않는다. head SHA 역조회는 그 실패가 드러난다.
+            NUMBER=$(gh api "repos/$REPO/commits/$HEAD_SHA/pulls" \
+              --jq '[.[] | select(.state == "open")][0].number // empty')
+          fi
+          if [ -z "$NUMBER" ]; then
+            echo "열린 PR 을 찾지 못했습니다 — 대상 없음"
+          else
+            echo "대상 PR: #$NUMBER"
+          fi
+          echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
+      - name: 판정하고 머지
+        if: steps.pr.outputs.number != ''
+        env:
+          PR: ${{ steps.pr.outputs.number }}
           SELF: ${{ github.workflow }}
           OPT_OUT_LABEL: no-auto-merge
         run: |
@@ -65,6 +120,17 @@ jobs:
             echo "skip: fork 에서 온 PR 입니다"
             exit 0
           fi
+
+          # statusCheckRollup 은 StatusContext 의 creator 를 주지 않는다 — gh 가
+          # 요청하는 필드가 context·state·startedAt·targetUrl 뿐이다(실측).
+          # 아래 게이트는 "누가 이 status 를 만들었는가"를 봐야 하므로 REST 로
+          # 따로 받아 합친다. head SHA 로 조회하므로 커밋 고정은 그대로다 —
+          # 새 커밋을 푸시하면 그 커밋의 status 만 보인다.
+          HEAD_SHA=$(jq -r '.headRefOid' pr.json)
+          gh api "repos/$REPO/commits/$HEAD_SHA/status" \
+            --jq '[.statuses[] | {context, state, creator: (.creator.login // "")}]' > statuses.json
+          jq --slurpfile s statuses.json '. + {commitStatuses: $s[0]}' pr.json > pr.merged.json
+          mv pr.merged.json pr.json
 
           # 게이트 전체를 jq 한 프로그램에 모은다. 셸 분기로 흩으면 조건이
           # 늘 때 조용히 빠지는 가지가 생긴다. 결과는 항상 한 줄로 로그에
@@ -100,17 +166,28 @@ jobs:
             # 쓰기 토큰을 들고 돈다. 신원을 보지 않으면 인터넷의 아무나가 승인
             # 한 건으로 main 머지에 도달한다.
             #
-            # github-actions[bot] 을 로그인으로 허용하는 것은 안전하다. fork 에서
-            # 온 PR 에 대해 pull_request 트리거의 GITHUB_TOKEN 은 읽기 전용으로
-            # 강등되므로 claude-review.yml 이 fork PR 을 승인하는 것 자체가
-            # 불가능하다 — 봇 승인이 존재한다는 사실 자체가 same-repo PR 임을
-            # 뜻한다.
+            # 봇 로그인을 특례로 통과시키지 않는다. 예전에는
+            # github-actions[bot] 을 로그인으로 허용했는데 그 분기는 **두 번
+            # 틀렸다** — 둘 다 PR 을 실제로 열어 실측한 것이다.
+            #
+            #   1. Actions 의 GITHUB_TOKEN 은 PR 을 승인할 수 없다. GitHub 이
+            #      "GitHub Actions is not permitted to approve pull requests"
+            #      로 거부한다(워크플로가 자기 승인으로 브랜치 보호를 우회하지
+            #      못하게 막는 플랫폼 제약). 그 분기를 탈 승인이 애초에 생기지
+            #      않는다.
+            #   2. 이 게이트가 읽는 `gh pr view --json` 은 GraphQL 이고, 거기서
+            #      봇 로그인은 대괄호 **없는** `github-actions` 다. REST 만
+            #      `github-actions[bot]` 을 준다. 문자열이 어긋나 설령 승인이
+            #      있어도 매치되지 않았다.
+            #
+            # 이 판정은 **사람 승인 전용**이다. Claude 는 PR 을 승인하지 않고
+            # Commit Status 로 통과 신호를 남기므로(아래 claudeOk) 봇을 위한
+            # 특례가 필요 없다.
             #
             # 목록 리터럴에 index 를 걸지 않는다 — 파이프 안에서는 . 이 그
             # 배열이 되어 .authorAssociation 이 배열 인덱싱으로 죽는다.
             def trusted:
-              ((.authorAssociation // "") | . == "OWNER" or . == "MEMBER" or . == "COLLABORATOR")
-              or ((.author.login // "") == "github-actions[bot]");
+              ((.authorAssociation // "") | . == "OWNER" or . == "MEMBER" or . == "COLLABORATOR");
 
             # 승인은 **그 승인이 달린 커밋이 현재 head 일 때만** 센다. 브랜치
             # 보호가 없으면 새 푸시가 기존 승인을 무효화하지 않는다 — 커밋 A 에
@@ -146,15 +223,46 @@ jobs:
               | map(select(isbad(.conclusion | norm) or isbad(.state | norm)))
               | length;
 
+            # Claude 의 통과 신호는 리뷰 승인이 아니라 **Commit Status** 로 온다.
+            # Actions 의 GITHUB_TOKEN 은 PR 을 승인할 수 없지만(GitHub 이
+            # "GitHub Actions is not permitted to approve pull requests" 로
+            # 거부한다) Commit Status 는 만들 수 있다. 승인 API 를 아예 쓰지
+            # 않으므로 별도 봇 계정도 PAT 도 필요 없다.
+            #
+            # 커밋 고정(onHead)이 필요 없다. statusCheckRollup 은 PR 의
+            # **head 커밋**에 대한 것만 돌려주므로 새 커밋을 푸시하면 이 status
+            # 가 없는 상태로 시작한다 — 옛 승인이 새 커밋을 머지시키던 TOCTOU
+            # 가 이 경로에는 존재하지 않는다.
+            #
+            # context 와 **creator 를 둘 다** 본다. context 만 보면 외부 CI 의
+            # 초록불 하나로 머지되고, creator 를 안 보면 statuses:write 를 가진
+            # 임의의 앱·워크플로가 같은 context 로 success 를 심어 리뷰 없이
+            # 게이트를 통과한다. 승인 쪽이 trusted 로 신원을 거르는 것과 같은
+            # 역할이며, 한쪽만 빠지면 비대칭이다.
+            #
+            # 이 판정이 읽는 것은 statusCheckRollup 이 아니라 commitStatuses 다
+            # — 그쪽은 StatusContext 의 creator 를 주지 않는다(gh 가 요청하는
+            # 필드에 없다). 셸에서 REST /commits/{sha}/status 로 따로 받아
+            # 합친다. head SHA 로 조회하므로 커밋 고정은 그대로다.
+            #
+            # creator 를 확인할 수 없으면 세지 않는다 — onHead 가 commit 없는
+            # 리뷰를 다루는 것과 같은 규율이다.
+            def claudeOk:
+              [ (.commitStatuses // [])[]
+                | select((.context // "") == "claude-review")
+                | select((.state | norm) == "SUCCESS")
+                | select((.creator // "") | . == "github-actions[bot]" or . == "github-actions") ]
+              | length > 0;
+
             if .state != "OPEN" then "skip: PR 이 열려 있지 않습니다 (state=\(.state))"
             elif .isDraft then "skip: draft PR 입니다"
             elif ([(.labels // [])[].name] | index($LABEL)) then "skip: \($LABEL) 라벨이 붙어 있습니다"
             elif rejections > 0 then "skip: 변경 요청이 \(rejections)건 있습니다"
-            elif approvals < 1 and stale > 0 then "skip: 승인 \(stale)건이 현재 head 에 대한 것이 아닙니다"
-            elif approvals < 1 then "skip: 승인이 없습니다"
+            elif approvals < 1 and (claudeOk | not) and stale > 0 then "skip: 승인 \(stale)건이 현재 head 에 대한 것이 아닙니다"
+            elif approvals < 1 and (claudeOk | not) then "skip: 승인도 claude-review 통과도 없습니다"
             elif pending > 0 then "skip: 체크 \(pending)건이 아직 진행 중입니다"
             elif failing > 0 then "skip: 실패한 체크가 \(failing)건 있습니다"
-            else "merge: 승인 \(approvals)건, 체크 통과"
+            else "merge: 승인 \(approvals)건, claude-review \(if claudeOk then "통과" else "없음" end), 체크 통과"
             end
           ' pr.json)
 
@@ -170,7 +278,7 @@ jobs:
           # 게이트는 이미 "승인이 현재 head 에 달렸다"를 확인했다. 그래도 그
           # 판정과 이 호출 사이에 새 푸시가 들어올 수 있고, 그 잔여 창은 서버만
           # 닫을 수 있다 — head 가 바뀌었으면 GitHub 이 머지를 거부한다.
-          HEAD_SHA=$(jq -r '.headRefOid' pr.json)
+          # HEAD_SHA 는 위 Commit Status 조회에서 이미 잡아 뒀다(같은 pr.json).
           gh pr merge "$PR" --repo "$REPO" --rebase --delete-branch --match-head-commit "$HEAD_SHA"
 
           # GITHUB_TOKEN 이 만든 push 는 워크플로를 트리거하지 않는다 —
