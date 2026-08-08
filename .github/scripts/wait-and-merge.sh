@@ -258,12 +258,24 @@ VERDICT=''
 # 확인한다"는 뜻이므로(위 --interval 주석 참고) 첫 조회 앞에 검사가 놓이면
 # 아무것도 확인하지 않고 끝난다. 잠들기 직전은 두 계약이 함께 성립하는 유일한
 # 지점이다 — 모든 갈래가 반드시 지나가고, 확인은 이미 한 번 했다.
+#
+# 잠은 **남은 시간까지만** 잔다. `sleep "$INTERVAL"` 을 통째로 자면 데드라인이
+# 폴링 간격보다 가까울 때(예: --timeout 10 --interval 20) 데드라인을 넘겨 깨어난
+# 뒤 조회를 한 벌 더 태우고서야 타임아웃한다 — `--timeout` 이 상한이 아니라
+# 대략치가 된다. 잘라 자고 데드라인에 닿으면 폴링으로 돌아가지 않고 끝낸다.
 sleep_or_timeout() {
-  if [ "$(date +%s)" -ge "$DEADLINE" ]; then
-    echo "타임아웃(${TIMEOUT}초) — 마지막 상태: ${VERDICT:-조회에 실패해 판정에 이르지 못했습니다}" >&2
-    exit 1
+  local now remaining
+  now=$(date +%s)
+  if [ "$now" -lt "$DEADLINE" ]; then
+    remaining=$((DEADLINE - now))
+    if [ "$INTERVAL" -lt "$remaining" ]; then
+      sleep "$INTERVAL"
+      return
+    fi
+    sleep "$remaining"
   fi
-  sleep "$INTERVAL"
+  echo "타임아웃(${TIMEOUT}초) — 마지막 상태: ${VERDICT:-조회에 실패해 판정에 이르지 못했습니다}" >&2
+  exit 1
 }
 
 # 기본값으로 최대 90회 폴링 × 호출 2건, 약 180회의 gh 호출이 오간다.
