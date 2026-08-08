@@ -174,6 +174,17 @@ describe('devkit create --type nest', () => {
     // 커맨드는 판정 기준을 복제하지 않고 스킬을 가리키는 얇은 래퍼다.
     expect(readFileSync(join(dir, '.claude/commands/module.md'), 'utf8')).toContain('.claude/skills/');
     expect(existsSync(join(dir, '.claude/commands/verify.md'))).toBe(true);
+    // 이슈 스킬 두 개는 COMMON 이라 유형과 무관하게 놓인다.
+    expect(existsSync(join(dir, '.claude/skills/scope-escape-issue/SKILL.md'))).toBe(true);
+    expect(existsSync(join(dir, '.claude/skills/issue-to-pr/SKILL.md'))).toBe(true);
+    expect(existsSync(join(dir, '.claude/commands/issue.md'))).toBe(true);
+    expect(existsSync(join(dir, '.claude/commands/issue-work.md'))).toBe(true);
+
+    // 계약 구획이 복사 과정에서 잘리지 않았는가. 스킬 본문이 통째로
+    // 옮겨졌다는 것을 파일 존재만으로는 알 수 없다.
+    expect(readFileSync(join(dir, '.claude/skills/issue-to-pr/SKILL.md'), 'utf8')).toContain(
+      '<!-- ISSUE-BODY-CONTRACT:START -->',
+    );
     // 생성물은 git 저장소가 아니므로(`--skip-git`) 여기서는 줄이 실렸는지만
     // 본다. git 이 실제로 그 판정을 내리는지는 merge-ignore-git.test.ts 가
     // 진짜 저장소에서 check-ignore 로 확인한다.
