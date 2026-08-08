@@ -54,7 +54,7 @@ Actions 에서 돌고 Commit Status 를 남긴다. 이 설계가 바꾸는 것�
 
 ## 5. 스크립트 계약
 
-```
+```text
 wait-and-merge.sh <PR번호> [--timeout <초>] [--interval <초>] [--dry-run]
 ```
 
@@ -195,7 +195,7 @@ Actions 에서 보고, 안 생겼으면 디스패치를 되살린다. 문서상 
 대신 **은퇴 파일 목록**을 둔다. "템플릿에서 없어진 파일 중 update 가 소비자에게서도
 지워야 하는 것"만 담는 별도 상수다. 지금 들어가는 항목은 하나다.
 
-```
+```text
 .github/workflows/auto-merge.yml
 ```
 

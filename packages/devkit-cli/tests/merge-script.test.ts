@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -141,7 +141,27 @@ describe('인자 파싱 (스크립트를 실제로 실행한다)', () => {
   it('--interval abc 는 exit 2', () => {
     const got = runScript(['42', '--interval', 'abc']);
     expect(got.status).toBe(2);
-    expect(got.stderr).toContain('--interval 은 0 이상의 정수여야 합니다');
+    expect(got.stderr).toContain('--interval 은 1 이상의 정수여야 합니다');
+  });
+
+  it('--interval 0 은 exit 2 (busy-loop 방지, A1)', () => {
+    // --interval 0 은 sleep 0 이 되어 지연 없이 gh API 를 두들기는 바쁜
+    // 루프를 만든다. --timeout 0 과 달리 0 을 허용하지 않는다.
+    const got = runScript(['42', '--interval', '0']);
+    expect(got.status).toBe(2);
+    expect(got.stderr).toContain('--interval 은 1 이상의 정수여야 합니다: 0');
+  });
+
+  it('PR 번호가 숫자가 아니면 exit 2 (A2)', () => {
+    const got = runScript(['abc']);
+    expect(got.status).toBe(2);
+    expect(got.stderr).toContain('PR 번호는 양의 정수여야 합니다: abc');
+  });
+
+  it('PR 번호 0 은 exit 2 (A2)', () => {
+    const got = runScript(['0']);
+    expect(got.status).toBe(2);
+    expect(got.stderr).toContain('PR 번호는 1 이상이어야 합니다: 0');
   });
 
   it('--help 는 exit 0 이고 사용법을 stdout 에 낸다', () => {
@@ -383,6 +403,66 @@ describe('머지 게이트 판정 (jq 를 실제로 돌린다)', () => {
       prJson({
         commitStatuses: [claudeStatus('success')],
         statusCheckRollup: [{ context: 'CodeRabbit', state: 'FAILURE' }],
+      }),
+    );
+    expect(got).toMatch(/^stop:/);
+  });
+
+  it('외부 CI 의 Status API 형태(.state)로 통과를 판정한다', () => {
+    // .state 만 있는 항목(StatusContext)이 SUCCESS 면 통과해야 한다 —
+    // .conclusion 이 없다는 이유로 차단되면 정당한 외부 CI 가 전부 막힌다.
+    const got = verdict(
+      prJson({
+        commitStatuses: [claudeStatus('success')],
+        statusCheckRollup: [{ context: 'CodeRabbit', state: 'SUCCESS' }],
+      }),
+    );
+    expect(got).toMatch(/^merge:/);
+  });
+
+  it('완료된 CheckRun 의 conclusion 이 SKIPPED 면 통과한다', () => {
+    // 경로 필터로 건너뛴 워크플로가 SKIPPED 로 완료되는 것은 매우 흔하다.
+    // 이것을 막으면 자신과 무관한 워크플로를 가진 정당한 PR 이 전부 막힌다.
+    const got = verdict(
+      prJson({
+        commitStatuses: [claudeStatus('success')],
+        statusCheckRollup: [{ name: 'docs-only', status: 'COMPLETED', conclusion: 'SKIPPED' }],
+      }),
+    );
+    expect(got).toMatch(/^merge:/);
+  });
+
+  it('완료된 CheckRun 의 conclusion 이 NEUTRAL 이면 통과한다', () => {
+    const got = verdict(
+      prJson({
+        commitStatuses: [claudeStatus('success')],
+        statusCheckRollup: [{ name: 'optional', status: 'COMPLETED', conclusion: 'NEUTRAL' }],
+      }),
+    );
+    expect(got).toMatch(/^merge:/);
+  });
+
+  it('완료된 CheckRun 의 conclusion 이 STALE 이면 멈춘다', () => {
+    // CodeRabbit 은 SUCCESS 만 허용하라고 지적했지만, 거부 목록이 아니라
+    // 허용 목록(SUCCESS·SKIPPED·NEUTRAL)으로 고쳤다. STALE 은 그 허용
+    // 목록에 없으므로 여전히 막힌다.
+    const got = verdict(
+      prJson({
+        commitStatuses: [claudeStatus('success')],
+        statusCheckRollup: [{ name: 'CI', status: 'COMPLETED', conclusion: 'STALE' }],
+      }),
+    );
+    expect(got).toMatch(/^stop:/);
+  });
+
+  it('알려지지 않은 conclusion 값은 멈춘다(fail-safe)', () => {
+    // 거부 목록이었다면 GitHub 이 새 conclusion 값을 추가할 때마다 그 값이
+    // 허용 목록 갱신 없이 조용히 통과했다. 허용 목록이므로 모르는 값은
+    // 자동으로 차단된다.
+    const got = verdict(
+      prJson({
+        commitStatuses: [claudeStatus('success')],
+        statusCheckRollup: [{ name: 'CI', status: 'COMPLETED', conclusion: 'FUTURE_VALUE' }],
       }),
     );
     expect(got).toMatch(/^stop:/);
@@ -809,5 +889,208 @@ describe('이 저장소판 리뷰 워크플로', () => {
     const trigger = /^on:\n\s*([\w_]+):/m.exec(doc);
     expect(trigger, 'on: 트리거 키를 찾지 못했다').not.toBeNull();
     expect(trigger?.[1]).toBe('pull_request');
+  });
+});
+
+/**
+ * PATH 앞에 가짜 `gh` 를 놓고 wait-and-merge.sh 를 통째로 실행한다.
+ *
+ * 위의 '인자 파싱'은 gh 호출 전에 끝나는 경로만 실제로 돌리고, '머지 게이트
+ * 판정'은 jq 게이트만 따로 돌린다. 폴링 루프·재시도·기본 브랜치 검사·머지
+ * 호출 자체는 지금까지 텍스트로만 읽었다 — CodeRabbit 과 이 브랜치의 최종
+ * 리뷰가 둘 다 이 빈틈을 지적했다. 가짜 gh 는 실제 gh CLI 의 관련 서브커맨드만
+ * 흉내 내되, `--jq` 필터는 인자로 받은 문자열을 진짜 jq 로 돌린다 — 필터
+ * 자체가 바뀌면 이 가짜도 그 변화를 따라가야 테스트가 계속 의미를 갖는다.
+ */
+interface FakeGh {
+  dir: string;
+  calls(): string[];
+  writePr(n: number | 'last', pr: Record<string, unknown>): void;
+  writeStatuses(n: number | 'last', statuses: unknown[]): void;
+}
+
+function makeFakeGh(repo: string): FakeGh {
+  const dir = mkdtempSync(join(tmpdir(), 'devbak-fake-gh-'));
+  writeFileSync(join(dir, 'repo.txt'), `${repo}\n`);
+  writeFileSync(join(dir, 'calls.log'), '');
+
+  const script = `#!/usr/bin/env bash
+set -euo pipefail
+DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+printf '%s\\n' "$*" >> "$DIR/calls.log"
+
+case "$1" in
+  repo)
+    cat "$DIR/repo.txt"
+    ;;
+  api)
+    case "$2" in
+      *auto-merge.yml)
+        # 기본 브랜치에 없다고 가정한다(F1 검사 통과, 경고 없음).
+        exit 1
+        ;;
+      */statuses)
+        N=$(cat "$DIR/poll.count" 2>/dev/null || echo 1)
+        FILTER=""
+        prev=""
+        for a in "$@"; do
+          if [ "$prev" = "--jq" ]; then FILTER="$a"; fi
+          prev="$a"
+        done
+        FIXTURE="$DIR/statuses-$N.json"
+        [ -f "$FIXTURE" ] || FIXTURE="$DIR/statuses-last.json"
+        jq -c "$FILTER" "$FIXTURE"
+        ;;
+      *)
+        echo "fake gh: unhandled api $2" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  pr)
+    case "$2" in
+      view)
+        N=$(( $(cat "$DIR/poll.count" 2>/dev/null || echo 0) + 1 ))
+        echo "$N" > "$DIR/poll.count"
+        FIXTURE="$DIR/pr-$N.json"
+        [ -f "$FIXTURE" ] || FIXTURE="$DIR/pr-last.json"
+        cat "$FIXTURE"
+        ;;
+      merge)
+        exit 0
+        ;;
+      *)
+        echo "fake gh: unhandled pr $2" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  *)
+    echo "fake gh: unhandled $1" >&2
+    exit 1
+    ;;
+esac
+`;
+  const ghPath = join(dir, 'gh');
+  writeFileSync(ghPath, script);
+  chmodSync(ghPath, 0o755);
+
+  return {
+    dir,
+    calls: () =>
+      readFileSync(join(dir, 'calls.log'), 'utf8')
+        .split('\n')
+        .filter((line) => line.length > 0),
+    writePr: (n, pr) => writeFileSync(join(dir, `pr-${n}.json`), JSON.stringify(pr)),
+    writeStatuses: (n, statuses) =>
+      writeFileSync(join(dir, `statuses-${n}.json`), JSON.stringify(statuses)),
+  };
+}
+
+function runFullScript(
+  fake: FakeGh,
+  args: string[],
+): { status: number; stdout: string; stderr: string } {
+  try {
+    const stdout = execFileSync('bash', [TEMPLATE_SCRIPT, ...args], {
+      encoding: 'utf8',
+      // 가짜 gh 를 실제 gh 보다 앞에 두되, bash·jq·mktemp·date 등은 그대로
+      // 시스템 PATH 에서 찾아야 하므로 대체가 아니라 앞에 붙인다.
+      env: { ...process.env, PATH: `${fake.dir}:${process.env.PATH}` },
+    });
+    return { status: 0, stdout, stderr: '' };
+  } catch (e) {
+    const err = e as { status: number | null; stdout?: string; stderr?: string };
+    return { status: err.status ?? -1, stdout: err.stdout ?? '', stderr: err.stderr ?? '' };
+  }
+}
+
+const FAKE_REPO = 'acme/widgets';
+const FAKE_SHA = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const CLAUDE_SUCCESS_STATUS = [
+  { context: 'claude-review', creator: { login: 'github-actions[bot]' }, id: 1, state: 'success' },
+];
+
+describe('스크립트 전체 실행 (가짜 gh 를 PATH 에 놓고 통째로 돌린다)', () => {
+  it('wait: 에서 merge: 로 전이하며 실제로 머지를 호출한다', () => {
+    const fake = makeFakeGh(FAKE_REPO);
+    try {
+      // 첫 폴링: claude-review 신호 없음 → wait. 둘째 폴링: 통과 → merge.
+      fake.writePr(1, prJson({ headRefOid: FAKE_SHA }));
+      fake.writeStatuses(1, []);
+      fake.writePr(2, prJson({ headRefOid: FAKE_SHA }));
+      fake.writeStatuses(2, CLAUDE_SUCCESS_STATUS);
+
+      const got = runFullScript(fake, ['7', '--interval', '1', '--timeout', '30']);
+
+      expect(got.status).toBe(0);
+      expect(got.stdout).toContain('wait: claude-review 신호가 아직 없습니다');
+      expect(got.stdout).toContain('merge:');
+      expect(got.stdout).toContain('머지했습니다 (#7');
+
+      // 머지가 실제로 호출됐는지는 종료 코드만으로 알 수 없다 — 가짜 gh 의
+      // 호출 기록으로 증명한다. 게이트가 읽은 head 커밋에 고정됐는지도 함께.
+      const mergeCall = fake.calls().find((c) => c.startsWith('pr merge'));
+      expect(mergeCall, '머지 호출이 기록에 없다').toBeDefined();
+      expect(mergeCall).toContain(' 7 ');
+      expect(mergeCall).toContain(`--match-head-commit ${FAKE_SHA}`);
+    } finally {
+      rmSync(fake.dir, { recursive: true, force: true });
+    }
+  });
+
+  it('stop: 이면 머지를 부르지 않고 exit 1 한다', () => {
+    const fake = makeFakeGh(FAKE_REPO);
+    try {
+      fake.writePr(
+        'last',
+        prJson({ headRefOid: FAKE_SHA, reviews: [review('someone', 'CHANGES_REQUESTED')] }),
+      );
+      fake.writeStatuses('last', []);
+
+      const got = runFullScript(fake, ['7', '--interval', '1', '--timeout', '30']);
+
+      expect(got.status).toBe(1);
+      expect(got.stdout).toContain('stop: 변경 요청이 1건 있습니다');
+      expect(fake.calls().some((c) => c.startsWith('pr merge'))).toBe(false);
+    } finally {
+      rmSync(fake.dir, { recursive: true, force: true });
+    }
+  });
+
+  it('타임아웃이면 exit 1 하고 마지막 사유를 출력한다', () => {
+    const fake = makeFakeGh(FAKE_REPO);
+    try {
+      // 'last' 만 두면 몇 번을 폴링하든 claude-review 신호가 계속 없다 —
+      // wait: 에서 절대 벗어나지 못하고 타임아웃까지 간다.
+      fake.writePr('last', prJson({ headRefOid: FAKE_SHA }));
+      fake.writeStatuses('last', []);
+
+      const got = runFullScript(fake, ['7', '--timeout', '1', '--interval', '1']);
+
+      expect(got.status).toBe(1);
+      expect(got.stderr).toContain('타임아웃(1초)');
+      expect(got.stderr).toContain('wait: claude-review 신호가 아직 없습니다');
+      expect(fake.calls().some((c) => c.startsWith('pr merge'))).toBe(false);
+    } finally {
+      rmSync(fake.dir, { recursive: true, force: true });
+    }
+  });
+
+  it('--dry-run 은 판정이 merge: 여도 실제로 머지하지 않는다', () => {
+    const fake = makeFakeGh(FAKE_REPO);
+    try {
+      fake.writePr('last', prJson({ headRefOid: FAKE_SHA }));
+      fake.writeStatuses('last', CLAUDE_SUCCESS_STATUS);
+
+      const got = runFullScript(fake, ['7', '--dry-run', '--interval', '1', '--timeout', '30']);
+
+      expect(got.status).toBe(0);
+      expect(got.stdout).toContain('merge:');
+      expect(got.stdout).toContain('--dry-run — 머지하지 않았습니다.');
+      expect(fake.calls().some((c) => c.startsWith('pr merge'))).toBe(false);
+    } finally {
+      rmSync(fake.dir, { recursive: true, force: true });
+    }
   });
 });

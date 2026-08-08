@@ -67,10 +67,20 @@ while [ $# -gt 0 ]; do
       INTERVAL="$2"
       case "$INTERVAL" in
         '' | *[!0-9]*)
-          echo "--interval 은 0 이상의 정수여야 합니다: $INTERVAL" >&2
+          echo "--interval 은 1 이상의 정수여야 합니다: $INTERVAL" >&2
           exit 2
           ;;
       esac
+      # --timeout 과 달리 0 을 허용하지 않는다. --interval 0 이면 아래 재시도
+      # 경로와 폴링 루프 끝의 `sleep "$INTERVAL"` 이 `sleep 0` 이 되어 지연
+      # 없이 돈다 — 타임아웃까지 gh API 를 쉬지 않고 두들기는 바쁜 루프가
+      # 된다. `--timeout 0` 은 반대로 "한 번만 확인하고 끝낸다"는 뜻이 있어
+      # (첫 폴링 뒤 데드라인 검사에 곧바로 걸린다) 0 을 허용해도 된다 — 두
+      # 옵션의 하한이 다른 것은 실수가 아니다.
+      if [ "$INTERVAL" -eq 0 ]; then
+        echo "--interval 은 1 이상의 정수여야 합니다: $INTERVAL" >&2
+        exit 2
+      fi
       shift 2
       ;;
     --dry-run)
@@ -100,6 +110,19 @@ done
 if [ -z "$PR" ]; then
   echo "PR 번호가 필요합니다." >&2
   usage >&2
+  exit 2
+fi
+
+# 검증 없이 그대로 gh 에 넘기면 임의 문자열이 API 호출까지 흘러가 알아보기
+# 어려운 에러로 죽는다. PR 번호는 1부터 시작하므로 0 도 거부한다.
+case "$PR" in
+  '' | *[!0-9]*)
+    echo "PR 번호는 양의 정수여야 합니다: $PR" >&2
+    exit 2
+    ;;
+esac
+if [ "$PR" -eq 0 ]; then
+  echo "PR 번호는 1 이상이어야 합니다: $PR" >&2
   exit 2
 fi
 
@@ -143,15 +166,37 @@ def rejections: latest | map(select(.state == "CHANGES_REQUESTED")) | length;
 # (.status/.conclusion)과 Commit Status API 가 만드는 StatusContext(.state).
 # 한쪽만 보면 나머지가 항상 통과로 세어진다.
 def checks: (.statusCheckRollup // []);
-def pending:
-  checks
-  | map(select(((.status | norm) | . != "" and . != "COMPLETED")
-            or ((.state | norm) == "PENDING")))
-  | length;
-def failing:
-  checks
-  | map(select(isbad(.conclusion | norm) or isbad(.state | norm)))
-  | length;
+
+# 완료된 CheckRun 의 conclusion 허용 목록. SUCCESS 는 물론 SKIPPED(경로
+# 필터로 건너뛴 워크플로가 매우 흔히 이 값으로 완료된다)·NEUTRAL 도 통과시킨다
+# — 이 둘을 막으면 자신과 무관한 워크플로를 가진 정당한 PR 이 전부 막힌다.
+# **거부 목록이 아니라 허용 목록이다**: GitHub 이 새 conclusion 값을 추가해도
+# (예전에 STALE 이 그랬듯) 허용 목록에 없으면 자동으로 차단된다 — 거부
+# 목록이었다면 새 값이 아무도 모르게 통과했다.
+def okConclusion($v): ["SUCCESS", "SKIPPED", "NEUTRAL"] | index($v) != null;
+
+# CheckRun(.status/.conclusion) 과 StatusContext(.state) 두 형태를 값이 아니라
+# **어느 필드가 있는가**로 먼저 가린다. `.state` 값만 보고 가르면 진행 중이라
+# `.conclusion` 이 아직 없는 CheckRun 이 StatusContext 로 오판된다. 우선순위:
+# 1) 완료된 CheckRun(.conclusion 이 값을 가짐) → 허용 목록으로 판정
+# 2) 아직 안 끝난 CheckRun(.status 는 있지만 COMPLETED 아님) → pending
+# 3) StatusContext(.state 만 있음) → SUCCESS 만 통과, PENDING 은 pending
+# 4) 위 어디에도 안 걸리는 형태 불명 항목 → 차단(fail-safe) — 여기엔 "완료로
+#    표시됐는데 conclusion 이 없는" 정상 API 라면 없어야 할 값도 포함된다.
+def classify:
+  if (.conclusion // null) != null then
+    (if okConclusion(.conclusion | norm) then "ok" else "bad" end)
+  elif (.status // null) != null then
+    (if (.status | norm) == "COMPLETED" then "bad" else "pending" end)
+  elif (.state // null) != null then
+    (if (.state | norm) == "SUCCESS" then "ok"
+     elif (.state | norm) == "PENDING" then "pending"
+     else "bad" end)
+  else "bad"
+  end;
+
+def pending: checks | map(select(classify == "pending")) | length;
+def failing: checks | map(select(classify == "bad")) | length;
 
 # Claude 의 통과 신호는 리뷰 승인이 아니라 Commit Status 로 온다. Actions 의
 # GITHUB_TOKEN 으로는 PR 을 승인할 수 없지만(GitHub 이 거부한다) Commit Status
@@ -252,8 +297,15 @@ while :; do
   VERDICT=$(jq -r --arg LABEL "$OPT_OUT_LABEL" "$GATE" "$WORK/pr.json")
 
   # 바뀐 판정만 출력한다. 매 폴링마다 같은 줄을 찍으면 정작 바뀐 순간이 묻힌다.
+  # `merge:` 만은 여기서 찍지 않는다 — 문서(README·merge.md)는 `merge:` 를
+  # "머지했다"로 정의하는데, 여기서 찍으면 그 뒤의 `gh pr merge` 가 head 커밋
+  # 변경이나 API 실패로 죽었을 때 사용자가 `merge:` 를 보고도 머지되지 않은
+  # 상태를 갖는다. 실제 머지가 성공한 뒤(아래)에 찍는다.
   if [ "$VERDICT" != "$LAST" ]; then
-    echo "$VERDICT"
+    case "$VERDICT" in
+      merge:*) ;;
+      *) echo "$VERDICT" ;;
+    esac
     LAST="$VERDICT"
   fi
 
@@ -271,6 +323,10 @@ while :; do
 done
 
 if [ "$DRY_RUN" = true ]; then
+  # --dry-run 은 머지하지 않으므로 위에서 미룬 `merge:` 판정 줄을 여기서
+  # 찍는다 — 머지 성공 뒤로 미룰 이유(실패하면 못 믿을 출력이 된다)가
+  # --dry-run 에는 없다. 애초에 아무것도 실행하지 않기 때문이다.
+  echo "$VERDICT"
   echo "--dry-run — 머지하지 않았습니다."
   exit 0
 fi
@@ -279,5 +335,7 @@ fi
 # 수 있다 — head 가 바뀌었으면 GitHub 이 머지를 거부한다.
 gh pr merge "$PR" --repo "$REPO" --rebase --delete-branch --match-head-commit "$HEAD_SHA"
 
+# 머지가 실제로 성공한 뒤에만 `merge:` 를 찍는다(위 루프에서 미뤄 둔 것).
+echo "$VERDICT"
 echo "머지했습니다 (#$PR, $HEAD_SHA)."
 echo "release.yml 은 main push 로 깨어납니다 — Actions 에 실행이 생겼는지 확인하세요."

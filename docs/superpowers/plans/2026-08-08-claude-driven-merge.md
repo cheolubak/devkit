@@ -8,6 +8,14 @@
 
 **Tech Stack:** bash, `gh` CLI, `jq`, TypeScript(devkit-cli), vitest
 
+> **이 문서는 계획 시점의 기록이다.** 아래 코드 블록은 작성 당시의 계획이고,
+> 실제로 랜딩한 코드는 리뷰 루프(CodeRabbit·최종 리뷰)를 거치며 게이트 축약
+> 키, 기본 브랜치의 잔존 워크플로 검사, `gh` 일시 실패 재시도, `--timeout`·
+> `--interval`·PR 번호 인자 검증 등이 계획서에는 없던 형태로 달라졌다. 코드
+> 블록은 과거 기록으로 남기고 고치지 않는다 — 현재 동작의 진실은
+> `.github/scripts/wait-and-merge.sh` 와
+> `packages/devkit-cli/tests/merge-script.test.ts` 다.
+
 ## Global Constraints
 
 - 설계서: `docs/superpowers/specs/2026-08-08-claude-driven-merge-design.md`

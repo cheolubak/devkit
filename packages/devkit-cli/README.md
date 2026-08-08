@@ -175,8 +175,13 @@ bash .github/scripts/wait-and-merge.sh <PR번호>
 | --- | --- |
 | 상태 | PR 이 열려 있고 draft 가 아님 |
 | 리뷰 | 철회되지 않은 변경 요청이 없음 |
-| 통과 신호 | `claude-review` Commit Status 가 `success` 이고 생성자가 `github-actions[bot]` |
+| 통과 신호 | `claude-review` Commit Status 가 `success` 이고 생성자가 `github-actions[bot]` 또는 `github-actions` |
 | 체크 | 다른 체크가 전부 완료·성공 |
+
+생성자가 둘인 이유는 표기 차이다 — GraphQL(`gh pr view`)은 Actions 봇 로그인을
+`github-actions`로 주고, REST(`gh api …/statuses`)는 `github-actions[bot]`로
+준다. 게이트가 읽는 것은 REST 쪽이라 실제로는 `github-actions[bot]`만 오지만,
+둘 다 받아 두지 않으면 GitHub 이 언제 표기를 바꿔도 알아채기 어렵다.
 
 `claude-review` 는 **context 와 creator 를 둘 다** 본다. context 만 보면 외부 CI
 의 초록불 하나로 머지되고, creator 를 안 보면 `statuses:write` 를 가진 임의의
@@ -370,7 +375,7 @@ devkit update — demo-api (nest)
 | 카테고리 | 대상 |
 | --- | --- |
 | `claude` | `CLAUDE.md`, `.claude/agents/**`, `.claude/commands/**` |
-| `ci` | `.github/workflows/**` |
+| `ci` | `.github/workflows/**`, `.github/scripts/**` |
 | `lint` | `eslint.config.mjs`, `.prettierignore`, `package.json`의 `prettier` 키와 `scripts.lint`·`format`·`format:check` |
 | `ts` | `tsconfig.json`, `tsconfig.build.json` |
 | `test` | `jest.config.js`, `jest-e2e.config.js`, `test/jest-e2e.config.ts`, `vitest.config.ts`, `package.json`의 `jest` 키와 `scripts.test`·`test:watch`·`test:e2e` |
@@ -430,7 +435,7 @@ devkit update — demo-api (nest)
 
 **JSON 파일은 통째로 덮지 않는다.** `package.json`·`tsconfig.json`은 키 단위로 병합되므로 직접 추가한 의존성과 `compilerOptions.paths`가 보존된다. 대가로 **키 삭제는 전파되지 않는다.**
 
-**JSON이 아닌 오버레이 파일은 반대로 통째로 덮는다 — `.gitignore`만 예외다(위 참고).** 여기 해당하는 것: `CLAUDE.md`(`claude`), `eslint.config.mjs`·`.prettierignore`(`lint`), `jest.config.js`·`jest-e2e.config.js`·`vitest.config.ts`(`test`), `pnpm-workspace.yaml`(`repo`, monorepo 전용), `.claude/agents/**`·`.claude/commands/**`(`claude`), `.github/workflows/**`(`ci`). 프로젝트 `CLAUDE.md`에 쌓아 온 규칙처럼 사용자가 직접 손댄 내용도 update 한 번에 템플릿판으로 되돌아간다. 데이터 손실은 아니다 — 변경 목록에 "덮어쓰기"로 뜨고, 워킹트리 dirty 게이트 덕에 `git checkout -- <path>`로 되돌릴 수 있다. 특정 파일군을 통째로 빼려면 `--only`에서 그 카테고리를 제외하면 된다 — 예: `CLAUDE.md`를 건드리지 않으려면 `--only ci,lint,ts,test,deps,repo`로 `claude`를 뺀다.
+**JSON이 아닌 오버레이 파일은 반대로 통째로 덮는다 — `.gitignore`만 예외다(위 참고).** 여기 해당하는 것: `CLAUDE.md`(`claude`), `eslint.config.mjs`·`.prettierignore`(`lint`), `jest.config.js`·`jest-e2e.config.js`·`vitest.config.ts`(`test`), `pnpm-workspace.yaml`(`repo`, monorepo 전용), `.claude/agents/**`·`.claude/commands/**`(`claude`), `.github/workflows/**`·`.github/scripts/**`(`ci`). 프로젝트 `CLAUDE.md`에 쌓아 온 규칙처럼 사용자가 직접 손댄 내용도 update 한 번에 템플릿판으로 되돌아간다. 데이터 손실은 아니다 — 변경 목록에 "덮어쓰기"로 뜨고, 워킹트리 dirty 게이트 덕에 `git checkout -- <path>`로 되돌릴 수 있다. 특정 파일군을 통째로 빼려면 `--only`에서 그 카테고리를 제외하면 된다 — 예: `CLAUDE.md`를 건드리지 않으려면 `--only ci,lint,ts,test,deps,repo`로 `claude`를 뺀다.
 
 **마커가 없는 첫 적용에서는 통째로 교체되는 파일을 따로 알린다.** 변경 목록의 "덮어쓰기"는 두 가지를 한 단어로 뭉뚱그린다 — `package.json`처럼 기존 위에 패치가 얹히는 것과, `eslint.config.mjs`처럼 통째로 교체되는 것. 마커가 없다는 건 devkit이 이 프로젝트를 관리한 적이 없다는 뜻이고, 그러면 덮이는 것은 전부 사람이 쓴 것이므로 뒤쪽만 따로 이름 붙여 낸다. 마커가 있으면 그 "덮어쓰기"는 devkit 자신의 이전 산출물 갱신이라 알리지 않는다(매번 뜨면 노이즈가 된다).
 
