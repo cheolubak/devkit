@@ -42,7 +42,7 @@ jobs:
       statuses: write # 통과 신호를 Commit Status 로 남긴다
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Run Claude Code Review
         uses: anthropics/claude-code-action@v1

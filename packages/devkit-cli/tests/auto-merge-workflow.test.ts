@@ -1007,16 +1007,18 @@ describe('이 저장소판 auto-merge 의 트리거 배선', () => {
     const files = await readdir(REPO_WORKFLOWS_DIR);
     const yamlFiles = files.filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
 
-    const prWorkflowNames: string[] = [];
-    for (const file of yamlFiles) {
-      const doc = await readFile(join(REPO_WORKFLOWS_DIR, file), 'utf8');
-      // pull_request_review: 를 pull_request: 로 잘못 매치하면 auto-merge.yml
-      // 자신이 대상에 들어와 이 테스트가 항상 실패한다 — 줄 구조로 정확히
-      // 가른다(값이 없는 최상위 트리거 키만, 2-space 들여쓰기로).
-      if (/^ {2}pull_request:[ \t]*$/m.test(doc)) {
-        prWorkflowNames.push(workflowName(doc));
-      }
-    }
+    // 파일끼리 독립이라 병렬로 읽는다. Promise.all 이 입력 순서를 보존하므로
+    // 아래에서 만드는 이름 목록의 순서도 순차로 읽을 때와 같다.
+    const docs = await Promise.all(
+      yamlFiles.map((file) => readFile(join(REPO_WORKFLOWS_DIR, file), 'utf8')),
+    );
+
+    // pull_request_review: 를 pull_request: 로 잘못 매치하면 auto-merge.yml
+    // 자신이 대상에 들어와 이 테스트가 항상 실패한다 — 줄 구조로 정확히
+    // 가른다(값이 없는 최상위 트리거 키만, 2-space 들여쓰기로).
+    const prWorkflowNames = docs
+      .filter((doc) => /^ {2}pull_request:[ \t]*$/m.test(doc))
+      .map((doc) => workflowName(doc));
 
     // 매치가 0건이면 이 관문은 아무것도 검증하지 않는다 — 조용히 통과시키지
     // 않고 던진다. 지금은 claude-review.yml 하나가 걸려 통과하고, 새 PR CI

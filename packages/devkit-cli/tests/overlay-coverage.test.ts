@@ -29,23 +29,28 @@ function consumedPath(type: string, relPath: string): string {
 }
 
 /** templates/<type>/ 아래의 모든 파일을 (템플릿 상대 경로, 배포 경로)로 수집한다. */
-async function collectOverlayFiles(): Promise<{ type: string; relPath: string; consumedPath: string }[]> {
-  const collected: { type: string; relPath: string; consumedPath: string }[] = [];
+async function collectOverlayFiles(): Promise<
+  { type: string; relPath: string; consumedPath: string }[]
+> {
   const types = await readdir(TEMPLATES_DIR, { withFileTypes: true });
+  // 타입 디렉토리끼리는 서로를 참조하지 않아 병렬로 읽어도 결과가 같다.
+  // Promise.all 이 입력 순서를 보존하므로 flat 뒤의 순서도 순차 때와 같다.
+  const perType = await Promise.all(
+    types
+      .filter((type) => type.isDirectory())
+      .map(async (type) => {
+        const root = `${TEMPLATES_DIR}/${type.name}`;
+        const entries = await readdir(root, { recursive: true, withFileTypes: true });
+        return entries
+          .filter((entry) => entry.isFile())
+          .map((entry) => {
+            const relPath = `${entry.parentPath}/${entry.name}`.slice(root.length + 1);
+            return { type: type.name, relPath, consumedPath: consumedPath(type.name, relPath) };
+          });
+      }),
+  );
 
-  for (const type of types) {
-    if (!type.isDirectory()) continue;
-    const root = `${TEMPLATES_DIR}/${type.name}`;
-    const entries = await readdir(root, { recursive: true, withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isFile()) continue;
-      const absDir = entry.parentPath;
-      const relPath = `${absDir}/${entry.name}`.slice(root.length + 1);
-      collected.push({ type: type.name, relPath, consumedPath: consumedPath(type.name, relPath) });
-    }
-  }
-
-  return collected;
+  return perType.flat();
 }
 
 const ALL_TYPE_DIRS = ['_shared', 'nest', 'next', 'monorepo'] as const;

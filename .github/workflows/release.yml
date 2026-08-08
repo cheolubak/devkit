@@ -22,17 +22,26 @@ jobs:
     # main 이 아닌 브랜치에서 하면 그 브랜치에서 버전을 올리고 게시해버린다.
     if: github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4
+      # v6 부터 자격증명이 .git/config 가 아니라 $RUNNER_TEMP 아래 별도 파일에
+      # 들어간다. 아래 "커밋과 태그" 의 git push 는 그대로 동작한다 — 그 변경이
+      # 깨는 것은 Docker container action 안에서 git 을 부르는 경로뿐이다.
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # 지난 릴리스 태그 이후를 읽어야 한다
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24 # .ts 를 네이티브로 실행한다(빌드 없이 릴리스 스크립트 호출)
           cache: pnpm
           # 게시 인증에 필요하다 — 없으면 .npmrc 가 안 생겨 pnpm publish 가
           # //npm.pkg.github.com/:_authToken 을 못 찾고 401 로 실패한다.
+          #
+          # setup-node v7 부터 더미 NODE_AUTH_TOKEN 을 내보내지 않는다. 그래서
+          # 아래 install 단계(토큰을 주지 않는다)에서 pnpm 이 "Failed to replace
+          # env in config: ${NODE_AUTH_TOKEN}" 을 **경고로** 남긴다 — 설치는
+          # 정상 진행된다(실측). 토큰은 게시 단계에만 주는 현재 설계가 맞으므로
+          # 그 경고를 없애려고 잡 전체에 토큰을 노출시키지 않는다.
           registry-url: https://npm.pkg.github.com
           scope: '@cheolubak'
 

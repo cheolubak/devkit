@@ -23,5 +23,18 @@
   "rules": {
     // tsconfig target이 ES2022라 toSorted(ES2023)를 쓸 수 없다
     "unicorn/no-array-sort": "off"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["**/tests/**"],
+      "rules": {
+        // 규칙의 권고("바깥 스코프로 옮겨 매번 재생성되지 않게 하라")가
+        // 테스트에서는 손해만 낸다. 단일 it 전용 픽스처 팩토리를 파일
+        // 최상단으로 올리면 setup 이 그것을 쓰는 단언에서 멀어지고, 부모
+        // 스코프를 캡처해 못 올라가는 형제 헬퍼와도 갈라진다. 노리는
+        // 이득인 재생성 비용은 테스트에서 의미가 없다.
+        "unicorn/consistent-function-scoping": "off"
+      }
+    }
+  ]
 }
