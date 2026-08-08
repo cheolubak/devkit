@@ -827,6 +827,10 @@ describe('_shared 리뷰 워크플로', () => {
     const doc = await readReview();
     expect(doc).toContain('/dismissals');
     expect(doc).toContain('event=DISMISS');
+    // 최신 1건만 고르면 나머지 변경 요청이 PR 화면에 남는다. 게이트는
+    // 리뷰어별 최신만 보므로 판정에는 차이가 없지만, 철회되지 않은 빨간
+    // 표시가 "왜 아직 막혀 있나"를 읽는 사람을 혼란시킨다.
+    expect(doc).not.toContain('.[-1].id');
   });
 
   it('프롬프트 인젝션 방어 지시를 갖는다', async () => {
@@ -913,6 +917,10 @@ describe('이 저장소판 리뷰 워크플로', () => {
     const doc = read();
     expect(doc).toContain('/dismissals');
     expect(doc).toContain('event=DISMISS');
+    // 최신 1건만 고르면 나머지 변경 요청이 PR 화면에 남는다. 게이트는
+    // 리뷰어별 최신만 보므로 판정에는 차이가 없지만, 철회되지 않은 빨간
+    // 표시가 "왜 아직 막혀 있나"를 읽는 사람을 혼란시킨다.
+    expect(doc).not.toContain('.[-1].id');
   });
 
   it('프롬프트 인젝션 방어 지시를 갖는다', () => {
