@@ -45,8 +45,13 @@ function workflowName(yaml: string): string {
  * 주석은 어느 스코프가 왜 필요한지를 설명하며 그 문자열을 **언급**하는데,
  * 부분 문자열 단언은 주석만 있어도 통과해 버린다 — 실제로 선언되지 않은 권한을
  * 선언됐다고 보고하는, 이 파일이 이미 여러 번 당한 형태의 공허한 단언이다.
- * 값까지 돌려주는 이유는 read/write 를 가리지 않기 위해서다 — write 는 read 를
- * 포함하므로 `actions: write` 인 사본도 통과해야 한다.
+ *
+ * 값까지 돌려주는 이유는 호출부가 **읽기가 되는지**를 봐야 하기 때문이다.
+ * 존재만 보면 `statuses: none` 이 통과하는데, 그 선언은 이 테스트가 막으려는
+ * 실패를 그대로 재현한다(명시된 `none` 은 미선언과 똑같이 권한이 없다).
+ * 그렇다고 `read` 로 못박을 수도 없다 — write 는 read 를 포함하고, 이 저장소
+ * 사본은 릴리스를 깨워야 해서 실제로 `actions: write` 다. 그래서 호출부는
+ * READABLE 로 본다.
  *
  * 던지는 것이 요구다 — 블록을 못 찾았을 때 빈 맵을 돌려주면 "권한이 없다"와
  * "파싱에 실패했다"가 구분되지 않는다.
@@ -71,6 +76,24 @@ function permissionsOf(yaml: string, source: string): Record<string, string> {
   }
   return scopes;
 }
+
+/**
+ * 권한 스코프가 **읽기를 허용하는** 값. `none` 을 거르는 것이 요점이다 —
+ * 명시된 `none` 은 미선언과 똑같이 권한이 없으므로, 존재만 보는 단언은 결함을
+ * 그대로 통과시킨다.
+ */
+const READABLE = /^(read|write)$/;
+
+/**
+ * 게이트가 자기 자신을 체크 집계에서 빼는 **실행되는** jq 표현식.
+ *
+ * 이 문자열을 문서 전체가 아니라 `extractGate()` 가 꺼낸 jq 프로그램에서 찾는
+ * 것이 요구다. 워크플로 주석은 어느 권한이 왜 필요한지 설명하며 `.workflowName`
+ * 을 **언급**하는데, 문서 전체를 부분 문자열로 훑으면 필터를 통째로 지워도
+ * 그 주석 때문에 통과한다 — 실제로 permissions 주석을 추가한 순간 아래 두
+ * 단언이 함께 공허해졌다.
+ */
+const SELF_EXCLUSION = 'select((.workflowName // "") != $SELF)';
 
 async function readAutoMerge(): Promise<string> {
   return readFile(AUTO_MERGE, 'utf8');
@@ -170,9 +193,17 @@ describe('_shared 자동 머지 워크플로', () => {
     // 공개 저장소에서는 이 데이터가 스코프 없이도 읽혀 **아무 증상이 없다** —
     // 툴킷 저장소가 공개라 여기서는 초록불이었고, 비공개인 소비자 저장소에서만
     // 드러났다. 그래서 실행이 아니라 이 단언이 관문이어야 한다.
+    //
+    // 존재가 아니라 **값**을 본다. `statuses: none` 은 미선언과 똑같이 권한이
+    // 없으므로, 있기만 하면 통과시키는 단언은 이 결함을 그대로 흘려보낸다.
     const perms = permissionsOf(await readAutoMerge(), 'templates/_shared');
-    expect(perms.statuses, 'statuses 스코프가 없다 — StatusContext 를 못 읽는다').toBeDefined();
-    expect(perms.actions, 'actions 스코프가 없다 — checkSuite.workflowRun 을 못 읽는다').toBeDefined();
+    expect(perms.statuses, 'statuses 가 읽기를 허용하지 않는다 — StatusContext 를 못 읽는다').toMatch(
+      READABLE,
+    );
+    expect(
+      perms.actions,
+      'actions 가 읽기를 허용하지 않는다 — checkSuite.workflowRun 을 못 읽는다',
+    ).toMatch(READABLE);
   });
 
   it('.workflowName 을 읽는 데 필요한 actions 권한이 있다', async () => {
@@ -182,8 +213,8 @@ describe('_shared 자동 머지 워크플로', () => {
     // 에러를 넘기더라도 workflowName 이 null 로 와 자기 체크가 집계에 남는다 —
     // 그 체크는 항상 IN_PROGRESS 이므로 영원히 머지되지 않는 데드락이다.
     const doc = await readAutoMerge();
-    expect(doc).toContain('.workflowName');
-    expect(permissionsOf(doc, 'templates/_shared').actions).toBeDefined();
+    expect(extractGate(doc, 'templates/_shared')).toContain(SELF_EXCLUSION);
+    expect(permissionsOf(doc, 'templates/_shared').actions).toMatch(READABLE);
   });
 
   it('자기 자신을 workflowName 으로 체크 집계에서 뺀다', async () => {
@@ -191,8 +222,9 @@ describe('_shared 자동 머지 워크플로', () => {
     // 거르면 잡 이름과 어긋나 자기 자신이 집계에 남고, 그 체크는 항상
     // IN_PROGRESS 이므로 영원히 머지되지 않는다(설계 5.5절).
     const doc = await readAutoMerge();
-    expect(doc).toContain('.workflowName');
+    expect(extractGate(doc, 'templates/_shared')).toContain(SELF_EXCLUSION);
     // 이름을 손으로 박으면 워크플로 name: 만 바꿔도 필터가 조용히 무력해진다.
+    // 이쪽은 jq 바깥의 env: 배선이라 문서에서 본다.
     expect(doc).toContain('${{ github.workflow }}');
   });
 
@@ -952,11 +984,12 @@ describe('두 auto-merge.yml 사본의 게이트 동일성', () => {
     // 드러나지 않는다. 비공개로 바뀌거나 이 파일을 다른 곳으로 옮기는 순간
     // "판정하고 머지" 스텝이 통째로 죽는다. 템플릿과 같은 기준을 여기에도 건다.
     //
-    // 값은 보지 않는다 — 이 사본은 머지 후 release.yml 을 깨워야 해서
-    // `actions: write` 이고, write 는 read 를 포함한다.
+    // 값을 read 로 못박지는 않는다 — 이 사본은 머지 후 release.yml 을 깨워야
+    // 해서 `actions: write` 이고, write 는 read 를 포함한다. 대신 `none` 은
+    // 걸러야 한다. 명시된 none 은 미선언과 똑같이 권한이 없다.
     const perms = permissionsOf(readFileSync(REPO_AUTO_MERGE, 'utf8'), '.github/workflows');
-    expect(perms.statuses).toBeDefined();
-    expect(perms.actions).toBeDefined();
+    expect(perms.statuses).toMatch(READABLE);
+    expect(perms.actions).toMatch(READABLE);
   });
 
   it('이 저장소판과 템플릿판의 jq 프로그램이 글자 그대로 같다', () => {
