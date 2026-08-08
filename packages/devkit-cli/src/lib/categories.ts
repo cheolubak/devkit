@@ -50,6 +50,9 @@ const FILE_PATTERNS: ReadonlyArray<readonly [RegExp, Category]> = [
   [/^\.claude\/(?:agents|commands|skills)\/.+/, 'claude'],
   [/^CLAUDE\.md$/, 'claude'],
   [/^\.github\/workflows\/.+/, 'ci'],
+  // 머지 판정 스크립트. 워크플로와 같은 카테고리다 — 둘은 함께 움직인다
+  // (워크플로가 통과 신호를 남기고 스크립트가 그것을 읽는다).
+  [/^\.github\/scripts\/.+/, 'ci'],
   [/^eslint\.config\.mjs$/, 'lint'],
   [/^_?\.?prettierignore$/, 'lint'],
   // .npmrc 는 레지스트리 접근 설정이라 의존성과 함께 움직인다(설계 5.3절).

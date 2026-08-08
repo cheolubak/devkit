@@ -30,13 +30,14 @@ describe('copyOverlay.plan', () => {
       '.claude/commands/issue.md',
       '.claude/commands/review.md',
       '.claude/commands/verify.md',
+      '.github/scripts/wait-and-merge.sh',
       '.github/workflows/auto-merge.yml',
       '.github/workflows/claude-review.yml',
       '.gitignore',
       '.npmrc',
     ]);
-    // .gitignore 는 병합 대상이라 kind 가 다르다 — 나머지 일곱은 그대로 file 이다.
-    expect(changes.filter((c) => c.kind === 'file')).toHaveLength(7);
+    // .gitignore 는 병합 대상이라 kind 가 다르다 — 나머지 여덟은 그대로 file 이다.
+    expect(changes.filter((c) => c.kind === 'file')).toHaveLength(8);
     expect(changes.find((c) => c.kind === 'ignore')?.file).toBe('.gitignore');
   });
 

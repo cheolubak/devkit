@@ -518,11 +518,18 @@ while :; do
   #
   # **복수형** /statuses 여야 한다. 단수형 /commits/{sha}/status(combined)는
   # creator 를 주지 않아 신원 검사가 구조적으로 항상 실패한다(PR #9 에서 실측).
-  # 대신 복수형은 컨텍스트별 이력 전체를 주므로 컨텍스트별 최신만 남긴다.
-  # id 로 고른다 — 단조 증가하므로 같은 초에 두 건이 들어와도 갈린다.
+  # 대신 복수형은 컨텍스트별 이력 전체를 주므로 최신만 남긴다. id 로 고른다 —
+  # 단조 증가하므로 같은 초에 두 건이 들어와도 갈린다.
+  #
+  # 축약 키에 creator 가 **들어가야 한다**. context 만으로 묶으면 신원 검사보다
+  # 축약이 먼저 일어나, statuses:write 를 가진 임의의 앱이 같은 context 로 id 만
+  # 더 큰 status 를 하나 올리는 것만으로 정당한 통과 신호를 지운다. 게이트의
+  # creator 검사는 그것을 머지로 이어지게 하지는 않지만(fail-safe 는 유지된다),
+  # 정당한 PR 이 영원히 wait: 에 갇혀 타임아웃으로 끝난다. 방어의 방향이
+  # 뚫림에서 가용성으로 옮겨갔을 뿐 무방비인 것은 같다.
   gh api "repos/$REPO/commits/$HEAD_SHA/statuses" --paginate \
     --jq '.[] | {context, state, creator: (.creator.login // ""), id}' \
-    | jq -s 'group_by(.context) | map(max_by(.id))' > "$WORK/statuses.json"
+    | jq -s 'group_by([.context, .creator]) | map(max_by(.id))' > "$WORK/statuses.json"
   jq --slurpfile s "$WORK/statuses.json" '. + {commitStatuses: $s[0]}' "$WORK/pr.json" \
     > "$WORK/pr.merged.json"
   mv "$WORK/pr.merged.json" "$WORK/pr.json"
@@ -641,6 +648,124 @@ EOF
 )"
 ```
 
+#### Task 1 fix round 1 — 조립 파이프라인의 무테스트 구간
+
+Task 1 리뷰가 찾은 것: 게이트 **판정** 은 jq 로 실제 검증되지만, 그 판정에 들어갈 데이터를 **조립하는** 셸 파이프라인(`gh api --jq` + `jq -s`)은 어떤 테스트도 건드리지 않았다. `extractGate` 가 꺼내는 범위가 heredoc 안쪽뿐이기 때문이다. 위 dedup 결함이 20건을 전부 통과한 이유가 정확히 그것이다.
+
+`packages/devkit-cli/tests/merge-script.test.ts` 에 아래를 더한다.
+
+```ts
+/**
+ * status 를 받아 오는 파이프라인을 스크립트에서 그대로 꺼낸다 — `gh api --jq`
+ * 의 프로그램과 그 뒤 `jq -s` 의 프로그램 둘 다.
+ *
+ * 던지는 것이 요구다. 추출이 실패했을 때 빈 프로그램을 돌려주면 아래 단언이
+ * 공허해진다.
+ *
+ * `.[]` 로 시작하는 것만 잡는다 — 같은 파일의 다른 `--jq`(`gh repo view` 의
+ * `.nameWithOwner`)는 따옴표도 `.[` 도 없어 걸리지 않는다.
+ */
+function extractStatusFetch(script: string, source: string): { perItem: string; reduce: string } {
+  const perItem = /--jq '(\.\[\][^']*)'/.exec(script);
+  if (perItem === null) throw new Error(`${source}: status 조회의 gh api --jq 를 찾지 못했다`);
+  const reduce = /\| jq -s '([^']*)'/.exec(script);
+  if (reduce === null) throw new Error(`${source}: status 조회의 jq -s 를 찾지 못했다`);
+  return { perItem: perItem[1], reduce: reduce[1] };
+}
+
+interface FetchedStatus {
+  context: string;
+  state: string;
+  creator: string;
+  id: number;
+}
+
+/** 스크립트에서 꺼낸 두 jq 프로그램을 실제 jq 로 이어 돌린다. */
+function runStatusFetch(response: unknown): FetchedStatus[] {
+  const { perItem, reduce } = extractStatusFetch(
+    readFileSync(TEMPLATE_SCRIPT, 'utf8'),
+    'templates/_shared',
+  );
+  const dir = mkdtempSync(join(tmpdir(), 'devbak-status-'));
+  try {
+    const file = join(dir, 'response.json');
+    writeFileSync(file, JSON.stringify(response));
+    const perItemOut = execFileSync('jq', ['-c', perItem, file], { encoding: 'utf8' });
+    return JSON.parse(
+      execFileSync('jq', ['-s', reduce], { input: perItemOut, encoding: 'utf8' }),
+    ) as FetchedStatus[];
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+describe('Commit Status 조립 파이프라인', () => {
+  // 이 블록이 없어서 dedup 결함이 판정 테스트 20건을 전부 통과했다. 게이트가
+  // 무엇을 막는지는 검증됐지만, 게이트에 **무엇이 들어가는지**는 아무도 보지
+  // 않고 있었다.
+
+  it('creator 를 살려 낸다 — 게이트의 신원 검사가 통과할 수 있다', () => {
+    const got = runStatusFetch([
+      {
+        context: 'claude-review',
+        creator: { login: 'github-actions[bot]' },
+        id: 5,
+        state: 'success',
+      },
+    ]);
+
+    expect(got[0]?.creator).toBe('github-actions[bot]');
+    expect(got[0]?.state).toBe('success');
+  });
+
+  it('creator 가 다른 같은 context 가 정당한 신호를 지우지 않는다', () => {
+    // statuses:write 를 가진 임의의 앱이 id 만 더 큰 claude-review status 를
+    // 하나 올리는 것으로 정당한 PR 을 영원히 wait: 에 가둘 수 있었다.
+    const got = runStatusFetch([
+      {
+        context: 'claude-review',
+        creator: { login: 'github-actions[bot]' },
+        id: 5,
+        state: 'success',
+      },
+      { context: 'claude-review', creator: { login: 'attacker[bot]' }, id: 10, state: 'failure' },
+    ]);
+
+    expect(got.find((s) => s.creator === 'github-actions[bot]')?.state).toBe('success');
+  });
+
+  it('같은 creator 의 옛 success 가 최신 failure 를 이기지 않는다', () => {
+    // 축약 자체는 여전히 필요하다. creator 를 키에 넣었다고 이력 전체가
+    // 그대로 흘러 들어오면, 옛 success 가 최신 failure 를 덮는다.
+    const got = runStatusFetch([
+      {
+        context: 'claude-review',
+        creator: { login: 'github-actions[bot]' },
+        id: 5,
+        state: 'success',
+      },
+      {
+        context: 'claude-review',
+        creator: { login: 'github-actions[bot]' },
+        id: 10,
+        state: 'failure',
+      },
+    ]);
+
+    expect(got.filter((s) => s.context === 'claude-review')).toHaveLength(1);
+    expect(got[0]?.state).toBe('failure');
+  });
+
+  it('creator 가 없는 응답도 크래시하지 않는다', () => {
+    const got = runStatusFetch([{ context: 'CodeRabbit', id: 1, state: 'success' }]);
+
+    expect(got[0]?.creator).toBe('');
+  });
+});
+```
+
+수정이 실제로 막는지 **변이로 확인한다**. dedup 키를 `group_by(.context)` 로 되돌리면 `creator 가 다른 같은 context 가 정당한 신호를 지우지 않는다` 가 FAIL 해야 한다. 확인 후 원복한다.
+
 ---
 
 ### Task 2: 저장소판 배치와 `auto-merge.yml` 철거
@@ -720,10 +845,58 @@ describe('스크립트 배선', () => {
 });
 ```
 
-기존 `auto-merge-workflow.test.ts` 의 `describe('Commit Status 조회 파이프라인 (실제 응답 녹화본에 돌린다)')` 블록 전체를 `merge-script.test.ts` 로 **옮긴다**. 옮길 때 바꾸는 것은 두 가지뿐이다.
+기존 `auto-merge-workflow.test.ts` 의 `describe('Commit Status 조회 파이프라인 (실제 응답 녹화본에 돌린다)')` 블록에서 **녹화본과 그것을 겨누는 단언만** 옮긴다.
 
-1. `extractStatusFetch(...)` 의 입력을 `readFileSync(AUTO_MERGE, 'utf8')` 에서 `readFileSync(TEMPLATE_SCRIPT, 'utf8')` 로 바꾼다. 정규식(`--jq '(\.\[\][^']*)'`, `\| jq -s '([^']*)'`)은 그대로 셸 스크립트에도 맞는다.
-2. `it('두 사본의 조회 파이프라인이 같다')` 는 삭제한다 — 위 바이트 동일성이 더 강하게 덮는다.
+**헬퍼는 옮기지 않는다.** Task 1 fix round 1 이 `merge-script.test.ts` 에 이미 `extractStatusFetch`·`runStatusFetch`·`FetchedStatus` 를 만들어 뒀다. 그대로 옮기면 중복 선언으로 컴파일이 깨진다. 옛 `runStatusFetch(response, yaml)` 는 인자로 yaml 을 받지만 새 것은 스크립트를 스스로 읽으므로, 호출부에서 두 번째 인자를 뺀다.
+
+옮기는 것은 녹화본 상수와 그것을 쓰는 단언 둘이다.
+
+```ts
+/**
+ * `GET /repos/{o}/{r}/commits/{sha}/statuses` 의 **실제 응답 녹화본**.
+ *
+ * 손으로 지어낸 형태가 아니라 툴킷 저장소 PR #9 의 head 커밋에서 그대로 받은
+ * 것이다(필드는 이 파이프라인이 읽는 것만 남겼다). 손으로 지어낸 픽스처가
+ * 정확히 그 결함을 숨겼기 때문이다 — "API 가 무엇을 주는가"와 "게이트가
+ * 무엇을 받는가" 사이의 이음매가 통째로 검증되지 않고 있었다.
+ *
+ * CodeRabbit 이 pending 2건 → success 2건으로 쌓여 있는 것도 녹화 그대로다.
+ * 축약을 실제 데이터로 검증할 수 있다.
+ */
+const CLAUDE_BOT = { login: 'github-actions[bot]' };
+const RABBIT_BOT = { login: 'coderabbitai[bot]' };
+
+const RECORDED_STATUSES = [
+  { context: 'claude-review', creator: CLAUDE_BOT, id: 51_873_194_642, state: 'success' },
+  { context: 'CodeRabbit', creator: RABBIT_BOT, id: 51_873_171_385, state: 'success' },
+  { context: 'CodeRabbit', creator: RABBIT_BOT, id: 51_873_171_102, state: 'success' },
+  { context: 'CodeRabbit', creator: RABBIT_BOT, id: 51_873_143_452, state: 'pending' },
+  { context: 'CodeRabbit', creator: RABBIT_BOT, id: 51_873_142_927, state: 'pending' },
+];
+
+describe('Commit Status 조립 파이프라인 (실제 응답 녹화본에 돌린다)', () => {
+  it('creator 가 살아서 나온다 — 게이트의 신원 검사가 통과할 수 있다', () => {
+    const got = runStatusFetch(RECORDED_STATUSES);
+    const claude = got.find((s) => s.context === 'claude-review');
+
+    expect(claude, 'claude-review status 가 축약 결과에 없다').toBeDefined();
+    // 게이트의 claudeState 가 정확히 이 값을 이 문자열과 비교한다.
+    expect(claude?.creator).toBe('github-actions[bot]');
+    expect(claude?.state).toBe('success');
+  });
+
+  it('컨텍스트별로 최신 하나만 남는다', () => {
+    // 복수형 엔드포인트는 이력 전체를 준다. 축약하지 않으면 같은 컨텍스트의
+    // 옛 status 가 최신을 이길 수 있다.
+    const got = runStatusFetch(RECORDED_STATUSES);
+
+    expect(got.map((s) => s.context).sort()).toEqual(['CodeRabbit', 'claude-review']);
+    expect(got.find((s) => s.context === 'CodeRabbit')?.id).toBe(51873171385);
+  });
+});
+```
+
+`it('옛 success 가 최신 failure 를 이기지 않는다')` 와 `it('두 사본의 조회 파이프라인이 같다')` 는 옮기지 않는다. 앞의 것은 Task 1 fix round 1 의 `같은 creator 의 옛 success 가 최신 failure 를 이기지 않는다` 와 같은 것을 겨누고, 뒤의 것은 위 바이트 동일성이 더 강하게 덮는다.
 
 기존 `describe('_shared 리뷰 워크플로')` 와 `describe('이 저장소판 리뷰 워크플로')` 두 블록도 통째로 옮긴다. 그 안에서 auto-merge.yml 을 문자열로 언급하는 단언은 없다(프롬프트 문구만 본다).
 
