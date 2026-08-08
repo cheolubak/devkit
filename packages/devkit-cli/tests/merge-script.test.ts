@@ -1313,4 +1313,29 @@ describe('스크립트 전체 실행 (가짜 gh 를 PATH 에 놓고 통째로 �
       rmSync(fake.dir, { recursive: true, force: true });
     }
   });
+
+  it('--interval 이 남은 시간보다 길면 그만큼만 자고 곧바로 타임아웃한다', () => {
+    const fake = makeFakeGh(FAKE_REPO);
+    try {
+      // 조회는 매번 성공하되 wait: 에 머문다.
+      fake.writePr('last', prJson({ headRefOid: FAKE_SHA }));
+      fake.writeStatuses('last', []);
+
+      // 데드라인(1초)이 폴링 간격(10초)보다 짧다. sleep 을 남은 시간으로
+      // 자르지 않으면 10초를 통째로 자고 깨어나 **데드라인이 지난 뒤에**
+      // 조회를 한 번 더 태운 다음에야 타임아웃한다.
+      const got = runFullScript(fake, ['7', '--timeout', '1', '--interval', '10']);
+
+      expect(got.status).toBe(1);
+      expect(got.stderr).toContain('타임아웃(1초)');
+      // 시간을 재지 않고 **조회 횟수**로 가른다 — 자르지 않으면 2회가 된다.
+      expect(fake.calls().filter((c) => c.startsWith('pr view')).length).toBe(1);
+      expect(fake.calls().filter((c) => c.includes('/statuses')).length).toBe(1);
+      expect(fake.calls().some((c) => c.startsWith('pr merge'))).toBe(false);
+    } finally {
+      rmSync(fake.dir, { recursive: true, force: true });
+    }
+    // 결함 상태에서는 10초를 통째로 자므로 기본 타임아웃(5초)에 걸린다.
+    // 고쳐지면 1초에 끝난다 — 넉넉히 준다.
+  }, 20_000);
 });
