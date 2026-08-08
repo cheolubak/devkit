@@ -71,6 +71,16 @@ describe('_shared 자동 머지 워크플로', () => {
     expect(doc).toMatch(/HEAD_SHA:.*github\.event\.sha/);
   });
 
+  it('Commit Status 를 creator 와 함께 따로 받아 pr.json 에 합친다', async () => {
+    // statusCheckRollup 은 StatusContext 의 creator 를 주지 않는다 — gh 가
+    // 요청하는 필드가 context·state·startedAt·targetUrl 뿐이다(실측). 신원을
+    // 검증하려면 REST /commits/{sha}/status 로 따로 받아 합쳐야 한다.
+    const doc = await readAutoMerge();
+    expect(doc).toMatch(/gh api "repos\/\$REPO\/commits\/\$HEAD_SHA\/status"/);
+    expect(doc).toContain('commitStatuses');
+    expect(doc).toContain('creator');
+  });
+
   it('workflow_run 이 듣는 이름이 claude-review.yml 의 name 과 일치한다', async () => {
     // 이름이 어긋나면 워크플로는 **에러 없이** 영원히 실행되지 않는다.
     // 실행으로는 절대 드러나지 않으므로 여기서 결합을 고정한다.
@@ -224,6 +234,7 @@ function prJson(over: Record<string, unknown> = {}): Record<string, unknown> {
     labels: [],
     reviews: [],
     statusCheckRollup: [],
+    commitStatuses: [],
     ...over,
   };
 }
@@ -242,6 +253,21 @@ function reviewBy(
     submittedAt,
     commit: commitOid === null ? null : { oid: commitOid },
   };
+}
+
+/**
+ * head 커밋의 Commit Status 하나.
+ *
+ * `statusCheckRollup` 은 StatusContext 의 **creator 를 주지 않는다**(gh 가
+ * 요청하는 필드에 `context`·`state`·`startedAt`·`targetUrl` 뿐이다 — 실측).
+ * 신원을 봐야 하므로 워크플로가 REST `/commits/{sha}/status` 로 따로 받아
+ * `pr.json` 에 `commitStatuses` 로 합친다. 이 헬퍼는 그 형태를 만든다.
+ */
+function claudeStatus(
+  state: string,
+  creator = 'github-actions[bot]',
+): Record<string, unknown> {
+  return { context: 'claude-review', state, creator };
 }
 
 const passingCheck = {
@@ -317,7 +343,7 @@ describe('자동 머지 게이트 판정 (jq 를 실제로 돌린다)', () => {
     // Actions 의 GITHUB_TOKEN 은 PR 을 승인할 수 없지만(플랫폼 제약) Commit
     // Status 는 만들 수 있다 — 그래서 승인 API 를 아예 쓰지 않는다.
     const got = verdict(
-      prJson({ statusCheckRollup: [{ context: 'claude-review', state: 'SUCCESS' }] }),
+      prJson({ commitStatuses: [claudeStatus('SUCCESS')] }),
     );
     expect(got).toMatch(/^merge:/);
   });
@@ -333,10 +359,31 @@ describe('자동 머지 게이트 판정 (jq 를 실제로 돌린다)', () => {
     const got = verdict(
       prJson({
         headRefOid: HEAD_OID,
-        statusCheckRollup: [{ context: 'claude-review', state: 'SUCCESS' }],
+        commitStatuses: [claudeStatus('SUCCESS')],
       }),
     );
     expect(got).toMatch(/^merge:/);
+  });
+
+  it('claude-review status 라도 creator 가 다르면 통과로 세지 않는다', () => {
+    // approvals 는 trusted 로 신원을 거르는데 claudeOk 만 빠지면 비대칭이다.
+    // statuses:write 를 가진 임의의 앱·워크플로가 같은 context 로 success 를
+    // 심으면 리뷰 없이 게이트를 통과한다. 이 저장소는 isCrossRepository 로
+    // fork 를 걷어내 노출이 낮지만, 템플릿판에는 그 가드가 없어(의도적 —
+    // fork 기여 자동 머지 허용) creator 검증이 **유일한** 방어선이 된다.
+    const got = verdict(
+      prJson({ commitStatuses: [claudeStatus('SUCCESS', 'some-other-app[bot]')] }),
+    );
+    expect(got).toBe('skip: 승인도 claude-review 통과도 없습니다');
+  });
+
+  it('creator 가 없는 status 는 통과로 세지 않는다', () => {
+    // 확인할 수 없으면 막는 쪽이 안전하다 — onHead 가 commit 없는 리뷰를
+    // 다루는 것과 같은 규율이다.
+    const got = verdict(
+      prJson({ commitStatuses: [{ context: 'claude-review', state: 'SUCCESS' }] }),
+    );
+    expect(got).toBe('skip: 승인도 claude-review 통과도 없습니다');
   });
 
   it('다른 context 의 success 는 승인으로 세지 않는다', () => {
@@ -370,7 +417,7 @@ describe('자동 머지 게이트 판정 (jq 를 실제로 돌린다)', () => {
           reviewBy('github-actions', 'CHANGES_REQUESTED', 'CONTRIBUTOR', '2026-08-07T01:00:00Z'),
           reviewBy('github-actions', 'DISMISSED', 'CONTRIBUTOR', '2026-08-07T02:00:00Z'),
         ],
-        statusCheckRollup: [{ context: 'claude-review', state: 'SUCCESS' }],
+        commitStatuses: [claudeStatus('SUCCESS')],
       }),
     );
     expect(got).toMatch(/^merge:/);
@@ -383,7 +430,7 @@ describe('자동 머지 게이트 판정 (jq 를 실제로 돌린다)', () => {
     const got = verdict(
       prJson({
         reviews: [reviewBy('reviewer', 'CHANGES_REQUESTED', 'COLLABORATOR')],
-        statusCheckRollup: [{ context: 'claude-review', state: 'SUCCESS' }],
+        commitStatuses: [claudeStatus('SUCCESS')],
       }),
     );
     expect(got).toContain('변경 요청');

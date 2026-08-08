@@ -121,6 +121,17 @@ jobs:
             exit 0
           fi
 
+          # statusCheckRollup 은 StatusContext 의 creator 를 주지 않는다 — gh 가
+          # 요청하는 필드가 context·state·startedAt·targetUrl 뿐이다(실측).
+          # 아래 게이트는 "누가 이 status 를 만들었는가"를 봐야 하므로 REST 로
+          # 따로 받아 합친다. head SHA 로 조회하므로 커밋 고정은 그대로다 —
+          # 새 커밋을 푸시하면 그 커밋의 status 만 보인다.
+          HEAD_SHA=$(jq -r '.headRefOid' pr.json)
+          gh api "repos/$REPO/commits/$HEAD_SHA/status" \
+            --jq '[.statuses[] | {context, state, creator: (.creator.login // "")}]' > statuses.json
+          jq --slurpfile s statuses.json '. + {commitStatuses: $s[0]}' pr.json > pr.merged.json
+          mv pr.merged.json pr.json
+
           # 게이트 전체를 jq 한 프로그램에 모은다. 셸 분기로 흩으면 조건이
           # 늘 때 조용히 빠지는 가지가 생긴다. 결과는 항상 한 줄로 로그에
           # 남는다 — "왜 안 머지됐는가"가 실행 로그만으로 읽혀야 한다.
@@ -169,9 +180,9 @@ jobs:
             #      `github-actions[bot]` 을 준다. 문자열이 어긋나 설령 승인이
             #      있어도 매치되지 않았다.
             #
-            # 자동 승인은 collaborator 권한을 가진 별도 봇 계정의 PAT 로 남긴다
-            # (claude-review.yml 의 github_token). 그 리뷰의 authorAssociation
-            # 은 COLLABORATOR 라 아래 첫 조건으로 통과하므로 특례가 필요 없다.
+            # 이 판정은 **사람 승인 전용**이다. Claude 는 PR 을 승인하지 않고
+            # Commit Status 로 통과 신호를 남기므로(아래 claudeOk) 봇을 위한
+            # 특례가 필요 없다.
             #
             # 목록 리터럴에 index 를 걸지 않는다 — 파이프 안에서는 . 이 그
             # 배열이 되어 .authorAssociation 이 배열 인덱싱으로 죽는다.
@@ -223,12 +234,24 @@ jobs:
             # 가 없는 상태로 시작한다 — 옛 승인이 새 커밋을 머지시키던 TOCTOU
             # 가 이 경로에는 존재하지 않는다.
             #
-            # context 를 정확히 본다. 아무 SUCCESS 나 인정하면 외부 CI 의
-            # 초록불 하나로 머지된다.
+            # context 와 **creator 를 둘 다** 본다. context 만 보면 외부 CI 의
+            # 초록불 하나로 머지되고, creator 를 안 보면 statuses:write 를 가진
+            # 임의의 앱·워크플로가 같은 context 로 success 를 심어 리뷰 없이
+            # 게이트를 통과한다. 승인 쪽이 trusted 로 신원을 거르는 것과 같은
+            # 역할이며, 한쪽만 빠지면 비대칭이다.
+            #
+            # 이 판정이 읽는 것은 statusCheckRollup 이 아니라 commitStatuses 다
+            # — 그쪽은 StatusContext 의 creator 를 주지 않는다(gh 가 요청하는
+            # 필드에 없다). 셸에서 REST /commits/{sha}/status 로 따로 받아
+            # 합친다. head SHA 로 조회하므로 커밋 고정은 그대로다.
+            #
+            # creator 를 확인할 수 없으면 세지 않는다 — onHead 가 commit 없는
+            # 리뷰를 다루는 것과 같은 규율이다.
             def claudeOk:
-              [ (.statusCheckRollup // [])[]
+              [ (.commitStatuses // [])[]
                 | select((.context // "") == "claude-review")
-                | select((.state | norm) == "SUCCESS") ]
+                | select((.state | norm) == "SUCCESS")
+                | select((.creator // "") | . == "github-actions[bot]" or . == "github-actions") ]
               | length > 0;
 
             if .state != "OPEN" then "skip: PR 이 열려 있지 않습니다 (state=\(.state))"
@@ -255,7 +278,7 @@ jobs:
           # 게이트는 이미 "승인이 현재 head 에 달렸다"를 확인했다. 그래도 그
           # 판정과 이 호출 사이에 새 푸시가 들어올 수 있고, 그 잔여 창은 서버만
           # 닫을 수 있다 — head 가 바뀌었으면 GitHub 이 머지를 거부한다.
-          HEAD_SHA=$(jq -r '.headRefOid' pr.json)
+          # HEAD_SHA 는 위 Commit Status 조회에서 이미 잡아 뒀다(같은 pr.json).
           gh pr merge "$PR" --repo "$REPO" --rebase --delete-branch --match-head-commit "$HEAD_SHA"
 
           # GITHUB_TOKEN 이 만든 push 는 워크플로를 트리거하지 않는다 —

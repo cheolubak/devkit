@@ -19,6 +19,10 @@ concurrency:
 
 jobs:
   review:
+    # draft 로 연 PR 은 리뷰해도 게이트가 "draft PR 입니다"로 막는다. opened 는
+    # draft 생성에도 발화하므로, 거르지 않으면 아무것도 결정하지 못하는 실행이
+    # 토큰을 태운다. ready_for_review 를 이미 듣고 있으므로 준비되는 순간 돈다.
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
       contents: read
