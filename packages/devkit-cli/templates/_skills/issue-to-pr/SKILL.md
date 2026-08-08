@@ -18,6 +18,7 @@ gh issue view <N> --json title,body,state,url,comments
 본문에 서명 `<!-- scope-escape-issue -->` 가 있으면 아래 정형으로 적혀 있다.
 
 <!-- ISSUE-BODY-CONTRACT:START -->
+```markdown
 ## 무엇을
 
 한 문장. 무엇을 바꿔야 하는가.
@@ -39,6 +40,7 @@ gh issue view <N> --json title,body,state,url,comments
 ## 무엇으로 다 됐다고 판단하나
 
 확인 방법. 테스트·명령·관찰 가능한 결과.
+```
 <!-- ISSUE-BODY-CONTRACT:END -->
 
 서명이 없으면 **사람이 손으로 연 이슈**다. 자유 본문으로 읽고, 위 다섯 가지 중
@@ -93,8 +95,7 @@ git switch -c <접두>/<슬러그> origin/main
 
 ## 5. 검증한다
 
-`/verify` 를 쓴다. `pnpm lint` → `pnpm build` → `pnpm test` 를 순서대로 돌리고
-실패 지점에서 멈춘다.
+`/verify` 를 쓴다.
 
 각 단계의 **실제 출력**을 근거로 판정한다. 종료 코드 0 이라는 것만으로 통과를
 보고하지 않는다.
@@ -124,3 +125,6 @@ PR 본문에 `Closes #<N>` 을 넣는다.
 
 검증이 깨지면 **멈추고 보고한다.** 이슈를 닫지 않고, PR 도 열지 않고,
 "일부는 됐다"고 뭉개지 않는다.
+
+`gh` 인증이나 리모트가 없어 이슈를 읽지 못하면 그 사실을 보고하고 멈춘다.
+추측으로 진행하지 않는다.
