@@ -14,6 +14,38 @@ const REPO_SCRIPT = fileURLToPath(
   new URL('../../../.github/scripts/wait-and-merge.sh', import.meta.url),
 );
 
+const TEMPLATE_COMMAND = fileURLToPath(
+  new URL('../templates/_shared/.claude/commands/merge.md', import.meta.url),
+);
+
+describe('/merge 커맨드', () => {
+  it('스크립트를 bash 로 부른다', async () => {
+    // 실행 비트는 보존되지 않는다 — copyOverlay 의 collectTree 가 내용만
+    // 읽어 writeFile 로 쓴다. `./script.sh` 로 부르면 소비자 프로젝트에서
+    // Permission denied 로 죽는다.
+    const doc = await readFile(TEMPLATE_COMMAND, 'utf8');
+    expect(doc).toContain('bash .github/scripts/wait-and-merge.sh');
+    expect(doc).not.toMatch(/(?<!bash )\.\/\.github\/scripts/);
+  });
+
+  it('판정 로직을 다시 적지 않는다', async () => {
+    // 게이트가 두 곳에 적히면 반드시 어긋난다. 커맨드는 부르고 보고할 뿐이다.
+    const doc = await readFile(TEMPLATE_COMMAND, 'utf8');
+    expect(doc).not.toContain('statusCheckRollup');
+    expect(doc).not.toContain('commitStatuses');
+  });
+
+  it('실패했을 때 고치지 말고 보고하라고 명시한다', async () => {
+    const doc = await readFile(TEMPLATE_COMMAND, 'utf8');
+    expect(doc).toContain('멈추고');
+  });
+
+  it('frontmatter 에 description 이 있다', async () => {
+    const doc = await readFile(TEMPLATE_COMMAND, 'utf8');
+    expect(doc).toMatch(/^---\ndescription: .+\n---\n/);
+  });
+});
+
 describe('두 사본의 동일성', () => {
   // 옛 auto-merge.yml 은 "jq 게이트만 같다"를 고정했다 — 주석과 배선은
   // 드리프트해도 통과했고, 실제로 드리프트했다. 저장소판과 템플릿판의

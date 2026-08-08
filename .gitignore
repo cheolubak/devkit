@@ -16,6 +16,11 @@ dist/
 !.claude/agents/
 .claude/agents/*
 !.claude/agents/devkit-reviewer.md
+# /merge 커맨드도 마찬가지다 — wait-and-merge.sh 를 부르는 사람의 진입점이라
+# 이 저장소 자신이 써야 하므로 스크래치가 아니라 저장소에 실제로 들어간다.
+!.claude/commands/
+.claude/commands/*
+!.claude/commands/merge.md
 .idea/
 .superpowers/
 
