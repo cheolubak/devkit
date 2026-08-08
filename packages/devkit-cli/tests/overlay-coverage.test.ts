@@ -9,9 +9,28 @@ const execFileAsync = promisify(execFile);
 
 const TEMPLATES_DIR = fileURLToPath(new URL('../templates', import.meta.url));
 
-/** templates/<type>/ 아래의 모든 파일을 프로젝트 상대 경로로 수집한다. */
-async function collectOverlayFiles(): Promise<{ type: string; relPath: string }[]> {
-  const collected: { type: string; relPath: string }[] = [];
+/** 스킬 풀 디렉토리 이름. copy-skills.ts의 SKILL_POOL_DIR과 같은 값이어야 한다. */
+const SKILL_POOL_DIR = '_skills';
+
+/**
+ * 템플릿 소스 경로를 실제 배포(소비) 경로로 바꾼다.
+ *
+ * `_shared`·`nest`·`next`·`monorepo`는 copyOverlay가 템플릿 상대경로를 그대로
+ * 프로젝트 상대경로로 쓴다(파일명 `_`→`.` 치환 제외) — 그래서 변환이 없다.
+ * `_skills`만 다르다: `copySkills`(ops/copy-skills.ts)가 `_skills/<name>/<rest>`를
+ * `.claude/skills/<name>/<rest>`로 옮겨 심는다 — 풀은 한 벌이고 유형마다 복사되지
+ * 않으므로(설계 2.2절), 템플릿 소스 경로와 프로젝트에 실제로 놓이는 경로가
+ * 애초에 다르다. 이 변환 없이 소스 경로를 그대로 categoryOf에 넘기면 스킬
+ * 파일은 항상 매칭에 실패한다 — 어떤 스킬을 추가해도 구조적으로 재현되는
+ * 실패라 categoryOf가 아니라 이 테스트가 대상 경로를 잘못 계산한 탓이다.
+ */
+function consumedPath(type: string, relPath: string): string {
+  return type === SKILL_POOL_DIR ? `.claude/skills/${relPath}` : relPath;
+}
+
+/** templates/<type>/ 아래의 모든 파일을 (템플릿 상대 경로, 배포 경로)로 수집한다. */
+async function collectOverlayFiles(): Promise<{ type: string; relPath: string; consumedPath: string }[]> {
+  const collected: { type: string; relPath: string; consumedPath: string }[] = [];
   const types = await readdir(TEMPLATES_DIR, { withFileTypes: true });
 
   for (const type of types) {
@@ -22,7 +41,7 @@ async function collectOverlayFiles(): Promise<{ type: string; relPath: string }[
       if (!entry.isFile()) continue;
       const absDir = entry.parentPath;
       const relPath = `${absDir}/${entry.name}`.slice(root.length + 1);
-      collected.push({ type: type.name, relPath });
+      collected.push({ type: type.name, relPath, consumedPath: consumedPath(type.name, relPath) });
     }
   }
 
@@ -51,12 +70,26 @@ describe('오버레이 카테고리 커버리지', () => {
   it('모든 오버레이 파일이 카테고리에 매칭된다', async () => {
     // 매칭되지 않는 파일은 어떤 --only 로도 갱신되지 않으면서
     // update 가 성공을 보고한다. 설계 5.4절의 드리프트 방어.
+    //
+    // categoryOf 는 프로젝트에 실제로 놓이는 경로를 기준으로 패턴을 정의하므로
+    // consumedPath(위 정의, `_skills`만 `.claude/skills/`를 접두)로 매칭한다.
+    // relPath(템플릿 소스 경로)를 그대로 넘기면 `_skills` 파일은 항상 걸린다.
     const files = await collectOverlayFiles();
     const unmatched = files
-      .filter(({ relPath }) => categoryOf(relPath) === null)
+      .filter(({ consumedPath }) => categoryOf(consumedPath) === null)
       .map(({ type, relPath }) => `${type}/${relPath}`);
 
     expect(unmatched).toEqual([]);
+  });
+
+  it('_skills 항목은 배포 경로로 변환된 뒤 검사된다 — 변환이 실제로 걸리는지 확인', async () => {
+    // 위 단언은 consumedPath 를 쓴다. _skills 아래 파일이 하나도 없으면 그
+    // 단언은 아무것도 걸러내지 못한 채 공허하게 통과한다 — 이 단언이 그 상태를
+    // 잡는다. Task 1이 심은 devkit-stack 이 있는 한 최소 1건은 나와야 한다.
+    const files = await collectOverlayFiles();
+    const transformed = files.filter((f) => f.type === SKILL_POOL_DIR && f.consumedPath !== f.relPath);
+
+    expect(transformed.length).toBeGreaterThan(0);
   });
 
   it('JSON 오버레이가 전부 정규형이다 — create와 update가 같은 바이트를 만든다', async () => {

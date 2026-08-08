@@ -22,7 +22,7 @@ export function templateFileName(name: string): string {
  * 루트를 찾아 거기서 잡는다 — 번들되면 이 파일이 dist/chunk-*.js 가 되어
  * 깊이가 달라지므로, 깊이를 세는 방식은 레이아웃마다 후보를 늘려야 한다.
  */
-function templatesRoot(): string {
+export function templatesRoot(): string {
   const root = join(packageRoot(fileURLToPath(import.meta.url)), 'templates');
   if (!existsSync(root)) {
     throw new Error(`templates 디렉토리를 찾지 못했습니다 (확인한 경로: ${root}).`);
@@ -59,7 +59,7 @@ function splitIgnoreTemplate(content: string): { lines: string[]; block: string[
  * 쓰였고(categoryOf 가 스스로 정규화하긴 하지만), 변경 목록 출력도 플랫폼과
  * 무관해야 스냅샷이 안정적이다.
  */
-async function collectTree(
+export async function collectTree(
   from: string,
   relDir: string,
   vars: Record<string, string>,
