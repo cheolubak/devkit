@@ -1,8 +1,9 @@
 import { join } from 'node:path';
 import type { Recipe, Step } from '../types.js';
 import { markerPatch } from '../lib/marker.js';
+import { SKILL_SETS } from '../lib/skill-sets.js';
 import { devkitVersion } from '../lib/version.js';
-import { copyOverlay, delegate, registryDeps, makeDirs, mergeJson, removeFiles } from '../ops/index.js';
+import { copyOverlay, copySkills, delegate, registryDeps, makeDirs, mergeJson, removeFiles } from '../ops/index.js';
 import { compose } from '../run.js';
 import { nextRecipe } from './next.js';
 
@@ -24,6 +25,11 @@ export const monorepoRecipe: Recipe = (options = {}) => {
     // /review 커맨드도 저장소를 열었을 때 보여야 한다. 아래 next 합성이
     // apps/web 에 같은 것을 또 놓으므로 그쪽은 제거한다.
     copyOverlay('_shared'),
+
+    // 스킬도 저장소 단위다. 루트에만 놓는다 — 아래 next 합성이 apps/web 에
+    // 놓는 것은 removeFiles(apps/web/.claude) 가 함께 지운다.
+    // monorepo 목록은 nest·next 를 모두 포함한다(워크스페이스에 양쪽이 산다).
+    copySkills(SKILL_SETS.monorepo),
 
     makeDirs(['apps', 'packages']),
 

@@ -3,6 +3,10 @@ import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
+import { SKILL_SETS } from '../src/lib/skill-sets.js';
+import { monorepoRecipe } from '../src/recipes/monorepo.js';
+import { nestRecipe } from '../src/recipes/nest.js';
+import { nextRecipe } from '../src/recipes/next.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -83,5 +87,68 @@ describe('스킬 풀 무결성', () => {
     });
     const tracked = stdout.split('\0').filter((p) => p.length > 0);
     expect(tracked.length).toBeGreaterThan(43);
+  });
+});
+
+describe('유형별 스킬 선택', () => {
+  it('유형별 개수가 설계와 일치한다', () => {
+    expect(SKILL_SETS.nest).toHaveLength(23);
+    expect(SKILL_SETS.next).toHaveLength(26);
+    expect(SKILL_SETS.monorepo).toHaveLength(43);
+  });
+
+  it('선택된 이름이 전부 풀에 실재한다', async () => {
+    // 오타 하나로 스킬이 조용히 빠지는 것을 막는다. copySkills 는 실행 시
+    // 던지지만, 그때는 이미 사용자가 create 를 돌린 뒤다.
+    const entries = await readdir(POOL_DIR, { withFileTypes: true });
+    const pool = new Set(entries.filter((e) => e.isDirectory()).map((e) => e.name));
+
+    const missing: string[] = [];
+    for (const [type, names] of Object.entries(SKILL_SETS)) {
+      for (const name of names) {
+        if (!pool.has(name)) missing.push(`${type}/${name}`);
+      }
+    }
+
+    expect(missing).toEqual([]);
+  });
+
+  it('풀의 모든 스킬이 최소 한 유형에 선택된다', async () => {
+    // 아무 유형도 쓰지 않는 스킬은 게시 패키지 용량만 먹는다.
+    const entries = await readdir(POOL_DIR, { withFileTypes: true });
+    const pool = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+    const selected = new Set(Object.values(SKILL_SETS).flat());
+
+    expect(pool.filter((name) => !selected.has(name))).toEqual([]);
+  });
+
+  it('유형별 목록에 중복이 없다', () => {
+    // 공통 목록과 유형별 목록이 겹치면 copySkills 가 같은 파일을 두 번 쓴다.
+    for (const [type, names] of Object.entries(SKILL_SETS)) {
+      expect(new Set(names).size, `${type} 에 중복이 있다`).toBe(names.length);
+    }
+  });
+
+  it('devkit-stack 이 세 유형 모두에 있다', () => {
+    // 스택 충돌 봉인은 유형과 무관하다.
+    expect(SKILL_SETS.nest).toContain('devkit-stack');
+    expect(SKILL_SETS.next).toContain('devkit-stack');
+    expect(SKILL_SETS.monorepo).toContain('devkit-stack');
+  });
+});
+
+describe('레시피의 copySkills 배선', () => {
+  it('세 레시피가 각각 자기 유형의 목록으로 copySkills 를 부른다', () => {
+    const cases = [
+      ['nest', nestRecipe] as const,
+      ['next', nextRecipe] as const,
+      ['monorepo', monorepoRecipe] as const,
+    ];
+
+    for (const [type, recipe] of cases) {
+      const step = recipe({ skipInstall: true }).find((s) => s.kind === 'copySkills');
+      expect(step, `${type} 레시피에 copySkills 단계가 없다`).toBeDefined();
+      expect(step?.describe()).toEqual({ skills: [...SKILL_SETS[type]] });
+    }
   });
 });

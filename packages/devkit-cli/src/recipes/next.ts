@@ -1,7 +1,8 @@
 import type { Recipe, Step } from '../types.js';
 import { markerPatch } from '../lib/marker.js';
+import { SKILL_SETS } from '../lib/skill-sets.js';
 import { devkitVersion } from '../lib/version.js';
-import { copyOverlay, delegate, registryDeps, makeDirs, mergeJson, removeFiles, scaffold } from '../ops/index.js';
+import { copyOverlay, copySkills, delegate, registryDeps, makeDirs, mergeJson, removeFiles, scaffold } from '../ops/index.js';
 
 /**
  * Next.js App Router 레시피. 설계 5.2절.
@@ -44,6 +45,11 @@ export const nextRecipe: Recipe = (options = {}) => {
     // 앱 하위로 들어간다 — 리뷰 자산은 저장소 루트에 있어야 하므로 그쪽에서
     // 지우고 루트에 다시 놓는다(monorepo.ts).
     copyOverlay('_shared'),
+
+    // 유형별 Claude 스킬. monorepo 는 이 레시피를 apps/web 에 합성한 뒤
+    // apps/web/.claude 를 통째로 지우므로(monorepo.ts), 여기서 놓인 것은
+    // 모노레포에서는 남지 않고 루트 쪽이 대신 놓인다.
+    copySkills(SKILL_SETS.next),
 
     // typescript-eslint는 templates/next/eslint.config.mjs가 파서로 쓴다.
     // @cheolubak/eslint-plugin-fsd는 파서를 제공하지 않아(consumer 책임) 이게
