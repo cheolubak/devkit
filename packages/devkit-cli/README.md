@@ -197,6 +197,21 @@ gh label create no-auto-merge --description "이 PR 은 자동 머지하지 않�
 `on.workflow_run.workflows` 목록에 이름을 손으로 넣어야 했고, 빠뜨리면 PR 이
 승인된 채로 조용히 멈췄다 — 이벤트로 깨어나지 않게 되면서 그 함정이 사라졌다.
 
+**이 머지 기능은 `devbak update --only` 의 두 카테고리에 걸쳐 있다** —
+`.claude/commands/merge.md`(`/merge` 커맨드)는 `claude` 카테고리, 
+`.github/scripts/wait-and-merge.sh`(실제 판정·머지 로직)는 워크플로와 같은
+`ci` 카테고리다(`categoryOf` 는 경로 기반이라 이 둘을 한 카테고리로 묶지
+않는다). `--only` 로 하나만 고르면 절반만 놓인다.
+
+- `--only claude` 는 `merge.md` 만 갱신한다. `wait-and-merge.sh` 는 오지
+  않고, 은퇴한 `auto-merge.yml` 도 지워지지 않는다 — 소비자는 **없는 파일을
+  부르는 `/merge`** 를 갖게 되고, 옛 자동 머지가 그대로 살아 있다.
+- `--only ci` 는 `wait-and-merge.sh` 와 `claude-review.yml` 만 갱신한다.
+  `/merge` 커맨드는 오지 않는다.
+
+머지 기능 전체를 갱신하려면 `--only claude,ci` 로 둘 다 지정하거나, `--only`
+를 아예 빼고 전체 update 를 돌린다.
+
 ## `devbak version` — 지금 무엇을 쓰고 있는지 본다
 
 ```
@@ -252,97 +267,27 @@ pnpm devbak update --help                       # 사용법만 출력하고 종�
 
 **1. 무엇이 바뀌는지 먼저 본다.** `--dry-run`은 아무것도 쓰지 않는다.
 
+아래 두 출력은 실제로 돌려 받은 것을 그대로 옮긴 것이다(손으로 지어낸 개수가
+아니다). 다만 `신규`의 대부분은 `.claude/skills/` 아래 스킬 카탈로그 파일이라
+**정확한 개수는 여기 고정할 수 없다** — 스킬이 추가될 때마다 늘어난다(실제로
+이 예시의 이전 버전은 13개라고 적었다가 스킬 카탈로그가 늘며 어긋났다). 아래는
+그 파일들을 생략하고 뼈대만 남긴 것이다.
+
 ```console
 $ pnpm devbak update ../demo-api --type nest --dry-run
 devkit update — demo-api (nest)
 
-  덮어쓰기 (2)
+  덮어쓰기 (1)
     package.json
-    tsconfig.json
-  신규 (92)
+  신규 (89)
     .claude/agents/devkit-implementer.md
     .claude/agents/devkit-reviewer.md
     .claude/commands/api-test.md
-    .claude/commands/issue-work.md
-    .claude/commands/issue.md
     .claude/commands/merge.md
     .claude/commands/module.md
     .claude/commands/review.md
     .claude/commands/verify.md
-    .claude/skills/backend-verify-loop/SKILL.md
-    .claude/skills/clean-architecture/SKILL.md
-    .claude/skills/clean-architecture/references/dependency-rule.md
-    .claude/skills/clean-architecture/references/hexagonal-ports-adapters.md
-    .claude/skills/clean-architecture/references/nestjs-application.md
-    .claude/skills/clean-architecture/references/solid.md
-    .claude/skills/clean-code/SKILL.md
-    .claude/skills/clean-code/references/code-smells.md
-    .claude/skills/clean-code/references/comments-errors.md
-    .claude/skills/clean-code/references/functions.md
-    .claude/skills/clean-code/references/naming.md
-    .claude/skills/devkit-stack/SKILL.md
-    .claude/skills/eslint/SKILL.md
-    .claude/skills/eslint/references/flat-config.md
-    .claude/skills/eslint/references/monorepo.md
-    .claude/skills/eslint/references/nestjs-node.md
-    .claude/skills/eslint/references/nextjs-react.md
-    .claude/skills/issue-to-pr/SKILL.md
-    .claude/skills/nestjs-auth/SKILL.md
-    .claude/skills/nestjs-auth/references/complete-auth-example.md
-    .claude/skills/nestjs-auth/references/oauth-google-example.md
-    .claude/skills/nestjs-caching/SKILL.md
-    .claude/skills/nestjs-caching/references/patterns.md
-    .claude/skills/nestjs-caching/references/redis-setup.md
-    .claude/skills/nestjs-config/SKILL.md
-    .claude/skills/nestjs-config/references/complete-config-setup.md
-    .claude/skills/nestjs-crud/SKILL.md
-    .claude/skills/nestjs-crud/references/complete-crud-example.md
-    .claude/skills/nestjs-crud/references/pagination.md
-    .claude/skills/nestjs-database/SKILL.md
-    .claude/skills/nestjs-database/references/prisma-patterns.md
-    .claude/skills/nestjs-database/references/typeorm-advanced-patterns.md
-    .claude/skills/nestjs-deployment/SKILL.md
-    .claude/skills/nestjs-deployment/references/ci-cd.md
-    .claude/skills/nestjs-deployment/references/dockerfile.md
-    .claude/skills/nestjs-deployment/references/health-lifecycle.md
-    .claude/skills/nestjs-error-handling/SKILL.md
-    .claude/skills/nestjs-error-handling/references/complete-error-handling.md
-    .claude/skills/nestjs-queue/SKILL.md
-    .claude/skills/nestjs-queue/references/bullmq.md
-    .claude/skills/nestjs-queue/references/scheduler.md
-    .claude/skills/nestjs-security/SKILL.md
-    .claude/skills/nestjs-security/references/headers-cors.md
-    .claude/skills/nestjs-security/references/rate-limiting.md
-    .claude/skills/nestjs-semantic-search/SKILL.md
-    .claude/skills/nestjs-semantic-search/references/prisma-pgvector-search.md
-    .claude/skills/nestjs-semantic-search/references/typeorm-pgvector-rag.md
-    .claude/skills/nestjs-swagger/SKILL.md
-    .claude/skills/nestjs-swagger/references/advanced-swagger-patterns.md
-    .claude/skills/nestjs-testing/SKILL.md
-    .claude/skills/nestjs-testing/references/e2e-test-example.md
-    .claude/skills/nestjs-testing/references/service-test-example.md
-    .claude/skills/nestjs-validation/SKILL.md
-    .claude/skills/nestjs-validation/references/custom-validators.md
-    .claude/skills/nestjs-validation/references/dto-patterns.md
-    .claude/skills/oxlint-eslint-hybrid/SKILL.md
-    .claude/skills/oxlint-eslint-hybrid/references/division-of-labor.md
-    .claude/skills/oxlint-eslint-hybrid/references/hybrid-setup.md
-    .claude/skills/oxlint-eslint-hybrid/references/workflow-integration.md
-    .claude/skills/prettier/SKILL.md
-    .claude/skills/prettier/references/config.md
-    .claude/skills/prettier/references/integration.md
-    .claude/skills/prettier/references/plugins.md
-    .claude/skills/scope-escape-issue/SKILL.md
-    .claude/skills/tdd/SKILL.md
-    .claude/skills/tdd/references/backend-integration.md
-    .claude/skills/tdd/references/backend-vitest.md
-    .claude/skills/tdd/references/frontend-advanced.md
-    .claude/skills/tdd/references/frontend-vitest.md
-    .claude/skills/tdd/references/regression.md
-    .claude/skills/tdd/references/walkthrough.md
-    .claude/skills/tdd/references/workflow.md
-    .claude/skills/typescript-patterns/SKILL.md
-    .claude/skills/verify-implementation/SKILL.md
+    .claude/skills/…                              (스킬 카탈로그 전체 — 생략, 버전마다 늘어난다)
     .github/scripts/wait-and-merge.sh
     .github/workflows/claude-review.yml
     .gitignore
@@ -352,6 +297,7 @@ devkit update — demo-api (nest)
     eslint.config.mjs
     jest-e2e.config.js
     jest.config.js
+    tsconfig.json
 
 --dry-run — 아무것도 쓰지 않았습니다.
 ```
@@ -362,90 +308,15 @@ devkit update — demo-api (nest)
 $ pnpm devbak update ../demo-api --type nest --only claude,ci --dry-run
 devkit update — demo-api (nest)
 
-  신규 (86)
+  신규 (82)
     .claude/agents/devkit-implementer.md
     .claude/agents/devkit-reviewer.md
     .claude/commands/api-test.md
-    .claude/commands/issue-work.md
-    .claude/commands/issue.md
     .claude/commands/merge.md
     .claude/commands/module.md
     .claude/commands/review.md
     .claude/commands/verify.md
-    .claude/skills/backend-verify-loop/SKILL.md
-    .claude/skills/clean-architecture/SKILL.md
-    .claude/skills/clean-architecture/references/dependency-rule.md
-    .claude/skills/clean-architecture/references/hexagonal-ports-adapters.md
-    .claude/skills/clean-architecture/references/nestjs-application.md
-    .claude/skills/clean-architecture/references/solid.md
-    .claude/skills/clean-code/SKILL.md
-    .claude/skills/clean-code/references/code-smells.md
-    .claude/skills/clean-code/references/comments-errors.md
-    .claude/skills/clean-code/references/functions.md
-    .claude/skills/clean-code/references/naming.md
-    .claude/skills/devkit-stack/SKILL.md
-    .claude/skills/eslint/SKILL.md
-    .claude/skills/eslint/references/flat-config.md
-    .claude/skills/eslint/references/monorepo.md
-    .claude/skills/eslint/references/nestjs-node.md
-    .claude/skills/eslint/references/nextjs-react.md
-    .claude/skills/issue-to-pr/SKILL.md
-    .claude/skills/nestjs-auth/SKILL.md
-    .claude/skills/nestjs-auth/references/complete-auth-example.md
-    .claude/skills/nestjs-auth/references/oauth-google-example.md
-    .claude/skills/nestjs-caching/SKILL.md
-    .claude/skills/nestjs-caching/references/patterns.md
-    .claude/skills/nestjs-caching/references/redis-setup.md
-    .claude/skills/nestjs-config/SKILL.md
-    .claude/skills/nestjs-config/references/complete-config-setup.md
-    .claude/skills/nestjs-crud/SKILL.md
-    .claude/skills/nestjs-crud/references/complete-crud-example.md
-    .claude/skills/nestjs-crud/references/pagination.md
-    .claude/skills/nestjs-database/SKILL.md
-    .claude/skills/nestjs-database/references/prisma-patterns.md
-    .claude/skills/nestjs-database/references/typeorm-advanced-patterns.md
-    .claude/skills/nestjs-deployment/SKILL.md
-    .claude/skills/nestjs-deployment/references/ci-cd.md
-    .claude/skills/nestjs-deployment/references/dockerfile.md
-    .claude/skills/nestjs-deployment/references/health-lifecycle.md
-    .claude/skills/nestjs-error-handling/SKILL.md
-    .claude/skills/nestjs-error-handling/references/complete-error-handling.md
-    .claude/skills/nestjs-queue/SKILL.md
-    .claude/skills/nestjs-queue/references/bullmq.md
-    .claude/skills/nestjs-queue/references/scheduler.md
-    .claude/skills/nestjs-security/SKILL.md
-    .claude/skills/nestjs-security/references/headers-cors.md
-    .claude/skills/nestjs-security/references/rate-limiting.md
-    .claude/skills/nestjs-semantic-search/SKILL.md
-    .claude/skills/nestjs-semantic-search/references/prisma-pgvector-search.md
-    .claude/skills/nestjs-semantic-search/references/typeorm-pgvector-rag.md
-    .claude/skills/nestjs-swagger/SKILL.md
-    .claude/skills/nestjs-swagger/references/advanced-swagger-patterns.md
-    .claude/skills/nestjs-testing/SKILL.md
-    .claude/skills/nestjs-testing/references/e2e-test-example.md
-    .claude/skills/nestjs-testing/references/service-test-example.md
-    .claude/skills/nestjs-validation/SKILL.md
-    .claude/skills/nestjs-validation/references/custom-validators.md
-    .claude/skills/nestjs-validation/references/dto-patterns.md
-    .claude/skills/oxlint-eslint-hybrid/SKILL.md
-    .claude/skills/oxlint-eslint-hybrid/references/division-of-labor.md
-    .claude/skills/oxlint-eslint-hybrid/references/hybrid-setup.md
-    .claude/skills/oxlint-eslint-hybrid/references/workflow-integration.md
-    .claude/skills/prettier/SKILL.md
-    .claude/skills/prettier/references/config.md
-    .claude/skills/prettier/references/integration.md
-    .claude/skills/prettier/references/plugins.md
-    .claude/skills/scope-escape-issue/SKILL.md
-    .claude/skills/tdd/SKILL.md
-    .claude/skills/tdd/references/backend-integration.md
-    .claude/skills/tdd/references/backend-vitest.md
-    .claude/skills/tdd/references/frontend-advanced.md
-    .claude/skills/tdd/references/frontend-vitest.md
-    .claude/skills/tdd/references/regression.md
-    .claude/skills/tdd/references/walkthrough.md
-    .claude/skills/tdd/references/workflow.md
-    .claude/skills/typescript-patterns/SKILL.md
-    .claude/skills/verify-implementation/SKILL.md
+    .claude/skills/…                              (스킬 카탈로그 전체 — 생략, 버전마다 늘어난다)
     .github/scripts/wait-and-merge.sh
     .github/workflows/claude-review.yml
     CLAUDE.md

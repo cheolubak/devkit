@@ -172,8 +172,12 @@ Actions 에서 보고, 안 생겼으면 디스패치를 되살린다. 문서상 
 
 - `src/lib/categories.ts` 의 `FILE_PATTERNS` 에 `[/^\.github\/scripts\/.+/, 'ci']`
   를 더한다. 없으면 오버레이 커버리지 테스트가 실패한다 — 그것이 안전망이다.
-- 실행 비트: git 에 `100755` 로 커밋하되, `copyOverlay` 가 모드를 보존하는지
-  **실행으로 확인**한다. 보존하지 않으면 커맨드가 `bash .github/scripts/…` 로 부른다.
+- 실행 비트: **실행으로 확인한 결과, `copyOverlay` 의 `collectTree` 는 내용만
+  읽어 `writeFile` 로 쓰므로 모드를 보존하지 않는다.** 그래서 파일은 git 에
+  `100644` 로 커밋하고, `/merge` 커맨드가 `./script.sh` 가 아니라
+  `bash .github/scripts/…` 로 부른다 — 소비자 프로젝트에 실행 비트 없이
+  놓여도 동작해야 하기 때문이다. `100755` 로 커밋했다면 오히려 소스와 소비자
+  프로젝트 사이에서 모드가 어긋나는 신호 없는 드리프트가 됐을 것이다.
 - `recipe-{next,nest,monorepo}.test.ts.snap` 3개 갱신.
 
 ## 10. 은퇴 파일 삭제

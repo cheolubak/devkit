@@ -80,7 +80,7 @@ FSD 레이어나 Server/Client 경계는 여기에 없다 — 그것은 이 저�
 
 ### 5. 게시 경로
 
-이 저장소의 머지는 곧바로 `release.yml` 디스패치를 거쳐 패키지 게시로 이어진다.
+이 저장소의 머지는 곧바로 `release.yml` 을 깨워(main push) 패키지 게시로 이어진다.
 승인 하나가 레지스트리까지 간다.
 
 - `package.json`의 `files`·`exports`·`bin`이 실제 산출물과 맞는가

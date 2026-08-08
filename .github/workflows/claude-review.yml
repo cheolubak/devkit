@@ -11,6 +11,15 @@ name: 'Claude Code Review'
 # 그것을 기다렸다 머지하는 것은 사람이 부르는 스크립트다. 그래서 이 파일의
 # name: 값을 다른 워크플로가 이름으로 참조하지 않는다 — 예전에는
 # auto-merge.yml 의 workflow_run 목록과 글자 그대로 같아야 했다.
+#
+# 트리거는 반드시 `pull_request` 여야 한다. `pull_request_target` 은 fork PR
+# 에도 시크릿(CLAUDE_CODE_OAUTH_TOKEN)을 흘려보내고 base 브랜치의 워크플로
+# 파일로 fork 의 코드를 리뷰한다. 지금은 fork PR 이 시크릿을 못 받아
+# CLAUDE_CODE_OAUTH_TOKEN 이 비고 claude-review status 자체가 만들어지지
+# 않아 게이트가 wait: 로 남다가 타임아웃으로 막힌다(fail-safe). 이 트리거를
+# pull_request_target 으로 바꾸면 그 방어가 조용히 사라지고, 게이트는 아무도
+# 리뷰하지 않은 fork PR 을 그대로 통과시킨다. tests/merge-script.test.ts 가
+# 이 파일에 pull_request_target 이 없는 것을 고정한다.
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]

@@ -18,31 +18,58 @@ const TEMPLATE_COMMAND = fileURLToPath(
   new URL('../templates/_shared/.claude/commands/merge.md', import.meta.url),
 );
 
-describe('/merge 커맨드', () => {
+// 저장소판. 스크립트와 마찬가지로 템플릿판과 바이트 단위로 같아야 한다 — 둘
+// 다르면 아무도 모르는 채로 드리프트한다. 이 상수가 없던 동안 저장소판
+// merge.md 는 어떤 단언에도 걸리지 않은 채 "우연히 동일"했다.
+const REPO_COMMAND = fileURLToPath(new URL('../../../.claude/commands/merge.md', import.meta.url));
+
+// 두 사본 모두에 같은 단언을 돌린다. 한쪽만 검증하면 다른 쪽의 드리프트가
+// 조용히 남는다 — 아래 '두 사본의 동일성' 이 그것을 바이트 단위로도
+// 잡아내지만, 내용 단언까지 양쪽에 걸어야 어느 사본이 무엇을 어겼는지가
+// 실패 메시지에 바로 드러난다.
+describe.each([
+  ['templates/_shared', TEMPLATE_COMMAND],
+  ['저장소판', REPO_COMMAND],
+])('/merge 커맨드 (%s)', (_label, commandPath) => {
   it('스크립트를 bash 로 부른다', async () => {
     // 실행 비트는 보존되지 않는다 — copyOverlay 의 collectTree 가 내용만
     // 읽어 writeFile 로 쓴다. `./script.sh` 로 부르면 소비자 프로젝트에서
     // Permission denied 로 죽는다.
-    const doc = await readFile(TEMPLATE_COMMAND, 'utf8');
-    expect(doc).toContain('bash .github/scripts/wait-and-merge.sh');
+    const doc = await readFile(commandPath, 'utf8');
+    expect(doc).toContain('bash "$(git rev-parse --show-toplevel)/.github/scripts/wait-and-merge.sh"');
     expect(doc).not.toMatch(/(?<!bash )\.\/\.github\/scripts/);
   });
 
   it('판정 로직을 다시 적지 않는다', async () => {
     // 게이트가 두 곳에 적히면 반드시 어긋난다. 커맨드는 부르고 보고할 뿐이다.
-    const doc = await readFile(TEMPLATE_COMMAND, 'utf8');
+    const doc = await readFile(commandPath, 'utf8');
     expect(doc).not.toContain('statusCheckRollup');
     expect(doc).not.toContain('commitStatuses');
   });
 
   it('실패했을 때 고치지 말고 보고하라고 명시한다', async () => {
-    const doc = await readFile(TEMPLATE_COMMAND, 'utf8');
+    const doc = await readFile(commandPath, 'utf8');
     expect(doc).toContain('멈추고');
   });
 
   it('frontmatter 에 description 이 있다', async () => {
-    const doc = await readFile(TEMPLATE_COMMAND, 'utf8');
+    const doc = await readFile(commandPath, 'utf8');
     expect(doc).toMatch(/^---\ndescription: .+\n---\n/);
+  });
+
+  it('스크립트를 절대경로로 부른다', async () => {
+    // cwd 가 저장소 루트가 아니면(하위 패키지, monorepo 의 apps/web 등)
+    // 상대경로 호출은 파일을 못 찾고 죽는다.
+    const doc = await readFile(commandPath, 'utf8');
+    expect(doc).toContain('git rev-parse --show-toplevel');
+  });
+
+  it('부르는 사람에게 PR 확인을 요구한다', async () => {
+    // 이 설계가 뺀 방어(신원 검증·trusted·커밋 고정)의 유일한 대체물은
+    // 사람이 세션 앞에 있다는 것이다. 그 사람에게 무엇이 요구되는지가
+    // 문서에 없으면 그 전제 자체가 아무 데도 적히지 않은 것과 같다.
+    const doc = await readFile(commandPath, 'utf8');
+    expect(doc).toContain('부르기 전에');
   });
 });
 
@@ -51,8 +78,88 @@ describe('두 사본의 동일성', () => {
   // 드리프트해도 통과했고, 실제로 드리프트했다. 저장소판과 템플릿판의
   // 차이(fork 차단·release 디스패치)가 사라진 지금은 파일 전체를 고정할 수
   // 있다. 약한 단언을 유지할 이유가 없다.
-  it('저장소판과 템플릿판이 바이트 단위로 같다', () => {
+  it('저장소판과 템플릿판 스크립트가 바이트 단위로 같다', () => {
     expect(readFileSync(REPO_SCRIPT, 'utf8')).toBe(readFileSync(TEMPLATE_SCRIPT, 'utf8'));
+  });
+
+  it('저장소판과 템플릿판 /merge 커맨드가 바이트 단위로 같다', () => {
+    // F2(절대경로 호출)·F9(사람 확인 요구)를 고치며 한쪽만 고치면 이 단언이
+    // 없는 한 아무도 모른다 — 스크립트는 이미 강화돼 있었지만 그것을 부르는
+    // 진입점은 그렇지 않았다.
+    expect(readFileSync(REPO_COMMAND, 'utf8')).toBe(readFileSync(TEMPLATE_COMMAND, 'utf8'));
+  });
+});
+
+/**
+ * 인자 파싱 결과를 실제 셸 실행으로 검증한다.
+ *
+ * 인자 오류는 gh 호출보다 앞에서 끝나므로 네트워크·인증 없이 스크립트를 그대로
+ * 돌릴 수 있다. 이 블록이 잡으려는 결함은 텍스트 검사로는 안 드러났다 —
+ * `--timeout` 만 주고 값을 안 주면 `${2:-}` 가 빈 문자열을 조용히 받고
+ * `shift 2` 가 `set -e` 아래에서 아무 출력 없이 rc=1 로 죽었고(usage 의 계약은
+ * 사용법 오류 exit 2), `--timeout abc` 는 DEADLINE 계산의 산술 확장이 문자열을
+ * 변수명으로 재귀 확장하려다 `set -u` 에 걸려 "unbound variable" 로 죽었다.
+ * 종료 코드만 보면 "죽었다"와 "사용법 오류를 알렸다"를 구분할 수 없으므로
+ * stderr 메시지까지 함께 본다.
+ */
+function runScript(args: string[]): { status: number; stdout: string; stderr: string } {
+  try {
+    const stdout = execFileSync('bash', [TEMPLATE_SCRIPT, ...args], { encoding: 'utf8' });
+    return { status: 0, stdout, stderr: '' };
+  } catch (e) {
+    const err = e as { status: number | null; stdout?: string; stderr?: string };
+    return { status: err.status ?? -1, stdout: err.stdout ?? '', stderr: err.stderr ?? '' };
+  }
+}
+
+describe('인자 파싱 (스크립트를 실제로 실행한다)', () => {
+  it('인자가 없으면 exit 2, 사용법을 알린다', () => {
+    const got = runScript([]);
+    expect(got.status).toBe(2);
+    expect(got.stderr).toContain('PR 번호가 필요합니다');
+    expect(got.stderr).toContain('사용법:');
+  });
+
+  it('--timeout 에 값이 없으면 exit 2', () => {
+    const got = runScript(['42', '--timeout']);
+    expect(got.status).toBe(2);
+    expect(got.stderr).toContain('--timeout 에 값이 필요합니다');
+  });
+
+  it('--timeout abc 는 exit 2', () => {
+    const got = runScript(['42', '--timeout', 'abc']);
+    expect(got.status).toBe(2);
+    expect(got.stderr).toContain('--timeout 은 0 이상의 정수여야 합니다');
+  });
+
+  it('--interval 에 값이 없으면 exit 2', () => {
+    const got = runScript(['42', '--interval']);
+    expect(got.status).toBe(2);
+    expect(got.stderr).toContain('--interval 에 값이 필요합니다');
+  });
+
+  it('--interval abc 는 exit 2', () => {
+    const got = runScript(['42', '--interval', 'abc']);
+    expect(got.status).toBe(2);
+    expect(got.stderr).toContain('--interval 은 0 이상의 정수여야 합니다');
+  });
+
+  it('--help 는 exit 0 이고 사용법을 stdout 에 낸다', () => {
+    const got = runScript(['--help']);
+    expect(got.status).toBe(0);
+    expect(got.stdout).toContain('사용법:');
+  });
+
+  it('알 수 없는 옵션은 exit 2', () => {
+    const got = runScript(['42', '--bogus']);
+    expect(got.status).toBe(2);
+    expect(got.stderr).toContain('알 수 없는 옵션');
+  });
+
+  it('PR 번호를 두 개 주면 exit 2', () => {
+    const got = runScript(['42', '43']);
+    expect(got.status).toBe(2);
+    expect(got.stderr).toContain('PR 번호는 하나만 받습니다');
   });
 });
 
@@ -590,6 +697,22 @@ describe('_shared 리뷰 워크플로', () => {
     expect(doc).toMatch(/^concurrency:/m);
     expect(doc).toContain('cancel-in-progress: true');
   });
+
+  it('pull_request_target 을 쓰지 않는다', async () => {
+    // fork PR 방어는 지금 전부 암묵적이다 — pull_request 트리거라 fork PR 에는
+    // 시크릿이 안 흐르고, CLAUDE_CODE_OAUTH_TOKEN 이 비어 claude-review status
+    // 가 아예 안 만들어지고, 게이트는 그것을 wait: 로 보다가 타임아웃으로
+    // 막는다(fail-safe). pull_request_target 으로 바뀌는 순간 그 방어가
+    // 조용히 사라지고 게이트는 리뷰되지 않은 fork PR 을 통과시킨다.
+    //
+    // `on:` 의 실제 트리거 키만 본다 — 파일 전체에서 문자열을 찾으면 이
+    // 위험을 설명하는 주석 자신(방금 쓴 이 텍스트 포함)이 그 문자열을
+    // 담고 있어 항상 걸린다.
+    const doc = await readReview();
+    const trigger = /^on:\n\s*([\w_]+):/m.exec(doc);
+    expect(trigger, 'on: 트리거 키를 찾지 못했다').not.toBeNull();
+    expect(trigger?.[1]).toBe('pull_request');
+  });
 });
 
 describe('이 저장소판 리뷰 워크플로', () => {
@@ -669,12 +792,22 @@ describe('이 저장소판 리뷰 워크플로', () => {
   });
 
   it('draft PR 이 ready 로 전환되는 것을 듣고, 겹친 실행을 concurrency 로 막는다', () => {
-    // 템플릿판과 같은 이유. 이 저장소판은 머지가 곧바로 release.yml 디스패치를
-    // 거쳐 패키지 게시로 이어지므로, 겹친 실행이 옛 커밋의 승인을 새 커밋에
+    // 템플릿판과 같은 이유. 이 저장소판은 머지(main push)가 곧바로 release.yml
+    // 을 깨워 패키지 게시로 이어지므로, 겹친 실행이 옛 커밋의 승인을 새 커밋에
     // 남기는 결함은 여기서 더 위험하다.
     const doc = read();
     expect(doc).toContain('ready_for_review');
     expect(doc).toMatch(/^concurrency:/m);
     expect(doc).toContain('cancel-in-progress: true');
+  });
+
+  it('pull_request_target 을 쓰지 않는다', () => {
+    // 템플릿판과 같은 이유 — fork PR 방어(fail-safe)가 pull_request 트리거에
+    // 암묵적으로 얹혀 있다. `on:` 의 실제 트리거 키만 본다(이유는 템플릿판
+    // 단언 참조 — 위험을 설명하는 주석 자신이 문자열을 담고 있다).
+    const doc = read();
+    const trigger = /^on:\n\s*([\w_]+):/m.exec(doc);
+    expect(trigger, 'on: 트리거 키를 찾지 못했다').not.toBeNull();
+    expect(trigger?.[1]).toBe('pull_request');
   });
 });
