@@ -277,12 +277,15 @@ pnpm devbak update --help                       # 사용법만 출력하고 종�
 $ pnpm devbak update ../demo-api --type nest --dry-run
 devkit update — demo-api (nest)
 
-  덮어쓰기 (1)
+  덮어쓰기 (2)
     package.json
-  신규 (89)
+    tsconfig.json
+  신규 (92)
     .claude/agents/devkit-implementer.md
     .claude/agents/devkit-reviewer.md
     .claude/commands/api-test.md
+    .claude/commands/issue-work.md
+    .claude/commands/issue.md
     .claude/commands/merge.md
     .claude/commands/module.md
     .claude/commands/review.md
@@ -297,7 +300,6 @@ devkit update — demo-api (nest)
     eslint.config.mjs
     jest-e2e.config.js
     jest.config.js
-    tsconfig.json
 
 --dry-run — 아무것도 쓰지 않았습니다.
 ```
@@ -308,10 +310,12 @@ devkit update — demo-api (nest)
 $ pnpm devbak update ../demo-api --type nest --only claude,ci --dry-run
 devkit update — demo-api (nest)
 
-  신규 (82)
+  신규 (86)
     .claude/agents/devkit-implementer.md
     .claude/agents/devkit-reviewer.md
     .claude/commands/api-test.md
+    .claude/commands/issue-work.md
+    .claude/commands/issue.md
     .claude/commands/merge.md
     .claude/commands/module.md
     .claude/commands/review.md
