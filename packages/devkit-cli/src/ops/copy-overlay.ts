@@ -52,6 +52,20 @@ function splitIgnoreTemplate(content: string): { lines: string[]; block: string[
   };
 }
 
+export interface CollectTreeOptions {
+  /**
+   * 파일명을 원문 그대로 쓴다(`_foo` → `.foo` 변환을 끈다).
+   *
+   * `_` 접두 규칙은 templates 트리가 자기 `.gitignore`·`.npmrc` 를 git 에
+   * 삼켜지지 않게 하려는 **이스케이프**지, 트리에 담긴 내용의 규칙이 아니다.
+   * 스킬 풀(`_skills/`)의 계약은 "바이트 그대로"이므로 그 이스케이프를 적용하면
+   * 안 된다 — 예를 들어 react-best-practices 는 자기 README 가 이름으로
+   * 참조하는 `rules/_template.md` 를 갖는데, `.template.md` 로 바뀌면 복사도
+   * 성공하고 파일 개수도 맞은 채 그 참조만 조용히 깨진다.
+   */
+  literalNames?: boolean;
+}
+
 /**
  * 템플릿 트리를 읽어 (상대경로, 최종 내용) 목록으로 만든다. **쓰지 않는다.**
  *
@@ -63,16 +77,17 @@ export async function collectTree(
   from: string,
   relDir: string,
   vars: Record<string, string>,
+  options: CollectTreeOptions = {},
 ): Promise<PlannedChange[]> {
   const entries = await readdir(from, { withFileTypes: true });
 
   const nested = await Promise.all(
     entries.map(async (entry): Promise<PlannedChange[]> => {
-      const name = templateFileName(entry.name);
+      const name = options.literalNames ? entry.name : templateFileName(entry.name);
       const rel = relDir === '' ? name : posix.join(relDir, name);
 
       if (entry.isDirectory()) {
-        return await collectTree(join(from, entry.name), rel, vars);
+        return await collectTree(join(from, entry.name), rel, vars, options);
       }
 
       let content = await readFile(join(from, entry.name), 'utf8');

@@ -16,9 +16,10 @@ export const SKILL_POOL_DIR = '_skills';
 /**
  * `templates/_skills/<name>/` 을 `.claude/skills/<name>/` 로 복사한다.
  *
- * `__NAME__` 치환을 하지 않는다(vars 가 빈 객체다). 스킬 본문은 프로젝트
- * 이름과 무관하고, 우연히 그 형태의 문자열이 있으면 치환이 원문을 훼손한다 —
- * 원본 그대로 복사가 이 자산의 계약이다(설계 2.1절).
+ * `__NAME__` 치환을 하지 않고(vars 가 빈 객체다) 파일명도 바꾸지 않는다
+ * (`literalNames`). 스킬 본문은 프로젝트 이름과 무관하고, 우연히 그 형태의
+ * 문자열이나 `_` 접두 파일명이 있으면 변환이 원문을 훼손한다 — 원본 그대로
+ * 복사가 이 자산의 계약이다(설계 2.1절).
  */
 export function copySkills(names: readonly string[]): Step {
   const plan = async (): Promise<PlannedChange[]> => {
@@ -33,7 +34,7 @@ export function copySkills(names: readonly string[]): Step {
               `조용히 건너뛰면 그 스킬은 어떤 유형에도 배포되지 않으면서 생성이 성공합니다.`,
           );
         }
-        return await collectTree(from, posix.join('.claude', 'skills', name), {});
+        return await collectTree(from, posix.join('.claude', 'skills', name), {}, { literalNames: true });
       }),
     );
 
