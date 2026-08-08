@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 // 검증 '대상'은 풀린 dist/bin.js 다 — 저장소 없이 도는지가 이 파일의 주제다.
 // 검증 '주체'인 테스트가 소스의 상수를 읽는 것은 그 격리와 무관하며,
@@ -89,5 +89,30 @@ describe('게시본(tarball) 으로 실행하기', () => {
     expect(existsSync(join(project, 'eslint.config.mjs'))).toBe(true);
     // 설치가 실제로 됐는지 — 레지스트리 경로가 통했다는 증거다.
     expect(existsSync(join(project, 'node_modules', '@cheolubak', 'tsconfig'))).toBe(true);
+  });
+
+  // 사용자가 실제로 치는 것은 `node .../dist/bin.js` 가 아니라 `devbak` 이다.
+  // 그 이름은 npm 이 설치 때 만드는 심볼릭 링크이고, 링크를 지나면 Node 는
+  // process.argv[1] 에 **링크 이름**(devbak) 을, import.meta.url 에는
+  // **해석된 실제 경로**(dist/bin.js) 를 준다. 두 값이 갈리는 이 지점을
+  // 지나는 실행 경로가 지금껏 어디에도 없었다 — 다른 테스트는 전부
+  // main() 을 직접 부르거나 dist/bin.js 를 실경로로 실행한다.
+  it('설치된 이름(devbak 심볼릭 링크) 으로 불러도 진입점이 실행된다', () => {
+    const root = packAndExtract();
+    const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+      version: string;
+    };
+
+    // npm 이 만드는 것과 같은 구조·같은 상대 링크다.
+    const binDir = join(root, 'node_modules', '.bin');
+    mkdirSync(binDir, { recursive: true });
+    const link = join(binDir, 'devbak');
+    symlinkSync(relative(binDir, join(root, 'dist', 'bin.js')), link);
+
+    const out = execFileSync(link, ['--version'], { stdio: 'pipe', encoding: 'utf8' });
+
+    // 종료 코드 0 은 증거가 못 된다 — 진입점을 아예 안 타도 0 으로 끝난다.
+    // 값이 실제로 나왔는지를 봐야 "돌았다" 를 증명한다.
+    expect(out.trim()).toBe(version);
   });
 });

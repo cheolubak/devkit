@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { basename, dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { packageLayout, packageRoot } from './lib/layout.js';
@@ -235,7 +235,19 @@ function runVersionCommand(path: string | undefined, baseDir: string): void {
   process.stdout.write(formatVersionReport(collectVersionReport(targetDir)));
 }
 
-const isDirectRun = process.argv[1] !== undefined && import.meta.url.endsWith(basename(process.argv[1]));
+/**
+ * 이 모듈이 CLI 진입점으로 실행됐는가 — tests/bin.test.ts 가 main 을 import
+ * 하므로, 모듈을 싣기만 해도 CLI 가 도는 것을 막아야 한다.
+ *
+ * 반드시 **실경로끼리** 비교한다. 사용자가 치는 이름은 npm 이 설치 때 만든
+ * 심볼릭 링크(node_modules/.bin/devbak)이고, 그 링크를 지나면 Node 는
+ * process.argv[1] 에 링크 경로를, import.meta.url 에 해석된 실제 경로를
+ * 준다. 이름을 문자열로 비교하면(예: endsWith(basename(argv[1]))) 전역
+ * 설치에서 'dist/bin.js' 와 'devbak' 을 견주는 꼴이 되어 항상 거짓이 되고,
+ * CLI 가 아무 출력 없이 종료 코드 0 으로 끝난다.
+ */
+const isDirectRun =
+  process.argv[1] !== undefined && fileURLToPath(import.meta.url) === realpathSync(process.argv[1]);
 if (isDirectRun) {
   main(process.argv.slice(2)).catch((error: unknown) => {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
