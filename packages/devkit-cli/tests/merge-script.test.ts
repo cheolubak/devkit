@@ -1239,4 +1239,78 @@ describe('스크립트 전체 실행 (가짜 gh 를 PATH 에 놓고 통째로 �
       rmSync(fake.dir, { recursive: true, force: true });
     }
   });
+
+  // 아래 세 건은 `--timeout` 계약이 **조회 성공 여부와 무관하게** 지켜지는지를
+  // 고정한다. 재시도 경로(`continue`)가 데드라인 검사를 건너뛰면 `--timeout` 은
+  // 조회가 성공한 폴링에서만 의미를 갖는다.
+  //
+  // `--timeout 0` 으로 겨눈다. 상한 3 은 스크립트에 박혀 있어 테스트가 키울 수
+  // 없고, 시간을 재는 방식은 CI 에서 흔들린다. 데드라인이 처음부터 지나 있으면
+  // 결함 유무가 **종료 사유 문자열**로 갈린다 — 건너뛰면 재시도가 상한까지 가
+  // "연속 3회 실패", 지나가면 곧바로 "타임아웃(0초)".
+
+  it('--timeout 0 은 한 번만 확인하고 타임아웃한다', () => {
+    const fake = makeFakeGh(FAKE_REPO);
+    try {
+      // 조회는 매번 성공하되 claude-review 신호가 없어 wait: 에 머문다.
+      fake.writePr('last', prJson({ headRefOid: FAKE_SHA }));
+      fake.writeStatuses('last', []);
+
+      const got = runFullScript(fake, ['7', '--timeout', '0', '--interval', '1']);
+
+      expect(got.status).toBe(1);
+      expect(got.stderr).toContain('타임아웃(0초)');
+      expect(got.stderr).toContain('wait: claude-review 신호가 아직 없습니다');
+      // "한 번만" 이 요점이다 — 데드라인 검사가 루프 맨 앞으로 가면 조회를
+      // 아예 안 하고 끝나 이 수가 0 이 된다.
+      expect(fake.calls().filter((c) => c.startsWith('pr view')).length).toBe(1);
+      expect(fake.calls().some((c) => c.startsWith('pr merge'))).toBe(false);
+    } finally {
+      rmSync(fake.dir, { recursive: true, force: true });
+    }
+  });
+
+  it('gh pr view 가 실패한 폴링도 데드라인 검사를 지나 타임아웃으로 끝난다', () => {
+    const fake = makeFakeGh(FAKE_REPO);
+    try {
+      // 조회가 계속 실패한다. 재시도 경로가 데드라인을 건너뛰면 상한 3 까지
+      // 가서 "연속 3회 실패" 로 끝나고, 지나가면 첫 실패 직후 타임아웃한다.
+      fake.failCalls('pr-view', [1, 2, 3, 4, 5]);
+      fake.writePr('last', prJson({ headRefOid: FAKE_SHA }));
+      fake.writeStatuses('last', []);
+
+      const got = runFullScript(fake, ['7', '--timeout', '0', '--interval', '1']);
+
+      expect(got.status).toBe(1);
+      expect(got.stderr).toContain('타임아웃(0초)');
+      expect(got.stderr).not.toContain('연속 3회 실패');
+      expect(fake.calls().filter((c) => c.startsWith('pr view')).length).toBe(1);
+      expect(fake.calls().some((c) => c.startsWith('pr merge'))).toBe(false);
+    } finally {
+      rmSync(fake.dir, { recursive: true, force: true });
+    }
+  });
+
+  it('gh api …/statuses 가 실패한 폴링도 데드라인 검사를 지나 타임아웃으로 끝난다', () => {
+    const fake = makeFakeGh(FAKE_REPO);
+    try {
+      // pr view 는 성공하고 statuses 만 계속 실패한다 — 두 재시도 경로 중
+      // 나머지 한쪽도 같은 가드를 받는지 따로 겨눈다.
+      fake.failCalls('statuses', [1, 2, 3, 4, 5]);
+      fake.writePr('last', prJson({ headRefOid: FAKE_SHA }));
+      fake.writeStatuses('last', []);
+
+      const got = runFullScript(fake, ['7', '--timeout', '0', '--interval', '1']);
+
+      expect(got.status).toBe(1);
+      expect(got.stderr).toContain('타임아웃(0초)');
+      expect(got.stderr).not.toContain('연속 3회 실패');
+      // `api` 로만 거르면 안 된다 — 스크립트는 auto-merge.yml 잔존 검사로도
+      // `gh api` 를 부른다. statuses 호출만 골라 센다.
+      expect(fake.calls().filter((c) => c.includes('/statuses')).length).toBe(1);
+      expect(fake.calls().some((c) => c.startsWith('pr merge'))).toBe(false);
+    } finally {
+      rmSync(fake.dir, { recursive: true, force: true });
+    }
+  });
 });
