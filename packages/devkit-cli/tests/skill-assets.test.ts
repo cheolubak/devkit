@@ -48,13 +48,51 @@ describe('devkit-stack 스킬', () => {
   });
 });
 
+describe('scope-escape-issue 스킬', () => {
+  it('frontmatter의 name이 scope-escape-issue 다', async () => {
+    const doc = await readFile(`${POOL_DIR}scope-escape-issue/SKILL.md`, 'utf8');
+    expect(doc).toMatch(/^---\n(?:.*\n)*?name: scope-escape-issue\n/);
+  });
+
+  it('브랜치 이름을 범위 판정의 근거로 삼는다', async () => {
+    // 새 선언 절차를 만들지 않고 이미 있는 선언을 재사용하는 것이 이 스킬의
+    // 핵심 결정이다(설계 5.2절). 이 줄이 빠지면 판정 기준 자체가 사라진다.
+    const doc = await readFile(`${POOL_DIR}scope-escape-issue/SKILL.md`, 'utf8');
+    expect(doc).toContain('git rev-parse --abbrev-ref HEAD');
+  });
+
+  it('본문을 stdin 으로 넘긴다 — 임시 파일을 만들지 않는다', async () => {
+    // 저장소 안에 임시 파일을 만들면 자동 훅이 커밋한다(실제 사고 기록).
+    const doc = await readFile(`${POOL_DIR}scope-escape-issue/SKILL.md`, 'utf8');
+    expect(doc).toContain('--body-file -');
+  });
+
+  it('중복 이슈를 먼저 훑는다', async () => {
+    const doc = await readFile(`${POOL_DIR}scope-escape-issue/SKILL.md`, 'utf8');
+    expect(doc).toContain('gh issue list');
+  });
+
+  it('발행 후 원래 작업으로 돌아오라고 지시한다', async () => {
+    // 이 문장이 없으면 스킬이 막으려던 바로 그 일(범위 이탈)을 스킬이 한다.
+    const doc = await readFile(`${POOL_DIR}scope-escape-issue/SKILL.md`, 'utf8');
+    expect(doc).toContain('## 5. 원래 작업으로 돌아온다');
+  });
+
+  it('gh 를 쓸 수 없을 때를 다루는 절을 갖는다', async () => {
+    // 산문 문구가 아니라 절의 존재를 본다. 문구는 다듬으면 바뀌지만
+    // 절이 사라지면 그 상황을 다루는 규율 자체가 없어진 것이다.
+    const doc = await readFile(`${POOL_DIR}scope-escape-issue/SKILL.md`, 'utf8');
+    expect(doc).toMatch(/^## .*gh.*쓸 수 없을 때/m);
+  });
+});
+
 describe('스킬 풀 무결성', () => {
-  it('풀에 43개 스킬이 있다', async () => {
+  it('풀에 44개 스킬이 있다', async () => {
     // 개수를 박는다. 원본이 하나 빠지면 유형별 목록(SKILL_SETS)과
     // 어긋나기 전에 여기서 먼저 드러난다.
     const entries = await readdir(POOL_DIR, { withFileTypes: true });
     const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
-    expect(dirs).toHaveLength(43);
+    expect(dirs).toHaveLength(44);
   });
 
   it('모든 스킬이 SKILL.md 를 갖고 frontmatter name 이 디렉토리명과 같다', async () => {
@@ -86,15 +124,15 @@ describe('스킬 풀 무결성', () => {
       cwd: fileURLToPath(new URL('..', import.meta.url)),
     });
     const tracked = stdout.split('\0').filter((p) => p.length > 0);
-    expect(tracked.length).toBeGreaterThan(43);
+    expect(tracked.length).toBeGreaterThan(44);
   });
 });
 
 describe('유형별 스킬 선택', () => {
   it('유형별 개수가 설계와 일치한다', () => {
-    expect(SKILL_SETS.nest).toHaveLength(23);
-    expect(SKILL_SETS.next).toHaveLength(26);
-    expect(SKILL_SETS.monorepo).toHaveLength(43);
+    expect(SKILL_SETS.nest).toHaveLength(24);
+    expect(SKILL_SETS.next).toHaveLength(27);
+    expect(SKILL_SETS.monorepo).toHaveLength(44);
   });
 
   it('선택된 이름이 전부 풀에 실재한다', async () => {

@@ -60,6 +60,7 @@ exports[`nest 레시피 > 단계 목록이 스냅샷과 일치한다 1`] = `
         "tdd",
         "clean-code",
         "verify-implementation",
+        "scope-escape-issue",
         "nestjs-auth",
         "nestjs-caching",
         "nestjs-config",
