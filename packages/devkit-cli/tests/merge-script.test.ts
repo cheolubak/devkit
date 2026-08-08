@@ -793,6 +793,20 @@ describe('_shared 리뷰 워크플로', () => {
     expect(trigger, 'on: 트리거 키를 찾지 못했다').not.toBeNull();
     expect(trigger?.[1]).toBe('pull_request');
   });
+
+  it('통과 신호보다 변경 요청 철회를 먼저 하도록 지시한다', async () => {
+    // wait-and-merge.sh 의 게이트는 rejections(변경 요청 존재)를 claudeState
+    // 보다 먼저 검사하고, stop: 판정은 재시도 없이 즉시 exit 1 한다. 통과
+    // 신호를 먼저 남기고 철회를 나중에 하면, 그 사이의 짧은 창을 폴링이
+    // 관측했을 때 이미 지적이 해소된 PR 이 옛 CHANGES_REQUESTED 때문에
+    // 영구 실패한다(사람이 다시 머지를 불러야 한다). 철회를 먼저 끝내면 그
+    // 창에서는 claudeState 가 비어 wait: 로만 떨어지고 wait: 는 재시도되므로
+    // 문제가 사라진다.
+    const doc = await readReview();
+    expect(doc).toContain('/dismissals');
+    expect(doc).toContain('state=success');
+    expect(doc.indexOf('/dismissals')).toBeLessThan(doc.indexOf('state=success'));
+  });
 });
 
 describe('이 저장소판 리뷰 워크플로', () => {
@@ -890,6 +904,17 @@ describe('이 저장소판 리뷰 워크플로', () => {
     expect(trigger, 'on: 트리거 키를 찾지 못했다').not.toBeNull();
     expect(trigger?.[1]).toBe('pull_request');
   });
+
+  it('통과 신호보다 변경 요청 철회를 먼저 하도록 지시한다', () => {
+    // 템플릿판과 같은 이유 — wait-and-merge.sh 의 게이트는 rejections 를
+    // claudeState 보다 먼저 검사하고 stop: 은 재시도 없이 즉시 실패한다.
+    // 철회가 통과 신호보다 늦으면, 그 사이 창을 폴링이 관측했을 때 이미
+    // 해소된 PR 이 영구 실패한다(이유는 템플릿판 단언 참조).
+    const doc = read();
+    expect(doc).toContain('/dismissals');
+    expect(doc).toContain('state=success');
+    expect(doc.indexOf('/dismissals')).toBeLessThan(doc.indexOf('state=success'));
+  });
 });
 
 /**
@@ -907,6 +932,13 @@ interface FakeGh {
   calls(): string[];
   writePr(n: number | 'last', pr: Record<string, unknown>): void;
   writeStatuses(n: number | 'last', statuses: unknown[]): void;
+  /**
+   * `target` 호출의 **몇 번째 호출인가**(1부터, 성공·실패 가리지 않고 센다)를
+   * `callNumbers` 에 나열된 번호일 때 실패(exit 1)시킨다. poll.count 를 쓰지
+   * 않는 이유는 poll.count 가 `pr view` 성공에서만 증가해, 실패 자체를 셀 수
+   * 없기 때문이다 — 별도 카운터(`<target>.calls`)로 raw 호출 수를 센다.
+   */
+  failCalls(target: 'pr-view' | 'statuses', callNumbers: number[]): void;
 }
 
 function makeFakeGh(repo: string): FakeGh {
@@ -919,6 +951,19 @@ set -euo pipefail
 DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 printf '%s\\n' "$*" >> "$DIR/calls.log"
 
+# 실패 주입: $1 은 카운터·설정 파일 접두사(pr-view 또는 statuses). 이 호출이
+# 몇 번째인지(raw, 성공/실패 무관)를 세어 fail-$1.calls 에 그 번호가 있으면
+# exit 1 로 죽는다 — 실제 gh 가 네트워크 순단·502 로 죽는 것을 흉내 낸다.
+fail_if_due() {
+  local ep="$1"
+  local n
+  n=$(( $(cat "$DIR/$ep.calls" 2>/dev/null || echo 0) + 1 ))
+  echo "$n" > "$DIR/$ep.calls"
+  if [ -f "$DIR/fail-$ep.calls" ] && grep -qx "$n" "$DIR/fail-$ep.calls"; then
+    exit 1
+  fi
+}
+
 case "$1" in
   repo)
     cat "$DIR/repo.txt"
@@ -930,6 +975,7 @@ case "$1" in
         exit 1
         ;;
       */statuses)
+        fail_if_due statuses
         N=$(cat "$DIR/poll.count" 2>/dev/null || echo 1)
         FILTER=""
         prev=""
@@ -950,6 +996,7 @@ case "$1" in
   pr)
     case "$2" in
       view)
+        fail_if_due pr-view
         N=$(( $(cat "$DIR/poll.count" 2>/dev/null || echo 0) + 1 ))
         echo "$N" > "$DIR/poll.count"
         FIXTURE="$DIR/pr-$N.json"
@@ -984,6 +1031,8 @@ esac
     writePr: (n, pr) => writeFileSync(join(dir, `pr-${n}.json`), JSON.stringify(pr)),
     writeStatuses: (n, statuses) =>
       writeFileSync(join(dir, `statuses-${n}.json`), JSON.stringify(statuses)),
+    failCalls: (target, callNumbers) =>
+      writeFileSync(join(dir, `fail-${target}.calls`), `${callNumbers.join('\n')}\n`),
   };
 }
 
@@ -1089,6 +1138,103 @@ describe('스크립트 전체 실행 (가짜 gh 를 PATH 에 놓고 통째로 �
       expect(got.stdout).toContain('merge:');
       expect(got.stdout).toContain('--dry-run — 머지하지 않았습니다.');
       expect(fake.calls().some((c) => c.startsWith('pr merge'))).toBe(false);
+    } finally {
+      rmSync(fake.dir, { recursive: true, force: true });
+    }
+  });
+
+  // 아래 세 건은 FAILS 재시도 카운터(연속 실패 시 중단, 성공 시 리셋)를
+  // 실행으로 고정한다. 지금까지의 4건은 gh pr view · gh api …/statuses 가
+  // 매 폴링마다 항상 성공하는 경로만 돌아, 재시도 분기 자체는 텍스트로만
+  // 읽혀 있었다(직전 커밋 메시지의 "재시도에 실행 테스트를 더했다"는 주장과
+  // 실제 커버리지가 어긋나 있었다).
+  it('조회가 1~2회 실패해도 재시도해 결국 머지한다', () => {
+    const fake = makeFakeGh(FAKE_REPO);
+    try {
+      // gh pr view 의 첫 호출과 gh api …/statuses 의 첫 호출을 각각 한 번씩
+      // 실패시킨다 — 두 조회 분기를 모두 건드려야 나머지 재시도 경로가
+      // 무검증으로 남지 않는다.
+      fake.failCalls('pr-view', [1]);
+      fake.failCalls('statuses', [1]);
+
+      // pr view 호출#2 에서 처음 성공(poll.count=1). 이 폴링은 뒤이은
+      // statuses 호출#1 이 실패해 verdict 까지 못 가고 재시도로 넘어간다.
+      fake.writePr(1, prJson({ headRefOid: FAKE_SHA }));
+      // pr view 호출#3 에서 다시 성공(poll.count=2), statuses 호출#2 도
+      // 성공해 통과 신호를 읽고 merge: 로 떨어진다.
+      fake.writePr(2, prJson({ headRefOid: FAKE_SHA }));
+      fake.writeStatuses(2, CLAUDE_SUCCESS_STATUS);
+
+      const got = runFullScript(fake, ['7', '--interval', '1', '--timeout', '30']);
+
+      expect(got.status).toBe(0);
+      expect(got.stdout).toContain('merge:');
+      expect(got.stdout).toContain('머지했습니다 (#7');
+      // 연속 실패가 2회에서 멈췄으므로 중단 메시지는 나오지 않는다.
+      expect(got.stderr).not.toContain('연속 3회 실패');
+
+      const mergeCall = fake.calls().find((c) => c.startsWith('pr merge'));
+      expect(mergeCall, '머지 호출이 기록에 없다').toBeDefined();
+      expect(mergeCall).toContain(`--match-head-commit ${FAKE_SHA}`);
+    } finally {
+      rmSync(fake.dir, { recursive: true, force: true });
+    }
+  });
+
+  it('연속 3회 실패 시 머지를 부르지 않고 exit 1 하며, stop: 과 구분되는 사유를 남긴다', () => {
+    const fake = makeFakeGh(FAKE_REPO);
+    try {
+      // gh pr view 가 처음 세 번 연속 실패한다.
+      fake.failCalls('pr-view', [1, 2, 3]);
+      // 4번째 이후는 정상 응답(그리고 claude-review 신호는 없는 wait: 상태)을
+      // 준비해 둔다 — 재시도 상한이 실제로 3인지를 메시지 문자열이 아니라
+      // "정확히 3번만 gh pr view 를 불렀다"로 고정하기 위해서다. 상한이 3보다
+      // 크게 바뀌면 3번째 실패 뒤에도 재시도가 이어져 이 폴백 픽스처를 읽고
+      // wait: 로 계속 돌다가 타임아웃으로 빠진다 — 호출 횟수와 중단 메시지
+      // 둘 다 어긋나야 이 변이가 실제로 잡힌다.
+      fake.writePr('last', prJson({ headRefOid: FAKE_SHA }));
+      fake.writeStatuses('last', []);
+
+      const got = runFullScript(fake, ['7', '--interval', '1', '--timeout', '5']);
+
+      expect(got.status).toBe(1);
+      expect(got.stderr).toContain('연속 3회 실패했습니다');
+      // "게이트가 막은 것이 아니다" 취지의 문구가 있어야 stop: 판정(게이트가
+      // 실제로 막은 것)과 혼동되지 않는다.
+      expect(got.stderr).toContain('게이트가 막은 것이 아닙니다');
+      expect(got.stdout).not.toContain('stop:');
+      expect(fake.calls().some((c) => c.startsWith('pr merge'))).toBe(false);
+      // 정확히 3번만 시도하고 멈췄는지 — 상한이 3이 아니면 이 수가 어긋난다.
+      expect(fake.calls().filter((c) => c.startsWith('pr view')).length).toBe(3);
+    } finally {
+      rmSync(fake.dir, { recursive: true, force: true });
+    }
+  });
+
+  it('성공이 연속 실패 카운터를 되돌려, 2회+2회 실패로는 중단되지 않는다', () => {
+    const fake = makeFakeGh(FAKE_REPO);
+    try {
+      // gh pr view 호출 #1,#2 실패 → #3 성공(리셋) → #4,#5 실패 → #6 성공.
+      // FAILS 가 "연속" 이 아니라 누적이었다면 2+2=4 가 되어 3회 문턱에서
+      // 이미 중단됐을 것이다 — 이 순서가 리셋 로직을 정확히 겨눈다.
+      fake.failCalls('pr-view', [1, 2, 4, 5]);
+
+      // pr view #3 성공(poll.count=1) → statuses 는 매번 성공하되, 아직
+      // claude-review 신호가 없어 wait: 로 남아 루프가 계속돈다.
+      fake.writePr(1, prJson({ headRefOid: FAKE_SHA }));
+      fake.writeStatuses(1, []);
+      // pr view #6 성공(poll.count=2) → statuses 도 성공하고 통과 신호가
+      // 있어 merge: 로 떨어진다.
+      fake.writePr(2, prJson({ headRefOid: FAKE_SHA }));
+      fake.writeStatuses(2, CLAUDE_SUCCESS_STATUS);
+
+      const got = runFullScript(fake, ['7', '--interval', '1', '--timeout', '30']);
+
+      expect(got.status).toBe(0);
+      expect(got.stderr).not.toContain('연속 3회 실패');
+      expect(got.stdout).toContain('merge:');
+      expect(got.stdout).toContain('머지했습니다 (#7');
+      expect(fake.calls().some((c) => c.startsWith('pr merge'))).toBe(true);
     } finally {
       rmSync(fake.dir, { recursive: true, force: true });
     }
