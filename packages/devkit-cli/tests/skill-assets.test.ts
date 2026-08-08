@@ -86,13 +86,97 @@ describe('scope-escape-issue 스킬', () => {
   });
 });
 
+describe('issue-to-pr 스킬', () => {
+  it('frontmatter의 name이 issue-to-pr 다', async () => {
+    const doc = await readFile(`${POOL_DIR}issue-to-pr/SKILL.md`, 'utf8');
+    expect(doc).toMatch(/^---\n(?:.*\n)*?name: issue-to-pr\n/);
+  });
+
+  it('이슈 댓글까지 읽는다', async () => {
+    // 이슈는 댓글에서 방향이 뒤집힌다. 본문만 읽으면 폐기된 계획을 구현한다.
+    const doc = await readFile(`${POOL_DIR}issue-to-pr/SKILL.md`, 'utf8');
+    expect(doc).toContain('comments');
+  });
+
+  it('좌표 검증을 조상 검사가 아니라 존재 확인으로 한다', async () => {
+    // 이 저장소는 squash 로 머지하고 브랜치를 지운다 — 발견 시점 커밋은
+    // main 의 조상이 아니다. merge-base --is-ancestor 를 게이트로 쓰면
+    // 정상 상황에서 매번 오경보한다(설계 1.4절).
+    const doc = await readFile(`${POOL_DIR}issue-to-pr/SKILL.md`, 'utf8');
+    expect(doc).toContain('git cat-file -e');
+    expect(doc).not.toContain('merge-base --is-ancestor');
+  });
+
+  it('좌표 확인이 두 분기로 갈린다 — 커밋이 있을 때와 없을 때', async () => {
+    // 산문 문구가 아니라 절과 분기의 존재를 본다. 분기 하나가 사라지면
+    // 검증할 수 없는 경우를 조용히 통과시키게 된다.
+    const doc = await readFile(`${POOL_DIR}issue-to-pr/SKILL.md`, 'utf8');
+    expect(doc).toContain('## 2. 좌표가 아직 유효한지 확인한다');
+    expect(doc).toContain('**커밋이 있으면**');
+    expect(doc).toContain('**커밋이 없으면**');
+  });
+
+  it('푸시·PR 전에 승인을 받는다', async () => {
+    // 소비자 프로젝트에서는 PR 생성이 자동 머지까지 이어진다(설계 6.7절).
+    const doc = await readFile(`${POOL_DIR}issue-to-pr/SKILL.md`, 'utf8');
+    expect(doc).toContain('## 7. 승인을 받고 푸시·PR');
+  });
+
+  it('worktree 를 지시하지 않는다 — 소비자에겐 그 규약이 없다', async () => {
+    // 없는 전제를 근거로 삼는 문서가 이 저장소가 반복해서 데인 형태다.
+    const doc = await readFile(`${POOL_DIR}issue-to-pr/SKILL.md`, 'utf8');
+    expect(doc).not.toContain('git worktree');
+  });
+
+  it('구현 방법론을 새로 정하지 않고 기존 스킬을 가리킨다', async () => {
+    const doc = await readFile(`${POOL_DIR}issue-to-pr/SKILL.md`, 'utf8');
+    expect(doc).toContain('.claude/skills/devkit-stack');
+    expect(doc).toContain('.claude/skills/verify-implementation');
+  });
+});
+
+const CONTRACT_START = '<!-- ISSUE-BODY-CONTRACT:START -->';
+const CONTRACT_END = '<!-- ISSUE-BODY-CONTRACT:END -->';
+
+function contractHeadings(doc: string, label: string): string[] {
+  const start = doc.indexOf(CONTRACT_START);
+  const end = doc.indexOf(CONTRACT_END);
+  expect(start, `${label} 에 계약 시작 마커가 없다`).toBeGreaterThanOrEqual(0);
+  expect(end, `${label} 에 계약 끝 마커가 없다`).toBeGreaterThan(start);
+  return [...doc.slice(start, end).matchAll(/^## (.+)$/gm)].map((m) => m[1].trim());
+}
+
+describe('이슈 본문 계약', () => {
+  it('발행 스킬과 처리 스킬이 같은 섹션 제목을 같은 순서로 쓴다', async () => {
+    // 두 문서에 손으로 적히는 유일한 인터페이스다. 한쪽이 `## 발견 좌표`,
+    // 다른 쪽이 `## 발견 위치` 여도 둘 다 문법적으로 멀쩡하고, 실패는 실제로
+    // 이슈를 처리할 때야 드러난다.
+    const publisher = await readFile(`${POOL_DIR}scope-escape-issue/SKILL.md`, 'utf8');
+    const worker = await readFile(`${POOL_DIR}issue-to-pr/SKILL.md`, 'utf8');
+
+    const written = contractHeadings(publisher, 'scope-escape-issue');
+    const read = contractHeadings(worker, 'issue-to-pr');
+
+    expect(written.length, '발행 스킬의 계약 구획이 비어 있다').toBeGreaterThan(0);
+    expect(read).toEqual(written);
+  });
+
+  it('처리 스킬이 발행 스킬의 서명을 그대로 안다', async () => {
+    const publisher = await readFile(`${POOL_DIR}scope-escape-issue/SKILL.md`, 'utf8');
+    const worker = await readFile(`${POOL_DIR}issue-to-pr/SKILL.md`, 'utf8');
+
+    expect(publisher).toContain('<!-- scope-escape-issue -->');
+    expect(worker).toContain('<!-- scope-escape-issue -->');
+  });
+});
+
 describe('스킬 풀 무결성', () => {
-  it('풀에 44개 스킬이 있다', async () => {
+  it('풀에 45개 스킬이 있다', async () => {
     // 개수를 박는다. 원본이 하나 빠지면 유형별 목록(SKILL_SETS)과
     // 어긋나기 전에 여기서 먼저 드러난다.
     const entries = await readdir(POOL_DIR, { withFileTypes: true });
     const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
-    expect(dirs).toHaveLength(44);
+    expect(dirs).toHaveLength(45);
   });
 
   it('모든 스킬이 SKILL.md 를 갖고 frontmatter name 이 디렉토리명과 같다', async () => {
@@ -124,15 +208,15 @@ describe('스킬 풀 무결성', () => {
       cwd: fileURLToPath(new URL('..', import.meta.url)),
     });
     const tracked = stdout.split('\0').filter((p) => p.length > 0);
-    expect(tracked.length).toBeGreaterThan(44);
+    expect(tracked.length).toBeGreaterThan(45);
   });
 });
 
 describe('유형별 스킬 선택', () => {
   it('유형별 개수가 설계와 일치한다', () => {
-    expect(SKILL_SETS.nest).toHaveLength(24);
-    expect(SKILL_SETS.next).toHaveLength(27);
-    expect(SKILL_SETS.monorepo).toHaveLength(44);
+    expect(SKILL_SETS.nest).toHaveLength(25);
+    expect(SKILL_SETS.next).toHaveLength(28);
+    expect(SKILL_SETS.monorepo).toHaveLength(45);
   });
 
   it('선택된 이름이 전부 풀에 실재한다', async () => {

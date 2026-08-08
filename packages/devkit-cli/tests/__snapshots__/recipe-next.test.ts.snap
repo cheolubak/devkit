@@ -63,6 +63,7 @@ exports[`next 레시피 > 단계 목록이 스냅샷과 일치한다 1`] = `
         "clean-code",
         "verify-implementation",
         "scope-escape-issue",
+        "issue-to-pr",
         "fsd-architecture",
         "react-best-practices",
         "nextjs-a11y",
