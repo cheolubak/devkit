@@ -196,6 +196,62 @@ describe('유형별 커맨드', () => {
   });
 });
 
+const ALL_TYPES = ['nest', 'next', 'monorepo'] as const;
+
+describe.each(ALL_TYPES)('%s 리뷰어의 스킬 배선', (type) => {
+  const reviewerPath = `${TEMPLATES_DIR}${type}/.claude/agents/devkit-reviewer.md`;
+
+  it('frontmatter 에 skills 목록을 갖는다', async () => {
+    const doc = await readFile(reviewerPath, 'utf8');
+    const frontmatter = doc.slice(0, doc.indexOf('\n---', 4));
+    expect(frontmatter).toContain('skills:');
+  });
+
+  it('frontmatter 의 name 이 devkit-reviewer 로 유지된다', async () => {
+    // skills: 를 더하면서 name 줄이 밀리면 review-assets.test.ts 의
+    // 정규식이 깨진다. 여기서 함께 고정한다.
+    const doc = await readFile(reviewerPath, 'utf8');
+    expect(doc).toMatch(/^---\n(?:.*\n)*?name: devkit-reviewer\n/);
+  });
+
+  it('가리키는 스킬이 전부 그 유형에 실제로 배포된다', async () => {
+    // 없는 스킬을 가리키면 리뷰어는 실패하지 않는다 — 근거 없이 기본
+    // 판단으로 리뷰하고 승인까지 찍는다. 자동 머지가 그 승인을 게이트로 읽는다.
+    const doc = await readFile(reviewerPath, 'utf8');
+    const available = new Set(SKILL_SETS[type]);
+    const referenced = [...doc.matchAll(/\.claude\/skills\/([a-z0-9-]+)/g)].map((m) => m[1]);
+
+    expect(referenced.length, '스킬 경로를 하나도 가리키지 않는다').toBeGreaterThan(0);
+    expect(referenced.filter((name) => !available.has(name))).toEqual([]);
+  });
+
+  it('판정 근거 경로가 "보는 것" 절 안에 있다', async () => {
+    // 금지 목록에만 있으면 리뷰어는 근거 문서를 읽을 이유를 못 찾는다.
+    const doc = await readFile(reviewerPath, 'utf8');
+    const observed = doc.slice(doc.indexOf('## 보는 것'));
+    expect(observed).toContain('.claude/skills/');
+  });
+
+  it('devkit-stack 우선순위를 금지 목록에 명시한다', async () => {
+    // 원본 스킬과 스택이 어긋나는 지점을 리뷰어가 지적 근거로 삼으면
+    // 모든 PR 에서 잘못된 지적이 나온다.
+    const doc = await readFile(reviewerPath, 'utf8');
+    const forbidden = doc.slice(doc.indexOf('## 지적하지 않는 것'), doc.indexOf('## 보는 것'));
+    expect(forbidden).toContain('devkit-stack');
+  });
+});
+
+describe('CI 워크플로의 스킬 배선', () => {
+  it('프롬프트가 .claude/skills/ 와 devkit-stack 우선순위를 안내한다', async () => {
+    // 워크플로는 리뷰어를 서브에이전트로 호출하지 않고 문서로 읽게 한다.
+    // frontmatter 의 skills: 는 그 경로에서 해석되지 않으므로, 프롬프트가
+    // 직접 말하지 않으면 CI 리뷰에는 스킬이 붙지 않는다.
+    const doc = await readFile(`${TEMPLATES_DIR}_shared/.github/workflows/claude-review.yml`, 'utf8');
+    expect(doc).toContain('.claude/skills/');
+    expect(doc).toContain('devkit-stack');
+  });
+});
+
 describe('레시피의 copySkills 배선', () => {
   it('세 레시피가 각각 자기 유형의 목록으로 copySkills 를 부른다', () => {
     const cases = [

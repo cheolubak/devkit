@@ -57,6 +57,12 @@ jobs:
             - .claude/agents/devkit-reviewer.md 를 읽고 그 기준으로만 리뷰합니다
             - 그 문서의 "지적하지 않는 것" 절을 반드시 지킵니다.
               포맷·import 정렬·타입 오류는 이미 lint 와 tsc 가 CI에서 검사합니다
+            - 판정 근거가 필요하면 .claude/skills/ 아래 문서를 직접 읽습니다.
+              devkit-reviewer.md 의 각 관점에 근거 스킬 경로가 적혀 있습니다
+            - .claude/skills/ 의 원본 스킬 중 일부는 이 프로젝트의 스택과 다른
+              선택지를 가르칩니다(class-validator, @eslint/js 직접 설치, steiger).
+              그 경우 .claude/skills/devkit-stack 이 이깁니다. 코드가 devkit-stack 을
+              따르고 있으면 다른 스킬과 다르다는 이유로 변경을 요청하지 않습니다
 
             구체적인 문제에 대해서는 인라인 주석을 사용하여 자세한 피드백을 제공해주세요.
 
