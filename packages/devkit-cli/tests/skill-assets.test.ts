@@ -1,6 +1,10 @@
-import { readFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
+
+const execFileAsync = promisify(execFile);
 
 const TEMPLATES_DIR = fileURLToPath(new URL('../templates/', import.meta.url));
 const POOL_DIR = `${TEMPLATES_DIR}_skills/`;
@@ -37,5 +41,47 @@ describe('devkit-stack 스킬', () => {
   it('우선순위 선언을 갖는다 — 다른 스킬과 어긋나면 이 문서가 이긴다', async () => {
     const doc = await readFile(`${POOL_DIR}devkit-stack/SKILL.md`, 'utf8');
     expect(doc).toContain('## 우선순위');
+  });
+});
+
+describe('스킬 풀 무결성', () => {
+  it('풀에 43개 스킬이 있다', async () => {
+    // 개수를 박는다. 원본이 하나 빠지면 유형별 목록(SKILL_SETS)과
+    // 어긋나기 전에 여기서 먼저 드러난다.
+    const entries = await readdir(POOL_DIR, { withFileTypes: true });
+    const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+    expect(dirs).toHaveLength(43);
+  });
+
+  it('모든 스킬이 SKILL.md 를 갖고 frontmatter name 이 디렉토리명과 같다', async () => {
+    // 이름이 어긋나면 Claude 가 스킬을 로드하지 못한다. 파일은 있으므로
+    // 복사 자체는 성공하고, 소비자만 조용히 스킬 없이 일하게 된다.
+    const entries = await readdir(POOL_DIR, { withFileTypes: true });
+    const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+
+    const broken: string[] = [];
+    for (const name of dirs) {
+      // oxlint-disable-next-line no-await-in-loop -- 실패 시 어느 스킬인지 순서대로 드러나는 편이 낫다
+      const doc = await readFile(`${POOL_DIR}${name}/SKILL.md`, 'utf8').catch(() => null);
+      if (doc === null) {
+        broken.push(`${name} — SKILL.md 가 없다`);
+        continue;
+      }
+      if (!new RegExp(`^---\\n(?:.*\\n)*?name: ${name}\\n`).test(doc)) {
+        broken.push(`${name} — frontmatter 의 name 이 디렉토리명과 다르다`);
+      }
+    }
+
+    expect(broken).toEqual([]);
+  });
+
+  it('풀의 모든 파일이 git 에 추적된다', async () => {
+    // 디스크는 초록불인데 clone·CI·게시본에는 없는 상태를 막는다
+    // (2026-08-06 devkit-implementer.md 전례).
+    const { stdout } = await execFileAsync('git', ['ls-files', '-z', '--', 'templates/_skills'], {
+      cwd: fileURLToPath(new URL('..', import.meta.url)),
+    });
+    const tracked = stdout.split('\0').filter((p) => p.length > 0);
+    expect(tracked.length).toBeGreaterThan(43);
   });
 });
