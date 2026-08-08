@@ -80,8 +80,10 @@ describe('오버레이 카테고리 커버리지', () => {
     // consumedPath(위 정의, `_skills`만 `.claude/skills/`를 접두)로 매칭한다.
     // relPath(템플릿 소스 경로)를 그대로 넘기면 `_skills` 파일은 항상 걸린다.
     const files = await collectOverlayFiles();
+    // 구조분해로 꺼내면 이름이 위의 consumedPath 함수를 가린다(no-shadow).
+    // 속성으로 읽어 그 그림자를 만들지 않는다.
     const unmatched = files
-      .filter(({ consumedPath }) => categoryOf(consumedPath) === null)
+      .filter((f) => categoryOf(f.consumedPath) === null)
       .map(({ type, relPath }) => `${type}/${relPath}`);
 
     expect(unmatched).toEqual([]);
