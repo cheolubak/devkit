@@ -126,9 +126,25 @@ jobs:
           # 아래 게이트는 "누가 이 status 를 만들었는가"를 봐야 하므로 REST 로
           # 따로 받아 합친다. head SHA 로 조회하므로 커밋 고정은 그대로다 —
           # 새 커밋을 푸시하면 그 커밋의 status 만 보인다.
+          #
+          # **복수형** /statuses 여야 한다. 단수형 /commits/{sha}/status(combined)
+          # 는 statusCheckRollup 과 마찬가지로 creator 를 주지 않는다 — 응답
+          # 필드가 context·state·description·target_url·created_at·updated_at·
+          # id·node_id·url·avatar_url 뿐이다(실측). 그쪽을 읽으면 creator 가
+          # 늘 빈 문자열이 되어 아래 claudeOk 의 신원 검사가 **구조적으로 항상
+          # 실패**한다. 툴킷 저장소의 PR #9 가 그 상태였다: claude-review 가
+          # success 인데도 "승인도 claude-review 통과도 없습니다"로 영원히
+          # skip 됐다.
+          #
+          # 대신 복수형은 컨텍스트별 **이력 전체**를 준다(단수형은 컨텍스트당
+          # 최신 하나였다). 그대로 넘기면 같은 컨텍스트의 옛 success 가 최신
+          # failure 를 이겨 버리므로, 리뷰를 리뷰어별 최신만 남기는 것과 같은
+          # 규율로 컨텍스트별 최신만 남긴다. id 로 고른다 — 단조 증가하므로
+          # created_at 문자열 비교와 달리 같은 초에 두 건이 들어와도 갈린다.
           HEAD_SHA=$(jq -r '.headRefOid' pr.json)
-          gh api "repos/$REPO/commits/$HEAD_SHA/status" \
-            --jq '[.statuses[] | {context, state, creator: (.creator.login // "")}]' > statuses.json
+          gh api "repos/$REPO/commits/$HEAD_SHA/statuses" --paginate \
+            --jq '.[] | {context, state, creator: (.creator.login // ""), id}' \
+            | jq -s 'group_by(.context) | map(max_by(.id))' > statuses.json
           jq --slurpfile s statuses.json '. + {commitStatuses: $s[0]}' pr.json > pr.merged.json
           mv pr.merged.json pr.json
 
@@ -242,7 +258,8 @@ jobs:
             #
             # 이 판정이 읽는 것은 statusCheckRollup 이 아니라 commitStatuses 다
             # — 그쪽은 StatusContext 의 creator 를 주지 않는다(gh 가 요청하는
-            # 필드에 없다). 셸에서 REST /commits/{sha}/status 로 따로 받아
+            # 필드에 없다). 셸에서 REST /commits/{sha}/statuses(복수형 — 단수형
+            # 은 creator 를 안 준다) 로 따로 받아 컨텍스트별 최신만 남겨
             # 합친다. head SHA 로 조회하므로 커밋 고정은 그대로다.
             #
             # creator 를 확인할 수 없으면 세지 않는다 — onHead 가 commit 없는

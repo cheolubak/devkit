@@ -74,9 +74,15 @@ describe('_shared 자동 머지 워크플로', () => {
   it('Commit Status 를 creator 와 함께 따로 받아 pr.json 에 합친다', async () => {
     // statusCheckRollup 은 StatusContext 의 creator 를 주지 않는다 — gh 가
     // 요청하는 필드가 context·state·startedAt·targetUrl 뿐이다(실측). 신원을
-    // 검증하려면 REST /commits/{sha}/status 로 따로 받아 합쳐야 한다.
+    // 검증하려면 REST /commits/{sha}/statuses 로 따로 받아 합쳐야 한다.
+    //
+    // **복수형**이어야 한다. 이 단언이 예전에 단수형(combined)을 못박고
+    // 있었고, 그쪽은 creator 를 주지 않아 claudeOk 가 구조적으로 항상
+    // false 였다. 형태만 보는 단언으로는 그것을 못 잡는다 — 아래
+    // "실제 응답에 돌린다" 테스트가 진짜 관문이다.
     const doc = await readAutoMerge();
-    expect(doc).toMatch(/gh api "repos\/\$REPO\/commits\/\$HEAD_SHA\/status"/);
+    expect(doc).toMatch(/gh api "repos\/\$REPO\/commits\/\$HEAD_SHA\/statuses"/);
+    expect(doc).not.toMatch(/gh api "repos\/\$REPO\/commits\/\$HEAD_SHA\/status"/);
     expect(doc).toContain('commitStatuses');
     expect(doc).toContain('creator');
   });
@@ -276,6 +282,116 @@ const passingCheck = {
   status: 'COMPLETED',
   conclusion: 'SUCCESS',
 };
+
+/**
+ * status 를 받아 오는 파이프라인을 워크플로에서 그대로 꺼낸다 — `gh api --jq`
+ * 의 프로그램과 그 뒤 `jq -s` 의 프로그램 둘 다.
+ *
+ * 던지는 것이 요구다. 추출이 실패했을 때 빈 프로그램을 돌려주면 아래 단언이
+ * 공허해진다 — 이 파일이 이미 한 번 당한 방식이다.
+ */
+function extractStatusFetch(yaml: string, source: string): { perItem: string; reduce: string } {
+  // `.[]` 로 시작하는 것만 잡는다. 같은 파일의 다른 `--jq` (PR 번호 조회)는
+  // `[.[] | select(...)]` 로 시작하므로 걸리지 않는다.
+  const perItem = /--jq '(\.\[\][^']*)'/.exec(yaml);
+  if (perItem === null) throw new Error(`${source}: status 조회의 gh api --jq 를 찾지 못했다`);
+  const reduce = /\| jq -s '([^']*)'/.exec(yaml);
+  if (reduce === null) throw new Error(`${source}: status 조회의 jq -s 를 찾지 못했다`);
+  return { perItem: perItem[1], reduce: reduce[1] };
+}
+
+/**
+ * `GET /repos/{o}/{r}/commits/{sha}/statuses` 의 **실제 응답 녹화본**.
+ *
+ * 손으로 지어낸 형태가 아니라 툴킷 저장소 PR #9 의 head 커밋에서 그대로 받은
+ * 것이다(필드는 이 파이프라인이 읽는 것만 남겼다). 손으로 지어낸 픽스처가
+ * 정확히 이 결함을 숨겼기 때문이다 — 게이트 테스트의 `claudeStatus()` 헬퍼가
+ * `creator` 를 채워 넣어서, "API 가 무엇을 주는가"와 "게이트가 무엇을
+ * 받는가" 사이의 이음매가 통째로 검증되지 않았다.
+ *
+ * CodeRabbit 이 pending 2건 → success 2건으로 쌓여 있는 것도 녹화 그대로다.
+ * 컨텍스트별 최신만 남기는 축약을 실제 데이터로 검증할 수 있다.
+ */
+const CLAUDE_BOT = { login: 'github-actions[bot]' };
+const RABBIT_BOT = { login: 'coderabbitai[bot]' };
+
+const RECORDED_STATUSES = [
+  { context: 'claude-review', creator: CLAUDE_BOT, id: 51_873_194_642, state: 'success' },
+  { context: 'CodeRabbit', creator: RABBIT_BOT, id: 51_873_171_385, state: 'success' },
+  { context: 'CodeRabbit', creator: RABBIT_BOT, id: 51_873_171_102, state: 'success' },
+  { context: 'CodeRabbit', creator: RABBIT_BOT, id: 51_873_143_452, state: 'pending' },
+  { context: 'CodeRabbit', creator: RABBIT_BOT, id: 51_873_142_927, state: 'pending' },
+];
+
+interface FetchedStatus {
+  context: string;
+  state: string;
+  creator: string;
+  id: number;
+}
+
+/** 워크플로에서 꺼낸 두 jq 프로그램을 실제 jq 로 이어 돌린다. */
+function runStatusFetch(response: unknown, yaml: string): FetchedStatus[] {
+  const { perItem, reduce } = extractStatusFetch(yaml, 'auto-merge.yml');
+  // 픽스처는 저장소 밖에 만든다 — 안에 만들면 자동 WIP 커밋 훅이 집어간다.
+  const dir = mkdtempSync(join(tmpdir(), 'devbak-status-'));
+  try {
+    const file = join(dir, 'response.json');
+    writeFileSync(file, JSON.stringify(response));
+    const perItemOut = execFileSync('jq', ['-c', perItem, file], { encoding: 'utf8' });
+    return JSON.parse(
+      execFileSync('jq', ['-s', reduce], { input: perItemOut, encoding: 'utf8' }),
+    ) as FetchedStatus[];
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+describe('Commit Status 조회 파이프라인 (실제 응답 녹화본에 돌린다)', () => {
+  // 이 블록이 이 파일에 없던 이음매다. 게이트 로직은 jq 로 제대로 검증되고
+  // 있었지만 그 입력이 손으로 만들어졌고, 워크플로가 실제로 부르는 API 는
+  // 문자열로만 확인됐다. 그 사이에서 creator 가 조용히 사라지고 있었다.
+
+  it('creator 가 살아서 나온다 — 게이트의 신원 검사가 통과할 수 있다', () => {
+    const got = runStatusFetch(RECORDED_STATUSES, readFileSync(AUTO_MERGE, 'utf8'));
+    const claude = got.find((s) => s.context === 'claude-review');
+
+    expect(claude, 'claude-review status 가 축약 결과에 없다').toBeDefined();
+    // 게이트의 claudeOk 가 정확히 이 값을 이 문자열과 비교한다.
+    expect(claude?.creator).toBe('github-actions[bot]');
+    expect(claude?.state).toBe('success');
+  });
+
+  it('컨텍스트별로 최신 하나만 남는다', () => {
+    // 복수형 엔드포인트는 이력 전체를 준다. 축약하지 않으면 같은 컨텍스트의
+    // 옛 status 가 최신을 이길 수 있다 — 옛 success 로 최신 failure 를
+    // 덮는 것이 그 최악이다.
+    const got = runStatusFetch(RECORDED_STATUSES, readFileSync(AUTO_MERGE, 'utf8'));
+
+    expect(got.map((s) => s.context).sort()).toEqual(['CodeRabbit', 'claude-review']);
+    expect(got.find((s) => s.context === 'CodeRabbit')?.id).toBe(51873171385);
+  });
+
+  it('옛 success 가 최신 failure 를 이기지 않는다', () => {
+    // 위 녹화본에는 실패가 없다. 축약 규칙 자체를 겨누는 이 한 건만 합성한다.
+    const withLaterFailure = [
+      ...RECORDED_STATUSES,
+      { context: 'claude-review', creator: CLAUDE_BOT, id: 51_873_999_999, state: 'failure' },
+    ];
+    const got = runStatusFetch(withLaterFailure, readFileSync(AUTO_MERGE, 'utf8'));
+
+    expect(got.find((s) => s.context === 'claude-review')?.state).toBe('failure');
+  });
+
+  it('두 사본의 조회 파이프라인이 같다', () => {
+    // 게이트 동일성은 이미 지켜지고 있었지만 **조회 쪽은 그 범위 밖**이었다.
+    // 두 사본이 나란히 틀려 있다가 한쪽만 고쳐지는 것이 다음 사고다.
+    const tpl = extractStatusFetch(readFileSync(AUTO_MERGE, 'utf8'), 'templates/_shared');
+    const repo = extractStatusFetch(readFileSync(REPO_AUTO_MERGE, 'utf8'), '.github/workflows');
+
+    expect(repo).toEqual(tpl);
+  });
+});
 
 describe('자동 머지 게이트 판정 (jq 를 실제로 돌린다)', () => {
   // 이 블록의 존재 이유. 이 파일의 나머지 단언은 전부 문자열 검사라
